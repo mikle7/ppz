@@ -1,0 +1,197 @@
+package daemon
+
+import (
+	"context"
+	"sort"
+	"sync"
+
+	"github.com/google/uuid"
+	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
+	"github.com/pipescloud/ppz/internal/envelope"
+	"github.com/pipescloud/ppz/internal/natsubj"
+)
+
+const listPreviewFetchConcurrency = 8
+
+type streamInfoListProvider interface {
+	ListStreams(context.Context, ...jetstream.StreamListOpt) jetstream.StreamInfoLister
+}
+
+func streamInfoByName(ctx context.Context, js streamInfoListProvider, orgID uuid.UUID) (map[string]*jetstream.StreamInfo, error) {
+	lister := js.ListStreams(ctx, jetstream.WithStreamListSubject(natsubj.OrgSubscription(orgID)))
+	infos := map[string]*jetstream.StreamInfo{}
+	for info := range lister.Info() {
+		infos[info.Config.Name] = info
+	}
+	if err := lister.Err(); err != nil {
+		return nil, err
+	}
+	return infos, nil
+}
+
+type listPreviewTarget struct {
+	streamName string
+	seq        uint64
+	sourceIdx  int
+	infoIdx    int
+}
+
+type listPreviewResult struct {
+	sourceIdx int
+	infoIdx   int
+	preview   string
+	payload   string
+}
+
+func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sources []cliproto.Source, orgID uuid.UUID, session string, patterns []string, cursors map[string]uint64) ([]cliproto.Source, error) {
+	streamInfos, err := streamInfoByName(ctx, js, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	enriched := make([]cliproto.Source, 0, len(sources))
+	previewTargets := make([]listPreviewTarget, 0)
+	for _, s := range sources {
+		pipes := pipesForSource(s)
+		infos := make([]cliproto.PipeInfo, 0, len(pipes))
+		for _, p := range pipes {
+			if !matchAnyTarget(s.Handle, p, patterns) {
+				continue
+			}
+
+			info := cliproto.PipeInfo{Pipe: p}
+			streamName := natsubj.StreamName(orgID, s.Handle, p)
+			if si := streamInfos[streamName]; si != nil {
+				info.Total = si.State.Msgs
+				info.LastSeq = si.State.LastSeq
+				if !si.State.LastTime.IsZero() {
+					lt := si.State.LastTime.UTC()
+					info.LastAt = &lt
+				}
+				if cursor := cursors[daemonCursorKey(orgID, s.Handle, p)]; info.LastSeq > cursor {
+					info.Unread = info.LastSeq - cursor
+				}
+				if info.LastSeq > 0 {
+					previewTargets = append(previewTargets, listPreviewTarget{
+						streamName: streamName,
+						seq:        info.LastSeq,
+						sourceIdx:  len(enriched),
+						infoIdx:    len(infos),
+					})
+				}
+			}
+			infos = append(infos, info)
+		}
+		if len(patterns) > 0 && len(infos) == 0 {
+			continue
+		}
+		s.PipeInfos = infos
+		enriched = append(enriched, s)
+	}
+
+	for result := range fetchListPreviews(ctx, js, previewTargets) {
+		enriched[result.sourceIdx].PipeInfos[result.infoIdx].Preview = result.preview
+		enriched[result.sourceIdx].PipeInfos[result.infoIdx].Payload = result.payload
+	}
+
+	return enriched, nil
+}
+
+func pipesForSource(s cliproto.Source) []string {
+	pipeSet := map[string]struct{}{}
+	for _, p := range pipesForKind(s.Kind) {
+		pipeSet[p] = struct{}{}
+	}
+	for _, p := range s.Pipes {
+		pipeSet[p] = struct{}{}
+	}
+	pipes := make([]string, 0, len(pipeSet))
+	for p := range pipeSet {
+		pipes = append(pipes, p)
+	}
+	sort.Strings(pipes)
+	return pipes
+}
+
+func fetchListPreviews(ctx context.Context, js jetstream.JetStream, targets []listPreviewTarget) <-chan listPreviewResult {
+	results := make(chan listPreviewResult)
+	if len(targets) == 0 {
+		close(results)
+		return results
+	}
+
+	jobs := make(chan listPreviewTarget)
+	workerCount := listPreviewFetchConcurrency
+	if len(targets) < workerCount {
+		workerCount = len(targets)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer wg.Done()
+			for target := range jobs {
+				stream, err := js.Stream(ctx, target.streamName)
+				if err != nil {
+					continue
+				}
+				msg, err := stream.GetMsg(ctx, target.seq)
+				if err != nil {
+					continue
+				}
+				env, err := envelope.Unmarshal(msg.Data)
+				if err != nil {
+					continue
+				}
+				select {
+				case results <- listPreviewResult{
+					sourceIdx: target.sourceIdx,
+					infoIdx:   target.infoIdx,
+					preview:   cliproto.TruncatePayload(env.Payload),
+					payload:   env.Payload,
+				}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, target := range targets {
+			select {
+			case jobs <- target:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	return results
+}
+
+func cursorSnapshot(c *cursors, session string) map[string]uint64 {
+	session = sessionIDForCursor(session)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	m, err := c.loadLocked(session)
+	if err != nil {
+		return map[string]uint64{}
+	}
+	return m
+}
+
+func sessionIDForCursor(s string) string {
+	if s == "" {
+		return "default"
+	}
+	return s
+}
