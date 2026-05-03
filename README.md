@@ -61,7 +61,6 @@ make build
 - [`docs/AUTH-V2.md`](docs/AUTH-V2.md) — auth design (GitHub OAuth + per-org NATS account JWTs)
 - [`docs/WIRE.md`](docs/WIRE.md) — wire protocol reference (subjects, error codes, retention semantics)
 - [`docs/ERRORS.md`](docs/ERRORS.md) — error code catalogue
-- [`docs/SECRETS.md`](docs/SECRETS.md) — secret model
 
 A self-hosting / deployment guide is on the way — track issues for
 progress.
