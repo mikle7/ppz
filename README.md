@@ -9,8 +9,8 @@ side with a server that runs NATS / JetStream as the transport.
 
 Hosted ppz is available at [pipescloud.io](https://pipescloud.io).
 It's built on this Apache-2.0 core and adds proprietary hosted-only
-features (billing, team management, ops tooling). The OSS code here
-is fully self-hostable.
+features (security, scalability, billing, team management, ops
+tooling). The OSS code here is fully self-hostable.
 
 ## Install
 
