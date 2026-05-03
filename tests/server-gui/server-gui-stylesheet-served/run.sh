@@ -11,7 +11,8 @@ echo "css-status=$status"
 echo "css-content-type-prefix=${ctype%%;*}"
 [ "$size" -gt 0 ] && echo "css-nonempty=yes" || echo "css-nonempty=no"
 
-if curl -sS "$PPZ_SERVER_URL/" | grep -qE '<link[^>]+href="/assets/style\.css"'; then
+page=$(curl_server "/")
+if grep -qE '<link[^>]+href="/assets/style\.css"' <<<"$page"; then
   echo "index-references-css=yes"
 else
   echo "index-references-css=no"
