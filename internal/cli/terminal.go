@@ -25,13 +25,13 @@ import (
 
 // cmdTerminal dispatches `ppz terminal <subverb>`.
 //
-//   wrap H [-- CMD ...]   create a pty source bound to handle H and run
-//                         CMD (or $SHELL) inside it.
-//   watch H               follow H.stdout in alt-screen TUI (interactive,
-//                         renders to the local terminal).
-//   read H [flags]        wrapper for `read <H>.stdout` with --tty as the
-//                         default output mode. Use this for capturable
-//                         text snapshots (agents, pipes, scripts).
+//	wrap H [-- CMD ...]   create a pty source bound to handle H and run
+//	                      CMD (or $SHELL) inside it.
+//	watch H               follow H.stdout in alt-screen TUI (interactive,
+//	                      renders to the local terminal).
+//	read H [flags]        wrapper for `read <H>.stdout` with --tty as the
+//	                      default output mode. Use this for capturable
+//	                      text snapshots (agents, pipes, scripts).
 func cmdTerminal(args []string) error {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: ppz terminal {share|watch|read} <handle> [...]")
@@ -282,6 +282,17 @@ func cmdTerminalShare(args []string) error {
 	}
 
 	var wg sync.WaitGroup
+	inboxAlerts := newTerminalInboxAlertPump(terminalInboxAlertConfig{
+		IdleAfter: 15 * time.Second,
+		Cooldown:  30 * time.Second,
+		Message:   terminalInboxAlertMessage,
+	}, ptmx)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		flushInboxAlerts(ctx, inboxAlerts)
+	}()
 
 	// Local stdin → PTY master with a control-response filter. The local
 	// terminal emits DA / cursor-position / focus replies into our stdin
@@ -303,12 +314,12 @@ func cmdTerminalShare(args []string) error {
 				filtered, p := filterControlResponses(input)
 				pending = p
 				if len(filtered) > 0 {
-					_, _ = ptmx.Write(filtered)
+					inboxAlerts.ForwardUserInput(time.Now(), filtered)
 				}
 			}
 			if err != nil {
 				if len(pending) > 0 {
-					_, _ = ptmx.Write(pending)
+					inboxAlerts.ForwardUserInput(time.Now(), pending)
 				}
 				return
 			}
@@ -331,6 +342,12 @@ func cmdTerminalShare(args []string) error {
 		forwardStdin(ctx, handle, ptmx)
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		forwardInboxAlerts(ctx, handle, inboxAlerts)
+	}()
+
 	// Wait for child. Give the kernel + reader a brief window to drain any
 	// final bytes still in the PTY buffer; then close the master so the
 	// reader's blocking Read returns and goroutines exit.
@@ -342,17 +359,48 @@ func cmdTerminalShare(args []string) error {
 	return nil
 }
 
+func flushInboxAlerts(ctx context.Context, pump *terminalInboxAlertPump) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			pump.Flush(now)
+		}
+	}
+}
+
 // publishAndDisplayStdout reads the PTY master in chunks. Each chunk is
 // fanned out two ways:
-//   (a) written verbatim to `display` (the user's local stdout) so the
-//       wrapped terminal looks normal,
-//   (b) published verbatim to <handle>.stdout — one message per chunk, no
-//       transformation. ANSI escapes survive intact, so `ppz terminal view`
-//       can replay the session in a terminal emulator and `ppz read
-//       <h>.stdout --json` gives byte-faithful access to log consumers.
+//
+//	(a) written verbatim to `display` (the user's local stdout) so the
+//	    wrapped terminal looks normal,
+//	(b) published verbatim to <handle>.stdout — one message per chunk, no
+//	    transformation. ANSI escapes survive intact, so `ppz terminal view`
+//	    can replay the session in a terminal emulator and `ppz read
+//	    <h>.stdout --json` gives byte-faithful access to log consumers.
 //
 // One read, two consumers — same fan-out as `script(1)` / `screen`.
+// Publishing runs on a bounded worker so a slow daemon/NATS round-trip does
+// not delay local terminal rendering; the bound preserves backpressure for
+// busy sessions instead of dropping stdout history.
 func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer) {
+	publishCh := make(chan string, 64)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for payload := range publishCh {
+			_ = sendStreamLine(handle, "stdout", payload)
+		}
+	}()
+	defer func() {
+		close(publishCh)
+		wg.Wait()
+	}()
+
 	buf := make([]byte, 4096)
 	var pending []byte // trailing partial UTF-8 sequence carried across reads
 	for {
@@ -376,14 +424,14 @@ func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer)
 			pending = partial
 
 			if len(complete) > 0 {
-				_ = sendStreamLine(handle, "stdout", string(complete))
+				publishCh <- string(complete)
 			}
 		}
 		if err != nil {
 			// Flush any final partial bytes (even if invalid) — better
 			// to ship them than drop, parity with legacy behaviour.
 			if len(pending) > 0 {
-				_ = sendStreamLine(handle, "stdout", string(pending))
+				publishCh <- string(pending)
 				pending = nil
 			}
 			return
@@ -465,6 +513,39 @@ func forwardStdin(ctx context.Context, handle string, master *os.File) {
 			payload += "\n"
 		}
 		_, _ = io.WriteString(master, payload)
+	}
+}
+
+func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxAlertPump) {
+	conn, err := net.Dial("unix", ipcSocket())
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	body, _ := json.Marshal(cliproto.ReadRequest{
+		Handle:    handle,
+		Channel:   "inbox",
+		Follow:    true,
+		NoAdvance: true,
+	})
+	if err := json.NewEncoder(conn).Encode(map[string]any{"method": cliproto.IPCRead, "params": json.RawMessage(body)}); err != nil {
+		return
+	}
+
+	go func() { <-ctx.Done(); _ = conn.Close() }()
+
+	dec := bufio.NewScanner(conn)
+	dec.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for dec.Scan() {
+		var evt cliproto.ReadEvent
+		if err := json.Unmarshal(dec.Bytes(), &evt); err != nil {
+			continue
+		}
+		if evt.Message == nil {
+			continue
+		}
+		pump.ObserveInboxMessage(time.Now(), *evt.Message)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
+	"github.com/pipescloud/ppz/internal/daemon"
 )
 
 // cmdRead: ppz read <handle>.<pipe> [--tail --json --tty --raw]
@@ -77,6 +78,13 @@ func runRead(target string, asJSON, follow, tty, raw, all bool, limit, skip int,
 	if tty && raw {
 		fmt.Fprintln(os.Stderr, "ppz read: --tty and --raw are mutually exclusive")
 		os.Exit(2)
+	}
+	if target == "inbox" {
+		resolved, err := currentInboxTarget()
+		if err != nil {
+			return err
+		}
+		target = resolved
 	}
 	idx := strings.LastIndex(target, ".")
 	if idx <= 0 || idx == len(target)-1 {
@@ -173,6 +181,18 @@ func runRead(target string, asJSON, follow, tty, raw, all bool, limit, skip int,
 		return nil
 	}
 	return nil
+}
+
+func currentInboxTarget() (string, error) {
+	var st cliproto.StatusReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
+		cliproto.StatusRequest{Session: sessionID()}, &st); err != nil {
+		return "", err
+	}
+	if st.Current == "" {
+		return "", cliproto.New(cliproto.ENoCurrentSource)
+	}
+	return st.Current + ".inbox", nil
 }
 
 // splitReadArgs lets `ppz read TGT --tail` and `ppz read --tail TGT` both

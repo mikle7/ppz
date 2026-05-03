@@ -3,4 +3,5 @@ Last Message
 --- per-pipe rows: handle:pipe:RELATIVE:payload (broadcast + archive both populated) ---
 foo:archive:RELATIVE:hello-archive
 foo:broadcast:RELATIVE:hello-broadcast
+foo:inbox::
 exit=0

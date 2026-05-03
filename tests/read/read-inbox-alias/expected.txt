@@ -1,0 +1,2 @@
+inbox hello
+exit=0

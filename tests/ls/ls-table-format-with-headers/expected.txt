@@ -1,4 +1,6 @@
 PIPE UNREAD BUFFERED LAST PAYLOAD
 chat.broadcast 1 1 RELATIVE hello world
+chat.inbox 0 0 - -
 verbose.broadcast 1 1 RELATIVE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…
+verbose.inbox 0 0 - -
 exit=0

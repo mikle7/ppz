@@ -1,4 +1,7 @@
 alpha.broadcast 0 0 - -
+alpha.inbox 0 0 - -
 beta.broadcast 0 0 - -
+beta.inbox 0 0 - -
 gamma.broadcast 0 0 - -
+gamma.inbox 0 0 - -
 exit=0

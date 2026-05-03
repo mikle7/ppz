@@ -1,4 +1,5 @@
 created pipe=chat.archive retention=ttl=24h0m0s,msgs=5000,bytes=16777216
 chat.archive 0 0 - -
 chat.broadcast 0 0 - -
+chat.inbox 0 0 - -
 exit=0

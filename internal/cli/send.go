@@ -9,20 +9,24 @@ import (
 	"github.com/pipescloud/ppz/internal/daemon"
 )
 
-// cmdSend: ppz send <handle>.<channel> <payload>
+// cmdSend: ppz send <handle>[.<pipe>] <payload>
 //
-// Explicit-target publish — the same wire format as ppz broadcast, just
-// without the "current handle" default. Used to write to .stdin of a
-// running terminal pipe, or to .broadcast of any pipe.
+// Bare handles target .inbox for direct source/agent messages. Explicit
+// <handle>.<pipe> targets can write to .stdin of a running terminal pipe,
+// or to .broadcast / custom pipes.
 func cmdSend(args []string) error {
 	if len(args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: ppz send <handle>.<channel> <payload>")
+		fmt.Fprintln(os.Stderr, "usage: ppz send <handle>[.<pipe>] <payload>")
 		os.Exit(2)
 	}
 	target := args[0]
 	payload := args[1]
 
 	idx := strings.LastIndex(target, ".")
+	if idx == -1 {
+		target += ".inbox"
+		idx = strings.LastIndex(target, ".")
+	}
 	if idx <= 0 || idx == len(target)-1 {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
