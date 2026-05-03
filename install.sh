@@ -87,6 +87,19 @@ main() {
 
 	tar -xzf "$TMP/$TARBALL" -C "$TMP"
 
+	# Stop a running daemon before replacing the binary. Without this,
+	# users upgrade but `ppz` keeps hitting the OLD daemon process —
+	# confusing, and a frequent footgun. Track whether we actually
+	# stopped one so we know to restart it after install.
+	restart_daemon=false
+	if command -v ppz >/dev/null 2>&1 || [ -x "$INSTALL_DIR/ppz" ]; then
+		ppz_bin=$(command -v ppz 2>/dev/null || echo "$INSTALL_DIR/ppz")
+		if "$ppz_bin" daemon stop 2>&1 | grep -q "daemon stopped"; then
+			msg "Stopped running daemon."
+			restart_daemon=true
+		fi
+	fi
+
 	installed=()
 	for b in "${BINARIES[@]}"; do
 		if [ -f "$TMP/$b" ]; then
@@ -99,6 +112,16 @@ main() {
 	msg ""
 	msg "Installed ${#installed[@]} binaries: ${installed[*]}"
 	msg "  → ${INSTALL_DIR}/"
+
+	# Restart the daemon iff we stopped one. Honours the principle of
+	# least surprise — fresh installs without a daemon stay that way.
+	if [ "$restart_daemon" = "true" ]; then
+		if "$INSTALL_DIR/ppz" daemon start >/dev/null 2>&1; then
+			msg "Restarted daemon (now running ${TAG})."
+		else
+			msg "Heads-up: daemon restart failed. Run: ppz daemon start"
+		fi
+	fi
 	case ":$PATH:" in
 		*:"$INSTALL_DIR":*)
 			msg ""
