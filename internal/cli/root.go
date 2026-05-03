@@ -109,7 +109,8 @@ Operations:
                                    '*' quoted or % unquoted as the wildcard)
   ppz broadcast [-m TEXT]          publish to <current_source>.broadcast
   ppz read TGT [--tail --json --tty --raw]
-                                   read NEW messages from <handle>.<pipe>
+                                   read NEW messages from <handle>.<pipe>;
+                                   'ppz read inbox' reads <current>.inbox
                                    since the session cursor; advances the
                                    cursor as it goes (agent inbox poll).
                                    --tail keeps streaming live until SIGINT.
@@ -120,6 +121,7 @@ Operations:
                                    ignoring the cursor. Carries the filter
                                    flags. Never advances the cursor.
   ppz send TGT PAYLOAD             publish PAYLOAD to <handle>.<pipe>
+  ppz send <handle> PAYLOAD        shorthand for <handle>.inbox
 
 Shell integration:
   ppz completion bash              tab-completion script for bash
