@@ -88,6 +88,11 @@ install-system: build
 		install -m 0755 ./bin/ppz "$(SYSTEM_BIN)/ppz"; \
 	fi
 	@echo "Installed $(VERSION) ($(SHA)) → $(SYSTEM_BIN)/ppz"
+	@resolved=$$(command -v ppz 2>/dev/null || true); \
+	if [ -n "$$resolved" ] && [ "$$resolved" != "$(SYSTEM_BIN)/ppz" ]; then \
+		echo "WARNING: 'ppz' resolves to $$resolved before $(SYSTEM_BIN)/ppz on PATH"; \
+		echo "         install there instead with: make install-system SYSTEM_BIN=$$(dirname "$$resolved")"; \
+	fi
 	@# Tab completion: append a one-line eval to the user's shell rc so
 	@# new shells pick up `ppz` completion automatically. Idempotent —
 	@# guarded by a marker so re-running install-system is safe. The
