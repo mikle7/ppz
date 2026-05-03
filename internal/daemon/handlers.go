@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -648,9 +647,8 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 	}
 	d.State.ResetPipes(handles)
 
-	// Aggregate per-pipe info from JetStream (route B). For each source
-	// we look at the pipe set implied by its kind, ask JetStream for
-	// each stream's Info, and join with the session's cursor.
+	// Aggregate per-pipe info from JetStream (route B). List stream metadata
+	// once, then fetch latest payload previews only for non-empty streams.
 	if err := d.ensureNATS(ctx); err != nil {
 		// No NATS = can't get per-pipe stats. Return what we have.
 		writeIPC(conn, cliproto.ListReply{Sources: lr.Sources})
@@ -667,63 +665,10 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
-	enriched := make([]cliproto.Source, 0, len(lr.Sources))
-	for _, s := range lr.Sources {
-		// Combine auto-provisioned pipes (from kind) with user-created
-		// pipes (returned by the server). Dedupe in case a user explicitly
-		// created an auto-provisioned name on a pty source — the row +
-		// stream coexist; ls should show one line.
-		pipeSet := map[string]struct{}{}
-		for _, p := range pipesForKind(s.Kind) {
-			pipeSet[p] = struct{}{}
-		}
-		for _, p := range s.Pipes {
-			pipeSet[p] = struct{}{}
-		}
-		pipes := make([]string, 0, len(pipeSet))
-		for p := range pipeSet {
-			pipes = append(pipes, p)
-		}
-		sort.Strings(pipes)
-		infos := make([]cliproto.PipeInfo, 0, len(pipes))
-		for _, p := range pipes {
-			info := cliproto.PipeInfo{Pipe: p}
-			streamName := natsubj.StreamName(orgID, s.Handle, p)
-			if stream, err := js.Stream(ctx, streamName); err == nil {
-				if si, err := stream.Info(ctx); err == nil {
-					info.Total = si.State.Msgs
-					info.LastSeq = si.State.LastSeq
-					if !si.State.LastTime.IsZero() {
-						lt := si.State.LastTime.UTC()
-						info.LastAt = &lt
-					}
-					cursor := d.Cursors.Get(req.Session, daemonCursorKey(orgID, s.Handle, p))
-					if info.LastSeq > cursor {
-						info.Unread = info.LastSeq - cursor
-					}
-					// Preview = TruncatePayload of the most recent
-					// envelope's payload field. Works uniformly for
-					// broadcast / stdin / stdout pipes — the postgres
-					// last_broadcast_payload mirror is purely for the
-					// server GUI now.
-					if info.LastSeq > 0 {
-						if msg, err := stream.GetMsg(ctx, info.LastSeq); err == nil {
-							if env, err := envelope.Unmarshal(msg.Data); err == nil {
-								info.Preview = cliproto.TruncatePayload(env.Payload)
-								// Full payload is consumed by `ppz ls --json`.
-								// Bounded by JetStream message size, so even a
-								// busy-source ls call stays within reasonable
-								// IPC payload bounds.
-								info.Payload = env.Payload
-							}
-						}
-					}
-				}
-			}
-			infos = append(infos, info)
-		}
-		s.PipeInfos = infos
-		enriched = append(enriched, s)
+	enriched, err := enrichSourcesWithPipeInfo(ctx, js, lr.Sources, orgID, req.Session, nil, cursorSnapshot(d.Cursors, req.Session))
+	if err != nil {
+		writeIPC(conn, cliproto.ListReply{Sources: lr.Sources})
+		return
 	}
 
 	writeIPC(conn, cliproto.ListReply{Sources: enriched})

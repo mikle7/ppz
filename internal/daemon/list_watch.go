@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,8 +12,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
-	"github.com/pipescloud/ppz/internal/envelope"
-	"github.com/pipescloud/ppz/internal/natsubj"
 )
 
 // handleListWatch is `ppz ls --watch [pattern...]`. Level-triggered: if
@@ -130,64 +127,9 @@ func (d *Daemon) buildFilteredList(ctx context.Context, orgID uuid.UUID, session
 		return cliproto.ListReply{}, cliproto.New(cliproto.ENATSUnreachable)
 	}
 
-	enriched := make([]cliproto.Source, 0)
-	for _, s := range lr.Sources {
-		// Same union-of-pipes logic as handleList: kind-derived
-		// auto-provisioned + user-created.
-		pipeSet := map[string]struct{}{}
-		for _, p := range pipesForKind(s.Kind) {
-			pipeSet[p] = struct{}{}
-		}
-		for _, p := range s.Pipes {
-			pipeSet[p] = struct{}{}
-		}
-		pipes := make([]string, 0, len(pipeSet))
-		for p := range pipeSet {
-			pipes = append(pipes, p)
-		}
-		sort.Strings(pipes)
-		infos := make([]cliproto.PipeInfo, 0, len(pipes))
-		for _, p := range pipes {
-			// Per-pipe filter: pattern can match handle alone (back-compat
-			// with `ls --watch agent-*`) or the full `<handle>.<pipe>`
-			// target (lets `*.stdout` filter to stdout pipes only).
-			if !matchAnyTarget(s.Handle, p, patterns) {
-				continue
-			}
-			info := cliproto.PipeInfo{Pipe: p}
-			streamName := natsubj.StreamName(orgID, s.Handle, p)
-			if stream, err := js.Stream(ctx, streamName); err == nil {
-				if si, err := stream.Info(ctx); err == nil {
-					info.Total = si.State.Msgs
-					info.LastSeq = si.State.LastSeq
-					if !si.State.LastTime.IsZero() {
-						lt := si.State.LastTime.UTC()
-						info.LastAt = &lt
-					}
-					cursor := d.Cursors.Get(session, daemonCursorKey(orgID, s.Handle, p))
-					if info.LastSeq > cursor {
-						info.Unread = info.LastSeq - cursor
-					}
-					if info.LastSeq > 0 {
-						if msg, err := stream.GetMsg(ctx, info.LastSeq); err == nil {
-							if env, err := envelope.Unmarshal(msg.Data); err == nil {
-								info.Preview = cliproto.TruncatePayload(env.Payload)
-								info.Payload = env.Payload
-							}
-						}
-					}
-				}
-			}
-			infos = append(infos, info)
-		}
-		// Skip the source entirely if none of its pipes survived the
-		// filter — keeps the table from showing handle headers with
-		// no pipe rows.
-		if len(infos) == 0 {
-			continue
-		}
-		s.PipeInfos = infos
-		enriched = append(enriched, s)
+	enriched, err := enrichSourcesWithPipeInfo(ctx, js, lr.Sources, orgID, session, patterns, cursorSnapshot(d.Cursors, session))
+	if err != nil {
+		return cliproto.ListReply{}, cliproto.New(cliproto.ENATSUnreachable)
 	}
 	return cliproto.ListReply{Sources: enriched}, nil
 }
