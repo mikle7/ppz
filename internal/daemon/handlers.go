@@ -734,9 +734,9 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 func pipesForKind(kind string) []string {
 	if kind == string(cliproto.KindPTY) {
 		// Sorted alphabetically so ls output is deterministic.
-		return []string{"broadcast", "stdctrl", "stdin", "stdout"}
+		return []string{"broadcast", "inbox", "stdctrl", "stdin", "stdout"}
 	}
-	return []string{"broadcast"}
+	return []string{"broadcast", "inbox"}
 }
 
 func daemonCursorKey(orgID uuid.UUID, handle, pipe string) string {

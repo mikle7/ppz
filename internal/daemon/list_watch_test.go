@@ -1,6 +1,9 @@
 package daemon
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // TestMatchAnyTarget covers patterns that target the full
 // `<handle>.<pipe>` rather than just the handle. Today the matcher
@@ -32,6 +35,32 @@ func TestMatchAnyTarget(t *testing.T) {
 			if got := matchAnyTarget(c.handle, c.pipe, c.patterns); got != c.want {
 				t.Errorf("matchAnyTarget(%q, %q, %v) = %v, want %v",
 					c.handle, c.pipe, c.patterns, got, c.want)
+			}
+		})
+	}
+}
+
+func TestPipesForKindIncludesInbox(t *testing.T) {
+	cases := []struct {
+		name string
+		kind string
+		want []string
+	}{
+		{
+			name: "message source",
+			kind: "",
+			want: []string{"broadcast", "inbox"},
+		},
+		{
+			name: "pty source",
+			kind: "pty",
+			want: []string{"broadcast", "inbox", "stdctrl", "stdin", "stdout"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := pipesForKind(c.kind); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("pipesForKind(%q) = %v, want %v", c.kind, got, c.want)
 			}
 		})
 	}

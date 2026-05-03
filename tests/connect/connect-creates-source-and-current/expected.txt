@@ -4,4 +4,5 @@ current handle=chat
 current source: chat
 --- ls ---
 chat.broadcast 0 0 - -
+chat.inbox 0 0 - -
 exit=0

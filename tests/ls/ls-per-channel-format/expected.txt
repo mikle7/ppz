@@ -1,6 +1,8 @@
 pty-pipe.broadcast 0 0 - -
+pty-pipe.inbox 0 0 - -
 pty-pipe.stdctrl 1 1 RELATIVE STDCTRL_JSON
 pty-pipe.stdin 0 0 - -
 pty-pipe.stdout 0 0 - -
 regular.broadcast 0 0 - -
+regular.inbox 0 0 - -
 exit=0

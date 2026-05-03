@@ -1,5 +1,7 @@
 --- a ---
 alpha-only.broadcast 0 0 - -
+alpha-only.inbox 0 0 - -
 --- b ---
 beta-only.broadcast 0 0 - -
+beta-only.inbox 0 0 - -
 exit=0
