@@ -14,19 +14,19 @@ tooling). The OSS code here is fully self-hostable.
 
 ## Install
 
-**Quick (any platform with Go 1.22+):**
+**Quick (linux / macOS, amd64 / arm64):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pipescloud/ppz/main/install.sh | bash
 ```
 
-This compiles from source via `go install` for now; pre-built
-binaries via GitHub Releases land on every tag (see the **Releases**
-tab) — once the release pipeline is wired through end-to-end the
-install script will switch over to downloading the right artifact
-for the current OS/arch.
+Detects your OS + arch, downloads the matching pre-built tarball
+from the latest [GitHub Release](https://github.com/pipescloud/ppz/releases),
+verifies the sha256, and drops the binaries into `~/.local/bin`. No
+Go toolchain required. Pin a specific version with `PPZ_VERSION=v0.17.0`
+or override the install dir with `PPZ_INSTALL_DIR=/usr/local/bin`.
 
-**From source:**
+**From source (requires Go 1.22+):**
 
 ```bash
 git clone https://github.com/pipescloud/ppz
