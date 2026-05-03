@@ -11,8 +11,9 @@ import (
 )
 
 // SourceKind enumerates the supported source shapes.
-//   "message" — default; one pipe: broadcast.
-//   "pty"     — terminal source; three pipes: broadcast, stdin, stdout.
+//
+//	"message" — default; two pipes: broadcast, inbox.
+//	"pty"     — terminal source; broadcast, inbox, and terminal IO pipes.
 type SourceKind string
 
 const (
@@ -31,8 +32,11 @@ type Source struct {
 }
 
 // Pipes returns the pipe set for a source based on its kind.
-// pty sources have three pipes:
+// All sources have:
 //   - broadcast: user-level messages (same as message-kind sources)
+//   - inbox: direct messages intended for this source/agent
+//
+// pty sources also have:
 //   - stdin: input fed to the wrapped child via `ppz send`
 //   - stdout: byte-faithful capture of the PTY master's output (ANSI
 //     escapes intact); both `ppz read` and `ppz terminal view` consume
@@ -40,9 +44,9 @@ type Source struct {
 func (s Source) Pipes() []string {
 	switch s.Kind {
 	case SourceKindPTY:
-		return []string{"broadcast", "stdin", "stdout", "stdctrl"}
+		return []string{"broadcast", "stdin", "stdout", "stdctrl", "inbox"}
 	default:
-		return []string{"broadcast"}
+		return []string{"broadcast", "inbox"}
 	}
 }
 

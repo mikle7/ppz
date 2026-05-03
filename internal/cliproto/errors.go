@@ -84,7 +84,7 @@ func Message(c Code) string {
 	case ENATSUnreachable:
 		return "nats unreachable; if running ppz daemon outside docker, set PPZ_NATS_URL=nats://localhost:4222 before 'ppz daemon start'"
 	case EInvalidPipe:
-		return "invalid pipe; target must be <handle>.<pipe> with pipe ∈ {broadcast, stdin, stdout}"
+		return "invalid pipe; target must be <handle>.<pipe> with pipe ∈ {broadcast, inbox, stdin, stdout}"
 	case EPipeTaken:
 		return "pipe with this name already exists on this source"
 	case EPipeNotFound:

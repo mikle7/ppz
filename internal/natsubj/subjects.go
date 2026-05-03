@@ -1,6 +1,8 @@
 // Package natsubj builds and parses the ppz subject grammar
-//   <org_id>.<handle>.<pipe>
-// where {pipe} ∈ {broadcast, stdin, stdout}. The optional workspace slot
+//
+//	<org_id>.<handle>.<pipe>
+//
+// where {pipe} ∈ {broadcast, inbox, stdin, stdout}. The optional workspace slot
 // between org and handle is reserved by the long-term grammar but unused.
 package natsubj
 
@@ -40,18 +42,20 @@ var Reserved = map[string]bool{
 // xterm.js viewport sized to match the source pty.
 var ValidPipes = map[string]bool{
 	"broadcast": true,
+	"inbox":     true,
 	"stdin":     true,
 	"stdout":    true,
 	"stdctrl":   true,
 }
 
-// AutoProvisionedPipes covers pipes the server creates automatically when
-// a pty source is provisioned. They're NOT blocked from user pipe creation
-// — `pipe create <h>.stdin` is allowed on any source (and is exactly how
-// bare `terminal share` ensures the pipes exist on a non-pty current
-// source). The set is here for documentation + the daemon's ls dedupe.
+// AutoProvisionedPipes covers pipes the server creates automatically for
+// sources. Some are also allowed via user pipe creation (`stdin`, `stdout`,
+// `stdctrl` for terminal sharing); `inbox` remains reserved from manual
+// creation even though it is provisioned automatically. The set is here for
+// documentation + the daemon's ls dedupe.
 var AutoProvisionedPipes = map[string]bool{
 	"broadcast": true,
+	"inbox":     true,
 	"stdin":     true,
 	"stdout":    true,
 	"stdctrl":   true,
@@ -126,7 +130,9 @@ func Broadcast(orgID uuid.UUID, handle string) string {
 }
 
 // StreamName produces the JetStream stream name per WIRE.md §2:
-//   source_<orgshort>_<handle>_<pipe>
+//
+//	source_<orgshort>_<handle>_<pipe>
+//
 // where orgshort is the first 8 hex chars of the org UUID, hyphens stripped.
 func StreamName(orgID uuid.UUID, handle, pipe string) string {
 	hex := strings.ReplaceAll(orgID.String(), "-", "")
