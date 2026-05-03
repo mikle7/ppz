@@ -1,0 +1,7 @@
+created handle=chat subject=ORG_ALPHA.chat.broadcast
+current handle=chat
+--- status ---
+current source: chat
+--- ls ---
+chat.broadcast 0 0 - -
+exit=0

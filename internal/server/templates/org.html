@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ppz — {{.Org.Name}}</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <div>
+        <h1><a href="/dashboard">ppz</a> / {{.Org.Name}}</h1>
+        <div class="crumbs"
+             data-owner-username="{{.Owner.Username}}">
+          {{.Org.ID}} · owner: {{.Owner.Username}}
+        </div>
+      </div>
+    </header>
+
+    <nav class="tabs" data-active-tab="{{.ActiveTab}}">
+      <a data-tab="pipes" href="/orgs/{{.Org.Name}}/pipes"
+         class="{{if eq .ActiveTab "pipes"}}active{{end}}">Pipes</a>
+      <a data-tab="users" href="/orgs/{{.Org.Name}}/users"
+         class="{{if eq .ActiveTab "users"}}active{{end}}">Users</a>
+      <a data-tab="keys"  href="/orgs/{{.Org.Name}}/keys"
+         class="{{if eq .ActiveTab "keys"}}active{{end}}">API keys</a>
+    </nav>
+
+    {{if eq .ActiveTab "pipes"}}
+    <section id="section-pipes">
+      {{if .Sources}}
+      <table id="pipes">
+        <thead>
+          <tr><th>source</th><th>pipe</th><th>Last Message</th><th>payload</th></tr>
+        </thead>
+        <tbody>
+          {{range .Sources}}
+          <tr data-source="{{.Handle}}"
+              data-source-row="{{.Handle}}:{{.Pipe}}:{{.LastMessageAt}}:{{.PayloadDisplay}}">
+            <td><code>{{.Handle}}</code></td>
+            <td>
+              <a href="{{.PipeLink}}" data-source-pipe-link="{{.PipeLink}}">{{.Pipe}}</a>
+              {{if .TerminalLink}}
+              · <a href="{{.TerminalLink}}" data-terminal-link="{{.TerminalLink}}">open terminal</a>
+              {{end}}
+            </td>
+            <td>{{if .HasLastMessage}}{{.LastMessageAt}}{{else}}<span class="empty">—</span>{{end}}</td>
+            <td>{{if .HasLastMessage}}{{.PayloadDisplay}}{{else}}<span class="empty">—</span>{{end}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p class="empty">No sources yet.</p>
+      {{end}}
+    </section>
+    {{end}}
+
+    {{if eq .ActiveTab "users"}}
+    <section id="section-users">
+      <div data-users-subsection="owner">
+        <h3>Owner</h3>
+        <ul class="tidy">
+          <li data-user-id="{{.Owner.ID}}"
+              data-username="{{.Owner.Username}}"
+              data-user-mode="{{.Owner.Mode}}">
+            <strong>{{.Owner.Username}}</strong>
+            <small>· {{.Owner.Email}} · {{.Owner.Mode}}</small>
+            <button type="button" disabled
+                    data-todo="transfer-ownership"
+                    title="Transfer ownership — coming in v2">Transfer ownership</button>
+          </li>
+        </ul>
+      </div>
+      <div data-users-subsection="members">
+        <h3>Members</h3>
+        {{if .Members}}
+        <ul class="tidy" id="members">
+          {{range .Members}}
+          <li data-user-id="{{.ID}}"
+              data-username="{{.Username}}"
+              data-user-mode="{{.Mode}}">
+            {{.Username}}
+            <small>· {{.Email}} · {{.Mode}}</small>
+            <form method="post" action="/orgs/{{$.Org.ID}}/members/{{.ID}}/remove" class="inline">
+              <button type="submit"
+                      onclick="return confirm('Remove {{.Username}} from this organisation?');">Remove</button>
+            </form>
+          </li>
+          {{end}}
+        </ul>
+        {{else}}
+        <p class="empty">No members yet.</p>
+        {{end}}
+        <form method="post" action="/orgs/{{.Org.ID}}/members">
+          <label>Add member by user_id <input name="user_id" required></label>
+          <button type="submit">Add member</button>
+        </form>
+        <button type="button" disabled
+                data-todo="invite"
+                title="Invite by email — coming in v2">Invite by email</button>
+      </div>
+    </section>
+    {{end}}
+
+    {{if eq .ActiveTab "keys"}}
+    <section id="section-keys">
+      {{if .Keys}}
+      <ul class="tidy" id="keys">
+        {{range .Keys}}
+        <li data-key-prefix="{{.KeyPrefix}}"
+            data-key-id="{{.ID}}"
+            data-key-state="{{if .Revoked}}revoked{{else}}active{{end}}">
+          {{.Label}}
+          <code>{{.KeyPrefix}}…</code>
+          <small>· {{.CreatedAt.Format "2006-01-02T15:04:05Z"}}</small>
+          {{if .Revoked}}
+          <small class="revoked">· revoked {{.RevokedAt.Format "2006-01-02T15:04:05Z"}}</small>
+          {{else}}
+          <form method="post" action="/api/v1/keys/{{.ID}}/revoke" class="inline">
+            <button type="submit" onclick="return confirm('Revoke this key? Existing daemons using it will lose access on their next call.');">Revoke</button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="empty">No keys yet.</p>
+      {{end}}
+      <form method="post" action="/orgs/{{.Org.Name}}/keys">
+        <label>Label <input name="label" required></label>
+        <button type="submit">Create key</button>
+      </form>
+    </section>
+    {{end}}
+  </main>
+</body>
+</html>

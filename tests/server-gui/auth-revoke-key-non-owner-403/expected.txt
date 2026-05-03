@@ -1,0 +1,5 @@
+--- POST revoke as bar (non-owner of alpha) ---
+status=403
+--- key state after the rejected revoke (should still be active) ---
+data-key-state="active"
+exit=0

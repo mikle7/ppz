@@ -1,0 +1,13 @@
+# mock-github image. Built from the repo root context.
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download || true
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/mock-github ./cmd/mock-github
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates wget
+COPY --from=build /out/mock-github /usr/local/bin/mock-github
+ENV PORT=:9000
+ENTRYPOINT ["/usr/local/bin/mock-github"]

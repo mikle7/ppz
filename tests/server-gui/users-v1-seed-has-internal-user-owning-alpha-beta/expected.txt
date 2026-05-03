@@ -1,0 +1,8 @@
+--- internal placeholder user exists ---
+unauthenticated|internal
+--- alpha and beta both have internal-mode owners ---
+alpha owned by foo (internal)
+beta owned by unauthenticated (internal)
+--- alpha's org page surfaces the owner ---
+data-owner-username="foo"
+exit=0

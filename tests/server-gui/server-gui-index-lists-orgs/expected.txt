@@ -1,0 +1,3 @@
+alpha
+beta
+exit=0

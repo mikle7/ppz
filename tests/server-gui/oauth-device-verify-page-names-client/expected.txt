@@ -1,0 +1,6 @@
+--- POST /oauth/device/code with client_name ---
+minted: true
+
+--- GET /oauth/device/verify → page names the client ---
+client_name_present: true
+exit=0

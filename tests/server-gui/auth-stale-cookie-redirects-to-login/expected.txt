@@ -1,0 +1,10 @@
+--- sanity: cookie works while user exists ---
+status=200
+
+--- delete the user from the DB out from under the cookie ---
+deleted=true
+
+--- /dashboard with the now-stale cookie → must redirect to /login ---
+status=302
+Location: /login?next=%2Fdashboard
+exit=0

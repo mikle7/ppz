@@ -1,0 +1,13 @@
+--- 1. CLI mints device + user codes ---
+minted: true
+
+--- 2. user (foo) approves the user_code in the browser ---
+verify_status=303
+
+--- 3. CLI polls token endpoint → bearer issued ---
+token_status: status=200
+token_has_oauth_prefix: true
+
+--- 4. use the bearer against an authed API endpoint ---
+api_status=200
+exit=0

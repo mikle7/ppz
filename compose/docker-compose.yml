@@ -1,0 +1,189 @@
+# ppz Phase 1 e2e harness.
+#
+# Topology mirrors the user's spec:
+#   local-a (test-runner) <-> daemon-a + desktop-gui-a <-> ppz-server <-> daemon-b + desktop-gui-b <-> local-b
+#
+# Boot order is enforced via depends_on healthchecks. The seeder runs as part
+# of ppz-server's entrypoint and writes plaintext keys + org IDs into the
+# /seed shared volume so test-runner can read them by file.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ppz
+      POSTGRES_DB: ppz
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ppz"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks: [ppz]
+
+  mock-github:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile.mock-github
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/healthz | grep -q ok"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks: [ppz]
+
+  ppz-server:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile.server
+    environment:
+      PPZ_DB_URL: postgres://postgres:ppz@postgres:5432/ppz?sslmode=disable
+      PPZ_HTTP_ADDR: ":8080"
+      PPZ_NATS_ADDR: ":4222"
+      # NATS URL is derived from the request's Host header — compose-internal
+      # clients automatically get nats://ppz-server:4222, host clients (via
+      # http://localhost:8080) get nats://localhost:4222. Set
+      # PPZ_NATS_PUBLIC_URL to override.
+      PPZ_SEED: "true"
+      PPZ_SEED_DIR: /seed
+      # Auth V2: GitHub URLs point at mock-github so e2e tests exercise
+      # the full OAuth flow without real github.com. Production sets
+      # none of these → defaults to real GitHub.
+      PPZ_BASE_URL: "http://ppz-server:8080"
+      PPZ_GITHUB_CLIENT_ID: "test-client"
+      PPZ_GITHUB_CLIENT_SECRET: "test-secret"
+      PPZ_GITHUB_AUTHORIZE_URL: "http://mock-github:9000/login/oauth/authorize"
+      PPZ_GITHUB_TOKEN_URL: "http://mock-github:9000/login/oauth/access_token"
+      PPZ_GITHUB_USER_URL: "http://mock-github:9000/user"
+      PPZ_SESSION_KEY: "compose-test-session-key-32-bytes-x"
+      PPZ_DEV_LOGIN: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-github:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz | grep -q ok"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+    volumes:
+      - seed:/seed
+    ports:
+      - "8080:8080"   # GUI + HTTP API on http://localhost:8080
+      - "4222:4222"   # NATS — needed by host CLI; set PPZ_NATS_URL=nats://localhost:4222
+    networks: [ppz]
+
+  caddy:
+    image: caddy:2-alpine
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - ../site/public:/srv/pipescloud-site:ro
+      - ./Caddyfile.compose:/etc/caddy/Caddyfile:ro
+    depends_on:
+      ppz-server:
+        condition: service_healthy
+    healthcheck:
+      # Verifies Caddy is up AND can reverse-proxy /healthz to
+      # ppz-server. If the proxy is broken, this fails and dependents
+      # never start.
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q ok"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+    ports:
+      - "8088:80"     # host access for manual testing through the prod-shape edge
+    networks: [ppz]
+
+  daemon-a:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile.daemon
+    command: ["ppz", "daemon", "start", "--foreground"]
+    environment:
+      PPZ_HOME: /home/ppz
+      PPZ_IPC_SOCKET: /home/ppz/daemon.sock
+    depends_on:
+      ppz-server:
+        condition: service_healthy
+    volumes:
+      - daemon-a-home:/home/ppz
+    networks: [ppz]
+
+  daemon-b:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile.daemon
+    command: ["ppz", "daemon", "start", "--foreground"]
+    environment:
+      PPZ_HOME: /home/ppz
+      PPZ_IPC_SOCKET: /home/ppz/daemon.sock
+    depends_on:
+      ppz-server:
+        condition: service_healthy
+    volumes:
+      - daemon-b-home:/home/ppz
+    networks: [ppz]
+
+  desktop-gui-a:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile.gui
+    command: ["ppz-desktop", "--headless", "--ipc=/home/ppz/daemon.sock", "--http-addr=:9090"]
+    depends_on:
+      - daemon-a
+    volumes:
+      - daemon-a-home:/home/ppz
+    ports:
+      - "9091:9090"   # browser viewer for daemon-a → http://localhost:9091
+    networks: [ppz]
+
+  desktop-gui-b:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile.gui
+    command: ["ppz-desktop", "--headless", "--ipc=/home/ppz/daemon.sock", "--http-addr=:9090"]
+    depends_on:
+      - daemon-b
+    ports:
+      - "9092:9090"   # browser viewer for daemon-b → http://localhost:9092
+    volumes:
+      - daemon-b-home:/home/ppz
+    networks: [ppz]
+
+  test-runner:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile.testrunner
+    environment:
+      PPZ_SERVER_URL: http://ppz-server:8080
+      PPZ_PUBLIC_URL: http://caddy:80
+      PPZ_DAEMON_A_HOME: /tmp/a
+      PPZ_DAEMON_B_HOME: /tmp/b
+    depends_on:
+      ppz-server:
+        condition: service_healthy
+      caddy:
+        condition: service_healthy
+      daemon-a:
+        condition: service_started
+      daemon-b:
+        condition: service_started
+      desktop-gui-a:
+        condition: service_started
+      desktop-gui-b:
+        condition: service_started
+    volumes:
+      - ../tests:/tests:ro
+      - daemon-a-home:/tmp/a
+      - daemon-b-home:/tmp/b
+      - seed:/seed:ro
+    command: ["bash", "/tests/run.sh"]
+    networks: [ppz]
+
+networks:
+  ppz: {}
+
+volumes:
+  seed: {}
+  daemon-a-home: {}
+  daemon-b-home: {}

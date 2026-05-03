@@ -1,0 +1,99 @@
+version: 2
+
+# ppz release pipeline.
+#
+# Triggered on tag push (v*) by .github/workflows/release.yml. Builds
+# every cmd/* binary for linux/darwin × amd64/arm64, archives them
+# per-platform, computes checksums, and uploads to the GitHub Release
+# the workflow creates.
+#
+# The CLI's `ppz` binary is the one most users care about; the others
+# (ppz-server, ppz-desktop, etc.) ship in the same archive so a single
+# download has everything needed for self-hosting.
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ppz
+    main: ./cmd/ppz
+    binary: ppz
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/pipescloud/ppz/internal/version.Version={{.Version}}
+      - -X github.com/pipescloud/ppz/internal/version.BuildSHA={{.ShortCommit}}
+
+  - id: ppz-server
+    main: ./cmd/ppz-server
+    binary: ppz-server
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/pipescloud/ppz/internal/version.Version={{.Version}}
+      - -X github.com/pipescloud/ppz/internal/version.BuildSHA={{.ShortCommit}}
+
+  - id: ppz-desktop
+    main: ./cmd/ppz-desktop
+    binary: ppz-desktop
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/pipescloud/ppz/internal/version.Version={{.Version}}
+      - -X github.com/pipescloud/ppz/internal/version.BuildSHA={{.ShortCommit}}
+
+  - id: ppz-seed
+    main: ./cmd/ppz-seed
+    binary: ppz-seed
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: [-s, -w]
+
+  - id: ppz-natsbootstrap
+    main: ./cmd/ppz-natsbootstrap
+    binary: ppz-natsbootstrap
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: [-s, -w]
+
+archives:
+  - id: default
+    builds: [ppz, ppz-server, ppz-desktop, ppz-seed, ppz-natsbootstrap]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - docs/**/*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: '{{ incpatch .Version }}-snapshot'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'Merge pull request'

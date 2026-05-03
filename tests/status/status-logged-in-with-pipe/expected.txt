@@ -1,0 +1,5 @@
+daemon: logged in (pid=PID)
+server: http://ppz-server:8080
+org: alpha
+current source: foo
+exit=0

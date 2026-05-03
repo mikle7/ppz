@@ -1,0 +1,5 @@
+--- ppz ls includes term1.stdctrl with at least one message ---
+term1.stdctrl has-msgs
+--- latest stdctrl message is a JSON resize event with non-zero dims ---
+{"type":"resize","cols_set":true,"rows_set":true}
+exit=0

@@ -1,0 +1,3 @@
+{"handle":"chat","payload":"hello"}
+{"handle":"chat","payload":"world"}
+exit=0

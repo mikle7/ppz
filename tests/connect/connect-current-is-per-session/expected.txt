@@ -1,0 +1,7 @@
+--- tab-a status (should show foo) ---
+current source: foo
+--- tab-b status (separate session — must NOT inherit) ---
+current source: -
+--- tab-a still shows foo (sanity: A's current didn't get clobbered) ---
+current source: foo
+exit=0

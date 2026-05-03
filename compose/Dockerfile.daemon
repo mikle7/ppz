@@ -1,0 +1,18 @@
+# Daemon image — also ships the `ppz` CLI binary on PATH.
+
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+RUN apk add --no-cache git
+COPY go.mod go.sum* ./
+RUN go mod download || true
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ppz ./cmd/ppz
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+RUN adduser -D -u 1000 ppz
+COPY --from=build /out/ppz /usr/local/bin/ppz
+USER ppz
+WORKDIR /home/ppz
+ENV PPZ_HOME=/home/ppz
+# No ENTRYPOINT — the compose command provides the full argv ("ppz daemon start --foreground").

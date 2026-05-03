@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ppz — {{.Org.Name}} / {{.Handle}} terminal</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/xterm.css">
+  <style>
+    /* Let xterm.js own its dimensions: cols×rows from the pty.stdctrl
+       resize event determines width/height. inline-block so the container
+       shrinks to the canvas size, then a viewport-wide flex wrapper
+       centers it — without this the terminal anchors to main's left
+       edge and overflows right on wide screens. */
+    .terminal-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 0 1rem 2rem;
+    }
+    #terminal { display: inline-block; }
+    .terminal-status {
+      font: 12px/1.4 monospace;
+      padding: 4px 0;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .terminal-status.ok  { color: #4a4; }
+    .terminal-status.err { color: #c44; }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <h1>
+        <a href="/dashboard">ppz</a> /
+        <a href="/orgs/{{.Org.Name}}">{{.Org.Name}}</a> /
+        <code>{{.Handle}}</code> /
+        terminal
+      </h1>
+      <div class="crumbs">
+        live read-only view of <code>{{.Handle}}.stdout</code> — replays
+        retained bytes, then follows new writes until the page is closed.
+        Read-only: keystrokes don't go anywhere yet.
+      </div>
+    </header>
+  </main>
+
+  <div id="terminal-status" class="terminal-status">connecting…</div>
+
+  <!-- Terminal sits OUTSIDE <main> so it isn't capped at main's
+       max-width: 960px. Its flex wrapper spans the full viewport and
+       centers the inline-block canvas, so a 180-col pty on a 2560px
+       monitor gets equal padding on both sides instead of overflowing
+       right. -->
+  <div class="terminal-wrap">
+    <div id="terminal" data-ws-path="/orgs/{{.Org.Name}}/sources/{{.Handle}}/terminal/ws"></div>
+  </div>
+
+  <script src="/assets/xterm.js"></script>
+  <script src="/assets/terminal.js"></script>
+</body>
+</html>

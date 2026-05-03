@@ -1,0 +1,7 @@
+--- login page identifier ---
+data-page="login"
+--- GitHub auth link present ---
+href="/auth/github/start"
+--- CTA copy ---
+Continue with GitHub
+exit=0

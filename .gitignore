@@ -1,0 +1,23 @@
+# Build artifacts
+bin/
+
+# Go
+*.test
+*.out
+coverage.html
+
+# OS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Local daemon state (typically ~/.ppz, but defend anyway)
+.ppz/
+
+# Local dev secrets — never commit. .env.local.example is the template.
+.env.local
+.env*.local
+

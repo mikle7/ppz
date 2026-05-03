@@ -1,0 +1,3 @@
+local-bridge-ok=yes
+channel-publish-ok=yes
+exit=0

@@ -1,0 +1,6 @@
+logged in url=http://ppz-server:8080 key=KEYPREFIX org=ORG_ALPHA
+daemon: logged in (pid=PID)
+server: http://ppz-server:8080
+org: alpha
+current source: -
+exit=0

@@ -1,0 +1,39 @@
+# Local-dev / e2e routing for the pipescloud edge.
+#
+# Mirrors the prod shape (infra/userdata.sh.tpl) at the path-handling
+# level: explicit marketing paths via file_server, everything else
+# reverse-proxied to ppz-server. TLS is handled by Caddy in prod;
+# this compose variant runs HTTP only.
+#
+# If you change routing here, change the prod Caddyfile in
+# infra/userdata.sh.tpl too — they're conceptually the same config.
+
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	root * /srv/pipescloud-site
+	encode zstd gzip
+
+	# Marketing paths — exact + prefix matchers. Add new pages here
+	# AND in infra/userdata.sh.tpl.
+	@marketing path / /about /pricing /legal/* /static/*
+	handle @marketing {
+		# .html-fallback so /about resolves to about.html, etc.
+		try_files {path} {path}.html
+		file_server
+	}
+
+	# Healthcheck shortcut — Caddy answers without round-tripping
+	# to ppz-server, so a healthy Caddy advertises itself even if
+	# the upstream is briefly down. (Optional — remove if you want
+	# Caddy's healthcheck to also exercise the proxy.)
+	# handle /caddy-healthz { respond "ok" 200 }
+
+	# Everything else → ppz-server.
+	handle {
+		reverse_proxy ppz-server:8080
+	}
+}

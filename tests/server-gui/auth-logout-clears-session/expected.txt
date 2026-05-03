@@ -1,0 +1,8 @@
+--- /dashboard authed (should be 200) ---
+status=200
+--- POST /auth/logout ---
+status=303
+Location: /
+--- /dashboard after logout (back to redirect) ---
+status=302
+exit=0

@@ -1,0 +1,11 @@
+--- bogus state, valid-looking code ---
+status=400
+
+--- no session cookie set ---
+0
+
+--- replay: mint a state, use it, use it again — second attempt rejected ---
+minted_state_present=true
+first_callback=303
+replay_callback=400
+exit=0

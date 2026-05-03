@@ -1,0 +1,7 @@
+--- watch '*.stdout' (quoted glob) — returns immediately, only stdout rows ---
+apple.stdout 1 1 RELATIVE stdout-from-apple
+banana.stdout 1 1 RELATIVE stdout-from-banana
+--- watch '%stdout' (sql alias, unquoted in zsh) — same result ---
+apple.stdout 1 1 RELATIVE stdout-from-apple
+banana.stdout 1 1 RELATIVE stdout-from-banana
+exit=0

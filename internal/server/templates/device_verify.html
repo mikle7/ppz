@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ppz — authorize CLI session</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body data-page="device-verify">
+  <header class="hero">
+    <img src="/assets/logo.png" alt="ppz" class="hero-logo">
+    {{if eq (index . "approved") "1"}}
+      <h1 class="hero-title">You're all set</h1>
+      <p class="hero-sub">You can close this window and return to your terminal.</p>
+    {{else}}
+      <p class="hero-tag">authorize CLI session</p>
+      {{if .ClientName}}
+        <p class="hero-sub"><strong>{{.ClientName}}</strong> would like to connect to your ppz account.</p>
+      {{else}}
+        <p class="hero-sub">A CLI session is requesting access. Approve only if you initiated this from your terminal.</p>
+      {{end}}
+      <form method="post" action="/oauth/device/verify" class="hero-cta">
+        <input type="hidden" name="user_code" value="{{.UserCode}}">
+        <button type="submit" class="btn-primary">Approve as me</button>
+      </form>
+      <p class="hero-sub" style="opacity:0.6">Code: <code>{{.UserCode}}</code></p>
+    {{end}}
+  </header>
+</body>
+</html>

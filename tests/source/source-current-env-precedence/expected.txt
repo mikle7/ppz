@@ -1,0 +1,13 @@
+--- env unset: daemon's current wins ---
+current source: foo
+--- env set: env wins, annotated ---
+current source: bar (env PPZ_CURRENT_HANDLE)
+current source: foo (pid=PID, PPZ_HOME/current.json)
+warning: current source is set twice, env takes precedence
+--- env set: broadcast targets bar, not foo ---
+bar.broadcast 1 1 RELATIVE to-bar
+--- env unset again: falls back to daemon's foo ---
+current source: foo
+--- env unset: broadcast targets foo ---
+foo.broadcast 1 1 RELATIVE to-foo
+exit=0

@@ -1,0 +1,2 @@
+daemon already running pid=PID
+exit=0

@@ -1,0 +1,10 @@
+--- new-key issuance returned both plaintext and id ---
+plaintext=present
+key_id=present
+--- login with the newly-issued key succeeds ---
+logged in
+--- revoke returns 200 ---
+http=200
+--- login with the same (now revoked) key is rejected ---
+error: E_INVALID_API_KEY: invalid api key
+exit=0

@@ -1,0 +1,2 @@
+created pipe=chat.archive retention=ttl=168h0m0s,msgs=5000,bytes=16777216
+exit=0

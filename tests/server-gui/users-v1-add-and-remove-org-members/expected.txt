@@ -1,0 +1,13 @@
+--- add bob as member ---
+http=200
+--- bob is now a member of wonder ---
+bob
+--- removing bob (regular member) succeeds ---
+http=200
+--- members table is empty again ---
+0
+--- removing alice (owner) is rejected ---
+http=409
+--- alice still owns wonder ---
+alice
+exit=0

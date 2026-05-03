@@ -1,0 +1,10 @@
+--- foo (owns+member alpha; nothing else) ---
+alpha_present:               true
+beta_present:                false
+tenant_leak_canary_present:  false
+
+--- bar (member of alpha + beta) ---
+alpha_present:               true
+beta_present:                true
+tenant_leak_canary_present:  false
+exit=0

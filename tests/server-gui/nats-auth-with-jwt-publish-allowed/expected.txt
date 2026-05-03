@@ -1,0 +1,9 @@
+--- daemon status reports a NATS user JWT in credentials ---
+nats_jwt_in_credentials: true
+
+--- broadcast within own org succeeds ---
+broadcast=ok
+
+--- ls sees the message ---
+ls=ok
+exit=0

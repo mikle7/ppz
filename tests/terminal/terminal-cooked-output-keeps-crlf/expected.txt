@@ -1,0 +1,3 @@
+stdout-bytes=6
+opost-on=yes
+exit=0

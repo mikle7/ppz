@@ -1,0 +1,2 @@
+stdout-bytes-ok=yes
+exit=0

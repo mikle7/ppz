@@ -1,0 +1,4 @@
+count=50
+first=msg-001
+last=msg-050
+exit=0

@@ -1,0 +1,311 @@
+package daemon
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
+	"github.com/pipescloud/ppz/internal/envelope"
+	"github.com/pipescloud/ppz/internal/natsubj"
+)
+
+// handleRead opens a JetStream OrderedConsumer on the pipe's stream, drains
+// retained messages applying the requested filters, then either closes (no
+// --follow) or keeps streaming live messages until the CLI closes the
+// connection (which it does on SIGINT).
+//
+// Streaming wire format: one JSON ReadEvent per line, followed by the
+// daemon closing the socket. The CLI reads ReadEvents until EOF.
+func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.ReadRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		writeReadErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+
+	if _, ok := d.State.Credentials(); !ok {
+		writeReadErr(conn, cliproto.New(cliproto.ENotLoggedIn))
+		return
+	}
+	if err := natsubj.ValidatePipe(req.Channel); err != nil {
+		writeReadErr(conn, cliproto.New(cliproto.EInvalidPipe))
+		return
+	}
+	if err := natsubj.ValidateHandle(req.Handle); err != nil {
+		writeReadErr(conn, cliproto.NewInvalidHandle(req.Handle))
+		return
+	}
+
+	// Verify the source exists in this org via the server. (Without this any
+	// not-yet-created handle would silently return empty rather than error.)
+	var listReply cliproto.ListSourcesReply
+	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &listReply); e != nil {
+		writeReadErr(conn, e)
+		return
+	}
+	found := false
+	for _, s := range listReply.Sources {
+		if s.Handle == req.Handle {
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeReadErr(conn, cliproto.NewSourceNotFound(req.Handle))
+		return
+	}
+
+	if err := d.ensureNATS(ctx); err != nil {
+		writeReadErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+		return
+	}
+
+	orgID, err := uuid.Parse(d.State.OrgID())
+	if err != nil {
+		writeReadErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
+		return
+	}
+	streamName := natsubj.StreamName(orgID, req.Handle, req.Channel)
+
+	js, err := jetstream.New(d.NC)
+	if err != nil {
+		writeReadErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+		return
+	}
+	stream, err := js.Stream(ctx, streamName)
+	if err != nil {
+		// No stream means the pipe has never been provisioned. For auto-
+		// provisioned pipes (broadcast / stdin / stdout) this would be a
+		// server-side bug; for user-created pipes it usually means a typo
+		// in the pipe name. Either way, return E_INVALID_PIPE.
+		writeReadErr(conn, cliproto.New(cliproto.EInvalidPipe))
+		return
+	}
+
+	// First pass: drain retained messages by GetMsg(seq), apply filters,
+	// hold them in a slice so we can apply tail-N at the end.
+	info, err := stream.Info(ctx)
+	if err != nil {
+		writeReadErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+		return
+	}
+
+	// On stdout reads, emit a leading Meta event with the source pty's
+	// current dimensions (sourced from the latest stdctrl resize). The
+	// CLI's --tty renderer uses these instead of the hardcoded 200×60
+	// default; without it, bytes positioned for a wider source garble
+	// when vt10x's grid wraps. Stdctrl missing / unparseable / dims=0
+	// are all treated as "no info" — caller falls back to defaults.
+	if req.Channel == "stdout" {
+		if cols, rows, ok := latestStdctrlResize(ctx, js, orgID, req.Handle); ok {
+			_ = json.NewEncoder(conn).Encode(cliproto.ReadEvent{
+				Meta: &cliproto.ReadMeta{Cols: cols, Rows: rows},
+			})
+		}
+	}
+
+	var (
+		retained    []cliproto.ReadMessage
+		lastSeqSeen uint64
+	)
+	// Cursor-aware vs forensic mode. `read` (default) starts at cursor+1 so
+	// the agent only sees what's new since they last looked. `reread`
+	// (req.All=true) ignores the cursor entirely — replay the full retained
+	// stream. NoAdvance is implied by All; cursor never moves under reread.
+	cursorKey := daemonCursorKey(orgID, req.Handle, req.Channel)
+	startSeq := info.State.FirstSeq
+	if !req.All && info.State.Msgs > 0 {
+		cursor := d.Cursors.Get(req.Session, cursorKey)
+		if cursor+1 > startSeq {
+			startSeq = cursor + 1
+		}
+	}
+	if info.State.Msgs > 0 && startSeq <= info.State.LastSeq {
+		var sinceCutoff time.Time
+		if req.SinceMS > 0 {
+			sinceCutoff = time.Now().Add(-time.Duration(req.SinceMS) * time.Millisecond)
+		}
+		for seq := startSeq; seq <= info.State.LastSeq; seq++ {
+			msg, err := stream.GetMsg(ctx, seq)
+			if err != nil {
+				continue // expired by retention
+			}
+			env, err := envelope.Unmarshal(msg.Data)
+			if err != nil {
+				continue
+			}
+			if !sinceCutoff.IsZero() && env.CreatedAt.Before(sinceCutoff) {
+				continue
+			}
+			retained = append(retained, cliproto.ReadMessage{
+				ID:        env.ID,
+				Handle:    env.Handle,
+				Payload:   env.Payload,
+				CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			})
+			lastSeqSeen = seq
+		}
+	}
+	if req.Skip > 0 && req.Skip < len(retained) {
+		retained = retained[req.Skip:]
+	} else if req.Skip >= len(retained) {
+		retained = nil
+	}
+	if req.Limit > 0 && req.Limit < len(retained) {
+		retained = retained[len(retained)-req.Limit:]
+	}
+
+	enc := json.NewEncoder(conn)
+	for _, m := range retained {
+		mm := m
+		if err := enc.Encode(cliproto.ReadEvent{Message: &mm}); err != nil {
+			return
+		}
+	}
+
+	// Advance the session's cursor to whatever we just delivered. Skipped
+	// when the caller passed NoAdvance (e.g. `ppz terminal view`, which is
+	// observational and shouldn't change anyone's unread count) or All (the
+	// `reread` forensic verb leaves cursor state untouched by design).
+	if !req.NoAdvance && !req.All && lastSeqSeen > 0 {
+		_ = d.Cursors.Advance(req.Session, cursorKey, lastSeqSeen)
+	}
+
+	if !req.Follow {
+		return
+	}
+
+	// Follow mode: open a live consumer starting just after the last
+	// sequence we drained (so we don't double-deliver). Stream until the
+	// CLI closes the socket or the request ctx is cancelled.
+	consumer, err := stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
+		FilterSubjects: []string{natsubj.Subject(orgID, req.Handle, req.Channel)},
+		DeliverPolicy:  jetstream.DeliverByStartSequencePolicy,
+		OptStartSeq:    lastSeqSeen + 1,
+	})
+	if err != nil {
+		return
+	}
+
+	cctx, err := consumer.Consume(func(msg jetstream.Msg) {
+		env, err := envelope.Unmarshal(msg.Data())
+		if err != nil {
+			_ = msg.Ack()
+			return
+		}
+		evt := cliproto.ReadEvent{Message: &cliproto.ReadMessage{
+			ID:        env.ID,
+			Handle:    env.Handle,
+			Payload:   env.Payload,
+			CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		}}
+		if err := enc.Encode(evt); err != nil {
+			// CLI has closed the connection — tear down.
+			return
+		}
+		// Advance the session's cursor as live messages stream by, so a
+		// long-running follow keeps the unread count truthful.
+		if !req.NoAdvance && !req.All {
+			if md, mderr := msg.Metadata(); mderr == nil {
+				_ = d.Cursors.Advance(req.Session, cursorKey, md.Sequence.Stream)
+			}
+		}
+		_ = msg.Ack()
+	})
+	if err != nil {
+		return
+	}
+	defer cctx.Stop()
+
+	// Block until the CLI closes the socket. We detect that by reading from
+	// the connection — the CLI never writes after the initial request, so a
+	// non-zero read or EOF means the client went away.
+	go func() {
+		var b [1]byte
+		_, _ = conn.Read(b[:])
+		cctx.Stop()
+	}()
+
+	<-ctx.Done()
+}
+
+func writeReadErr(conn net.Conn, e *cliproto.Error) {
+	_ = json.NewEncoder(conn).Encode(cliproto.ReadEvent{Error: e})
+}
+
+// parseTarget splits "handle.channel" or returns an error if the form is
+// wrong. Bare "handle" (no dot) is rejected explicitly per Phase 1 spec.
+func parseTarget(target string) (handle, channel string, err error) {
+	idx := strings.LastIndex(target, ".")
+	if idx <= 0 || idx == len(target)-1 {
+		return "", "", errors.New("target must be <handle>.<channel>")
+	}
+	return target[:idx], target[idx+1:], nil
+}
+
+// stdctrlResizePayload mirrors the {type:"resize",cols,rows} JSON
+// `terminal share` publishes via publishWinsize. Local to read.go since
+// nothing else needs to deserialise these — the server does its own
+// inline parse for the GUI WebSocket path.
+type stdctrlResizePayload struct {
+	Type string `json:"type"`
+	Cols int    `json:"cols"`
+	Rows int    `json:"rows"`
+}
+
+// latestStdctrlResize fetches the most recent resize event from a
+// source's stdctrl pipe and returns its dimensions. Used by handleRead
+// to emit a leading Meta event on `<h>.stdout` reads so the CLI can
+// configure its --tty renderer at the source's actual size instead of
+// the hardcoded 200×60 default.
+//
+// Returns (0, 0, false) when:
+//   - the stdctrl stream doesn't exist (handle never had `terminal share`),
+//   - the stream is empty, or
+//   - the latest message isn't a parseable resize event.
+//
+// All of those collapse to "no Meta — fall back to defaults". Sane and
+// boring; the caller doesn't need to distinguish.
+//
+// Dimensions are clamped to [1, 1000] on each axis so a malformed or
+// runaway publisher can't pass nonsense to vt10x.
+func latestStdctrlResize(ctx context.Context, js jetstream.JetStream, orgID uuid.UUID, handle string) (cols, rows int, ok bool) {
+	streamName := natsubj.StreamName(orgID, handle, "stdctrl")
+	stream, err := js.Stream(ctx, streamName)
+	if err != nil {
+		return 0, 0, false
+	}
+	info, err := stream.Info(ctx)
+	if err != nil || info.State.Msgs == 0 {
+		return 0, 0, false
+	}
+	msg, err := stream.GetMsg(ctx, info.State.LastSeq)
+	if err != nil {
+		return 0, 0, false
+	}
+	env, err := envelope.Unmarshal(msg.Data)
+	if err != nil {
+		return 0, 0, false
+	}
+	var rs stdctrlResizePayload
+	if err := json.Unmarshal([]byte(env.Payload), &rs); err != nil || rs.Type != "resize" {
+		return 0, 0, false
+	}
+	if rs.Cols <= 0 || rs.Rows <= 0 {
+		return 0, 0, false
+	}
+	if rs.Cols > 1000 {
+		rs.Cols = 1000
+	}
+	if rs.Rows > 1000 {
+		rs.Rows = 1000
+	}
+	return rs.Cols, rs.Rows, true
+}

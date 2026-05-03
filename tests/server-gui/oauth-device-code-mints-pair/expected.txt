@@ -1,0 +1,7 @@
+--- mint a device code ---
+device_code present: true
+user_code XXXX-XXXX: true
+verification_uri present: true
+interval ≥ 1: true
+expires_in ≥ 60: true
+exit=0

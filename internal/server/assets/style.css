@@ -1,0 +1,607 @@
+/* ppz server GUI — minimal, modern, readable. No framework. */
+
+:root {
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --border: #e5e5e3;
+  --text: #1c1c1a;
+  --muted: #71716e;
+  /* Sampled from the logo's pipe blue — a deeper royal that gives
+     enough contrast against white button text. Used by buttons,
+     active tab markers, and the primary CTA. */
+  --accent: #1d4ed8;
+  --accent-hover: #1e40af;
+  /* Buttons stay this saturated cobalt in BOTH light and dark mode
+     so they match the pipe in the logo. --accent itself shifts in
+     dark mode (for link legibility on near-black bg) — buttons do
+     not, because they always have white text on top. */
+  --btn-bg: #1d4ed8;
+  --btn-bg-hover: #1e40af;
+  --code-bg: #f1f1ef;
+  --row-hover: #f5f5f3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a18;
+    --surface: #232321;
+    --border: #353532;
+    --text: #ececea;
+    --muted: #92928e;
+    --accent: #60a5fa;
+    --accent-hover: #93c5fd;
+    --code-bg: #2c2c2a;
+    --row-hover: #2a2a28;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Helvetica Neue", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover { color: var(--accent-hover); text-decoration: underline; }
+a:visited { color: var(--accent); }
+
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-size: 1.75rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.1rem; margin: 2rem 0 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+
+small, .meta { color: var(--muted); font-size: 0.85rem; }
+
+code, pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  background: var(--code-bg);
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+}
+pre {
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* Header / brand */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.brand img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+.brand h1 a { color: inherit; }
+.brand .crumbs { color: var(--muted); font-size: 0.95rem; }
+
+.back {
+  display: inline-block;
+  margin: 1.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+/* Lists & cards */
+ul.tidy {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+ul.tidy li {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+ul.tidy li:last-child { border-bottom: 0; }
+ul.tidy li:hover { background: var(--row-hover); }
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+th, td {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+tr:last-child td { border-bottom: 0; }
+th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: var(--bg);
+  font-weight: 600;
+}
+tbody tr:hover { background: var(--row-hover); }
+
+/* Forms */
+form { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--muted); }
+input[type="text"], input:not([type]) {
+  font: inherit;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 200px;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+button {
+  font: inherit;
+  padding: 0.4rem 0.85rem;
+  background: var(--btn-bg);
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+button:hover { background: var(--btn-bg-hover); }
+
+/* Empty / muted */
+.empty { color: var(--muted); font-style: italic; }
+
+/* Revoked API keys: dim + strike-through, no Revoke button. The
+   row stays in the list for audit. */
+[data-key-state="revoked"] {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+[data-key-state="revoked"] .revoked { color: var(--muted); }
+
+/* Org page tab nav (Pipes / Users / API keys). Each link is a
+   plain horizontal item; the active tab gets a coloured underline
+   so the user can tell where they are without depending on URL. */
+nav.tabs {
+  display: flex;
+  gap: 1.25rem;
+  border-bottom: 1px solid var(--border);
+  margin: 1rem 0 1rem;
+}
+nav.tabs a {
+  padding: 0.5rem 0;
+  text-decoration: none;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; /* sit on top of the bottom border */
+}
+nav.tabs a:hover { color: var(--text); }
+nav.tabs a.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* Keys list + Users subsections (owner + members): flex rows so
+   the trailing action (Revoke form, Remove form, Transfer-ownership
+   button) hugs the right edge instead of inlining after the row's
+   text content. */
+#keys li,
+[data-users-subsection] li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+#keys form.inline,
+[data-users-subsection] li > form.inline,
+[data-users-subsection] li > button[data-todo] {
+  margin: 0 0 0 auto;
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   Landing page (`/`). The operator dashboard is at /dashboard; this
+   surface is purely marketing — logo + tagline + animated demos.
+   The hero sits on a black background so the existing logo PNG
+   blends in seamlessly without alpha-channel surgery.
+   ────────────────────────────────────────────────────────────── */
+
+body[data-page="landing"] {
+  background: var(--bg);
+  margin: 0;
+}
+
+.hero {
+  background: #000;
+  color: #fff;
+  padding: 4rem 1.5rem 3rem;
+  text-align: center;
+}
+.hero-logo {
+  display: block;
+  margin: -3rem auto -3rem;
+  max-width: min(480px, 70vw);
+  height: auto;
+  /* The source PNG has ~20% black padding baked in above + below
+     the artwork. clip-path crops it visually; the matching negative
+     margins above pull adjacent content into the void left behind
+     so the tagline hugs the logo instead of floating in dead space.
+     Swap when we have a properly cropped PNG. */
+  clip-path: inset(20% 0);
+}
+.hero-tag {
+  font-size: 1.6rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.8rem;
+}
+.hero-title {
+  font-size: clamp(2.6rem, 6vw, 4.5rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  margin: 0 0 1.4rem;
+}
+.hero-sub {
+  color: #b9b9b3;
+  max-width: 640px;
+  margin: 0 auto 1.6rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.hero-examples {
+  margin: 0 auto 1.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.hero-examples code {
+  background: rgba(255,255,255,0.06);
+  color: #d6deeb;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+.hero-cta {
+  margin: 0;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.btn-primary,
+.btn-primary:visited {
+  display: inline-block;
+  padding: 0.75rem 1.4rem;
+  background: var(--btn-bg);
+  /* :visited would otherwise paint the text the browser's default
+     visited-link colour and clash with the button background. Lock
+     it to white in both states. */
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.btn-primary:hover { background: var(--btn-bg-hover); }
+/* Secondary button: subtle outline against the black hero, sits
+   beside the primary CTA. Used for "GitHub →" today. */
+.btn-secondary,
+.btn-secondary:visited {
+  display: inline-block;
+  padding: 0.75rem 1.4rem;
+  background: transparent;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  border: 1px solid #555;
+  border-radius: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #888;
+}
+/* One-line install snippet under the CTA row. Visually a code box
+   the user can triple-click and copy. NB: the URL here points to a
+   curl installer that doesn't exist yet (task #86) — the visual is
+   in place ahead of the script landing. */
+.hero-install {
+  position: relative;
+  display: inline-block;
+  margin: 1.4rem auto 0;
+  padding: 0.6rem 2.4rem 0.6rem 1rem;
+  background: #1a1a18;
+  border: 1px solid #353532;
+  border-radius: 6px;
+  color: #ececea;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+  white-space: pre;
+  overflow-x: auto;
+  max-width: 90vw;
+}
+.hero-install code { font: inherit; color: inherit; }
+/* Copy-to-clipboard button. The generic `button` rule above paints
+   it cobalt with white text — we override here to a subtle ghost
+   button that sits in the top-right of the install snippet. The
+   .copied class swaps clipboard icon for a checkmark for 1.5s after
+   a successful copy (added by the inline script in landing.html). */
+.hero-install .copy-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 4px 6px;
+  background: transparent;
+  color: #92928e;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.hero-install .copy-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ececea;
+}
+.hero-install .copy-btn .check-icon { display: none; }
+.hero-install .copy-btn.copied { color: #5fb87a; }
+.hero-install .copy-btn.copied .copy-icon { display: none; }
+.hero-install .copy-btn.copied .check-icon { display: inline; }
+
+.demos {
+  max-width: 1100px;
+  margin: 3rem auto;
+  padding: 0 1.5rem;
+}
+.demos h2 {
+  text-align: center;
+  margin: 0 0 0.4rem;
+  font-weight: 500;
+}
+.demos-blurb {
+  text-align: center;
+  color: var(--muted);
+  margin: 0 0 2.5rem;
+}
+.demo-pair {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  margin: 0 0 7rem;
+  /* Whichever demo is currently in the viewport's centre band gets
+     `.in-focus` (set by typewriter.js IntersectionObserver). Demos
+     above and below fade toward the page background so they don't
+     compete with the one the reader is actually looking at. */
+  opacity: 0.18;
+  filter: blur(1px);
+  transition: opacity 0.5s ease, filter 0.5s ease;
+}
+.demo-pair.in-focus {
+  opacity: 1;
+  filter: none;
+}
+/* Two-sender / one-receiver "monitor" layout: top row splits into
+   columns for the parallel sender terminals; the receiver below
+   spans full-width. Collapses to single-column on narrow screens. */
+.demo-pair .senders {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+@media (max-width: 720px) {
+  .demo-pair .senders { grid-template-columns: 1fr; }
+}
+.demo-pair h3 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.6rem;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+.demo-blurb {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+}
+.demo-blurb code {
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent);
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+}
+/* Highlighted Unix `|` in the "you can also | to pipes" heading.
+   Sits inline with the heading text but coloured cobalt to make
+   the joke land. */
+.demo-pair h3 .hl-pipe {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--btn-bg);
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  font: inherit;
+  font-weight: 700;
+}
+/* Tinted left edge on PTY-shared agent panes so they read as
+   "this is what claude/copilot looks like, captured live" rather
+   than as a generic terminal. */
+.pty-claude  { border-left: 3px solid #b87a99; }
+.pty-copilot { border-left: 3px solid #a78bfa; }
+/* Browser-frame wrapper for the "remote monitor" demo. Its inner
+   .pane mirrors the sender pane on the left; the chrome around it
+   makes the second view obviously a browser viewport rather than
+   another terminal. */
+.browser-frame {
+  border: 1px solid #3a3a37;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1a18;
+  display: flex;
+  flex-direction: column;
+}
+.browser-frame .pane {
+  border-radius: 0;
+  border-left: 0;
+  flex: 1;
+}
+.browser-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  background: #2a2a28;
+  border-bottom: 1px solid #3a3a37;
+}
+.browser-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.browser-dot.dot-r { background: #ff5f56; }
+.browser-dot.dot-y { background: #ffbd2e; }
+.browser-dot.dot-g { background: #27c93f; }
+.browser-url {
+  flex: 1;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: #8a8a85;
+  background: #1a1a18;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid #353532;
+  margin: 0 0.4rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pane .cmd {
+  /* User-input rows (prompt + typed command) — bright blue so they
+     stand out against the muted output text. */
+  color: #60a5fa;
+  font-weight: 500;
+}
+.pane {
+  background: #0d1117;
+  color: #d6deeb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 0;
+  min-height: 9rem;
+  white-space: pre;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid #1f2933;
+}
+
+/* Pipe segment between sender + receiver. Renders a faint vertical
+   tube anchored to the centre of each terminal pair, with a tiny
+   "ppz" label badged in the middle. The packet is a small accent-
+   coloured dot that animates from top → bottom whenever the pair
+   gains the `.fire` class (typewriter.js sets+clears it between
+   sender finishing and receiver starting). */
+.pipe {
+  position: relative;
+  height: 3.5rem;
+  margin: -0.25rem auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pipe::before {
+  /* The tube itself: a vertical line behind the label. */
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--accent) 20%,
+    var(--accent) 80%,
+    transparent 100%
+  );
+  opacity: 0.35;
+}
+.pipe-label {
+  position: relative;
+  z-index: 2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg);
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+}
+.packet {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.demo-pair.fire .packet {
+  /* Travel from above the pipe to below it, fading in on entry and
+     out on exit so the ends look natural. */
+  animation: packet-fly 1100ms cubic-bezier(0.4, 0, 0.6, 1);
+}
+@keyframes packet-fly {
+  0%   { top: -10%; opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { top: 110%; opacity: 0; }
+}
+.demo-pair.fire .pipe::before {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.hero-footer {
+  text-align: center;
+  padding: 2rem 1rem 3rem;
+  color: var(--muted);
+}
+.hero-footer a { color: var(--accent); text-decoration: none; }
+.hero-footer a:hover { text-decoration: underline; }

@@ -1,0 +1,3 @@
+daemon stopped pid=PID
+daemon: not running
+exit=11

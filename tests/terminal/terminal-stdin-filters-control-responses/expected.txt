@@ -1,0 +1,3 @@
+stdout=BEFOREAFTER
+esc-leaked=no
+exit=0

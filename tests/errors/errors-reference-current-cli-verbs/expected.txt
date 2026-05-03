@@ -1,0 +1,5 @@
+--- E_NOT_LOGGED_IN: should reference 'ppz daemon login' ---
+error: E_NOT_LOGGED_IN: not logged in; run 'ppz daemon login URL -apikey K'
+--- E_NO_CURRENT_SOURCE: should reference 'ppz source create' / 'ppz source switch' ---
+error: E_NO_CURRENT_SOURCE: no current source; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one)
+exit=0

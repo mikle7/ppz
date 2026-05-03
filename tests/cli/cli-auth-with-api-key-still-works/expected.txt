@@ -1,0 +1,6 @@
+--- daemon-a status reports logged-in ---
+login=ok
+
+--- ls works against the API ---
+ls=ok
+exit=0

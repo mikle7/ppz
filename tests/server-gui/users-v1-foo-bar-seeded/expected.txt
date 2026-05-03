@@ -1,0 +1,14 @@
+--- seed user files exist + non-empty ---
+user-foo.txt=present
+user-bar.txt=present
+--- both users are in the database with mode=internal ---
+bar|internal
+foo|internal
+--- the seed files match the database ids ---
+foo-id-matches=true
+bar-id-matches=true
+--- seeded memberships: foo→alpha, bar→beta ---
+bar→alpha
+foo→alpha
+bar→beta
+exit=0

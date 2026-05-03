@@ -1,0 +1,2 @@
+daemon: not running
+exit=11

@@ -1,0 +1,9 @@
+--- beta subscribes to its own subjects (no forged messages allowed in) ---
+
+--- alpha publishes a beta-shaped subject ---
+Published 10 bytes
+(message published into alpha's account namespace; beta cannot see it)
+
+--- beta's subscriber timed out without receiving the forged message ---
+beta_received_forged_message: no
+exit=0

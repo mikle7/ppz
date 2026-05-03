@@ -1,0 +1,191 @@
+package daemon
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
+)
+
+// IPC wire format (per WIRE.md §7): newline-delimited JSON. One req per
+// connection, one resp, then close. Subscribe streams envelopes until close.
+//
+// Request:  {"method":"<Name>","params":<obj>}
+// Response: {"result":<obj>}     OR     {"error":{"code":"E_*","message":"..."}}
+
+type ipcRequest struct {
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
+}
+
+type ipcResponse struct {
+	Result any             `json:"result,omitempty"`
+	Error  *cliproto.Error `json:"error,omitempty"`
+}
+
+func (d *Daemon) serveIPC(ctx context.Context, ln net.Listener) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		conn, err := ln.Accept()
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			continue
+		}
+		go d.handleConn(ctx, conn)
+	}
+}
+
+func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
+	defer conn.Close()
+	br := bufio.NewReader(conn)
+	line, err := br.ReadBytes('\n')
+	if err != nil {
+		return
+	}
+	var req ipcRequest
+	if err := json.Unmarshal(line, &req); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+
+	switch req.Method {
+	case cliproto.IPCStatus:
+		d.ipcStatus(ctx, conn, req.Params)
+	case cliproto.IPCLogin:
+		d.ipcLogin(ctx, conn, req.Params)
+	case cliproto.IPCCreate:
+		d.ipcCreate(ctx, conn, req.Params)
+	case cliproto.IPCSwitch:
+		d.ipcSwitch(ctx, conn, req.Params)
+	case cliproto.IPCBroadcast:
+		d.ipcBroadcast(ctx, conn, req.Params)
+	case cliproto.IPCList:
+		d.ipcList(ctx, conn, req.Params)
+	case cliproto.IPCListWatch:
+		d.handleListWatch(ctx, conn, req.Params)
+	case cliproto.IPCSubscribe:
+		d.ipcSubscribe(ctx, conn, req.Params)
+	case cliproto.IPCRead:
+		d.handleRead(ctx, conn, req.Params)
+	case cliproto.IPCConnect:
+		d.handleConnect(ctx, conn, req.Params)
+	case cliproto.IPCDisconnect:
+		d.handleDisconnect(ctx, conn, req.Params)
+	case cliproto.IPCPipeCreate:
+		d.handlePipeCreate(ctx, conn, req.Params)
+	case cliproto.IPCPipeDestroy:
+		d.handlePipeDestroy(ctx, conn, req.Params)
+	default:
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: "unknown method " + req.Method})
+	}
+}
+
+func writeIPC(w net.Conn, result any) {
+	_ = json.NewEncoder(w).Encode(ipcResponse{Result: result})
+}
+
+func writeIPCErr(w net.Conn, e *cliproto.Error) {
+	_ = json.NewEncoder(w).Encode(ipcResponse{Error: e})
+}
+
+func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.StatusRequest
+	_ = json.Unmarshal(params, &req) // optional body — empty is fine
+	reply := cliproto.StatusReply{
+		DaemonPID: os.Getpid(),
+	}
+	if creds, ok := d.State.Credentials(); ok {
+		reply.LoggedIn = true
+		reply.URL = creds.URL
+		reply.KeyPrefix = d.State.KeyPrefix()
+		reply.OrgID = d.State.OrgID()
+		reply.OrgName = d.State.OrgName()
+		// loginCheck is populated by callServer on every server-touching
+		// handler, plus SetLogin (login itself counts as a successful
+		// observation). If it's still empty here, no observation has
+		// happened yet — probe once so status never lies. A cheap GET
+		// /api/v1/sources doubles as the auth check.
+		check := d.State.LoginCheck()
+		if check == "" {
+			var lr cliproto.ListSourcesReply
+			if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
+				if e.Code == cliproto.EInvalidAPIKey {
+					check = cliproto.LoginCheckInvalid
+				}
+				// Server-unreachable / other errors leave check empty
+				// — the CLI renders that as "unverified" rather than
+				// claiming a state we don't actually know.
+			} else {
+				check = cliproto.LoginCheckOK
+			}
+		}
+		reply.LoginCheck = check
+	}
+	reply.Current = d.State.Current(req.Session)
+	reply.CurrentPath = filepath.Join(d.State.Home(), fileCurrent)
+	writeIPC(conn, reply)
+}
+
+// The remaining ipc* methods are wired in later steps so the package compiles
+// today. They reply with a clear "not implemented" error for now.
+
+func (d *Daemon) ipcLogin(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleLogin(ctx, conn, params)
+}
+func (d *Daemon) ipcCreate(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleCreate(ctx, conn, params)
+}
+func (d *Daemon) ipcSwitch(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleSwitch(ctx, conn, params)
+}
+func (d *Daemon) ipcBroadcast(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleBroadcast(ctx, conn, params)
+}
+func (d *Daemon) ipcList(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleList(ctx, conn, params)
+}
+func (d *Daemon) ipcSubscribe(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleSubscribe(ctx, conn, params)
+}
+
+// IPC client helpers — used by the CLI.
+
+// Call sends one request to the daemon over a fresh connection and decodes
+// either result or error.
+func Call(sock, method string, params, result any) error {
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return cliproto.New(cliproto.EDaemonNotRunning)
+	}
+	defer conn.Close()
+	enc := json.NewEncoder(conn)
+	enc.SetEscapeHTML(false)
+	body, _ := json.Marshal(params)
+	if err := enc.Encode(ipcRequest{Method: method, Params: body}); err != nil {
+		return err
+	}
+	dec := json.NewDecoder(conn)
+	var resp ipcResponse
+	if err := dec.Decode(&resp); err != nil {
+		return fmt.Errorf("ipc decode: %w", err)
+	}
+	if resp.Error != nil {
+		return resp.Error
+	}
+	if result == nil {
+		return nil
+	}
+	raw, _ := json.Marshal(resp.Result)
+	return json.Unmarshal(raw, result)
+}

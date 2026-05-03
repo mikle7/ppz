@@ -1,0 +1,2 @@
+term.stdout 1 1 RELATIVE msg
+exit=0

@@ -1,0 +1,2 @@
+ppz VERSION (SHA)
+exit=0

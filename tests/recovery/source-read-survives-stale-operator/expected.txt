@@ -1,0 +1,4 @@
+before-readable=before-stale
+simulate=200
+after-readable=after-stale
+exit=0

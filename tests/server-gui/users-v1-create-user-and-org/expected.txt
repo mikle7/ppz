@@ -1,0 +1,12 @@
+--- create user alice ---
+http=200
+--- alice now appears in the database ---
+alice|alice@example.com|internal
+--- create org wonder owned by alice ---
+http=200
+--- wonder is owned by alice ---
+alice
+--- POST /orgs with only a name → owner defaults to the authed session user ---
+http=200
+foo
+exit=0

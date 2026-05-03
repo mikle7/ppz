@@ -1,0 +1,3 @@
+response-occurrences=1
+leaked-plaintext=false
+exit=0

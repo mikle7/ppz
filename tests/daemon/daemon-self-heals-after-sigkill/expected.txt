@@ -1,0 +1,5 @@
+orphan-sock: yes
+orphan-pid: yes
+daemon started pid=PID
+daemon: not logged in (pid=PID)
+exit=0

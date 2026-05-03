@@ -1,0 +1,9 @@
+--- random bearer that doesn't match either prefix ---
+status=401
+
+--- ppz_live_ but wrong hash → still 401 ---
+status=401
+
+--- ppz_oauth_ but unknown → 401 ---
+status=401
+exit=0

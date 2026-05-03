@@ -1,0 +1,32 @@
+Restored session: Mon 27 Apr 2026 21:50:21 AWST
+jimmy@Jamess-MacBook-Pro ppz % claude
+▗ ▗   ▖ ▖  Claude Code v2.1.119
+           Opus 4.7 (1M context) · Claude Max
+  ▘▘ ▝▝    ~/external-source/ppz
+
+❯ tell me another story
+
+⏺ A pipe walks into a bar. The bartender says, "We don't serve your kind here — you'll just drain
+  through the floor."
+
+  The pipe replies, "That's fine. I came for the atmosphere, not the contents."
+
+  The bartender pauses, then pours a drink anyway. "On the house. What's your retention policy?"
+
+  "24 hours," says the pipe. "After that, I forget everything."
+
+  "Perfect," says the bartender. "Same as my customers."
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Press Ctrl-C again to exit
+
+Resume this session with:
+claude --resume dce02586-1606-4817-a7a1-df634035611a
+jimmy@Jamess-MacBook-Pro ppz % ./bin/ppz status
+daemon: running pid=59991
+login: http://localhost:8080 key=0b41bfd4
+org: 3dd536f0-9bf9-4b7f-85a2-5efb0bcac73c
+current: bar
+jimmy@Jamess-MacBook-Pro ppz %

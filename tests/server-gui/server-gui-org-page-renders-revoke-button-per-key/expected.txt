@@ -1,0 +1,7 @@
+--- active key has a revoke form pointing at its id ---
+active-revoke-form=present
+--- revoked key has NO revoke form ---
+revoked-revoke-form=absent
+--- revoked key is marked with data-key-state=revoked ---
+revoked-state-marker=present
+exit=0

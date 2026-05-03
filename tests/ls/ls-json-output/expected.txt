@@ -1,0 +1,2 @@
+{"handle":"chat","pipe":"broadcast","total":1,"unread":1,"has_last_at":true,"payload_len":78,"truncated":false}
+exit=0

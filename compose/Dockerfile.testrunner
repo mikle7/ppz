@@ -1,0 +1,24 @@
+# Test runner — has the ppz CLI binary, plus bash, curl, jq, postgres-client,
+# and the nats CLI for between-scenario reset.
+
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+RUN apk add --no-cache git
+COPY go.mod go.sum* ./
+RUN go mod download || true
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ppz ./cmd/ppz
+RUN CGO_ENABLED=0 go build -trimpath -tags headless -o /out/ppz-desktop ./cmd/ppz-desktop
+
+FROM alpine:3.20
+RUN apk add --no-cache bash curl jq postgresql16-client diffutils
+# nats CLI (single static binary).
+ARG NATS_VERSION=0.1.5
+RUN wget -qO /tmp/nats.zip "https://github.com/nats-io/natscli/releases/download/v${NATS_VERSION}/nats-${NATS_VERSION}-linux-amd64.zip" \
+ && unzip -o /tmp/nats.zip -d /tmp/nats >/dev/null \
+ && mv /tmp/nats/*/nats /usr/local/bin/nats \
+ && chmod +x /usr/local/bin/nats \
+ && rm -rf /tmp/nats /tmp/nats.zip
+COPY --from=build /out/ppz         /usr/local/bin/ppz
+COPY --from=build /out/ppz-desktop /usr/local/bin/ppz-desktop
+WORKDIR /tests

@@ -1,0 +1,6 @@
+--- column header is 'Last Message' ---
+Last Message
+--- per-pipe rows: handle:pipe:RELATIVE:payload (broadcast + archive both populated) ---
+foo:archive:RELATIVE:hello-archive
+foo:broadcast:RELATIVE:hello-broadcast
+exit=0

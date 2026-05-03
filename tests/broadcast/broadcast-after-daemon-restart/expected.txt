@@ -1,0 +1,3 @@
+sent id=UUID subject=ORG_ALPHA.persists.broadcast bytes=13
+persists.broadcast 1 1 RELATIVE after restart
+exit=0

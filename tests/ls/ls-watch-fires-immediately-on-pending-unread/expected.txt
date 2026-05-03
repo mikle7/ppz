@@ -1,0 +1,3 @@
+--- watch returns immediately (level-triggered) ---
+chat.broadcast 1 1 RELATIVE preexisting
+exit=0

@@ -1,0 +1,6 @@
+--- broadcast with stale current — should be E_NO_CURRENT_SOURCE, not E_SOURCE_NOT_FOUND ---
+error: E_NO_CURRENT_SOURCE: no current source; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one)
+broadcast_exit=16
+--- status after broadcast — current should be cleared ---
+current source: -
+exit=0

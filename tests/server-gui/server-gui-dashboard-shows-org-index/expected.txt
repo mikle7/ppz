@@ -1,0 +1,4 @@
+--- /dashboard lists seeded orgs ---
+alpha
+beta
+exit=0

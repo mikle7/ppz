@@ -1,0 +1,3 @@
+--- watch fired with new message visible ---
+chat.broadcast 1 2 RELATIVE new
+exit=0

@@ -1,0 +1,6 @@
+--- foo source-rows in GUI ---
+foo:broadcast::
+foo:stdctrl:RELATIVE:STDCTRL_JSON
+foo:stdin::
+foo:stdout::
+exit=0

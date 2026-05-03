@@ -1,0 +1,13 @@
+--- source-rows ---
+pty-pipe:broadcast::
+pty-pipe:stdctrl:RELATIVE:STDCTRL_JSON
+pty-pipe:stdin::
+pty-pipe:stdout::
+regular:broadcast::
+--- pipe-links ---
+/orgs/alpha/sources/pty-pipe/pipes/broadcast
+/orgs/alpha/sources/pty-pipe/pipes/stdctrl
+/orgs/alpha/sources/pty-pipe/pipes/stdin
+/orgs/alpha/sources/pty-pipe/pipes/stdout
+/orgs/alpha/sources/regular/pipes/broadcast
+exit=0

@@ -1,0 +1,3 @@
+created handle=foo subject=ORG_ALPHA.foo.broadcast
+current handle=foo
+exit=0

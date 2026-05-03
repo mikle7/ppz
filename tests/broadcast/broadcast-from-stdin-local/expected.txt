@@ -1,0 +1,3 @@
+sent id=UUID subject=ORG_ALPHA.foo.broadcast bytes=16
+foo.broadcast 1 1 RELATIVE hello from stdin
+exit=0

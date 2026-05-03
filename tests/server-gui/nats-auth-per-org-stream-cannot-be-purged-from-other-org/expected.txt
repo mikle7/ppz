@@ -1,0 +1,7 @@
+beta_stream_set_up: true
+
+--- alpha JWT issues STREAM.PURGE on beta's stream ---
+
+--- beta's data is still intact ---
+beta_data_still_intact: true
+exit=0

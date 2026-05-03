@@ -1,0 +1,6 @@
+device_code_minted: true
+
+--- poll without verification → authorization_pending ---
+"error":"authorization_pending"
+status=400
+exit=0

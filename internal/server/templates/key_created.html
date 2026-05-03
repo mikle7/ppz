@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ppz — new api key</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <div>
+        <h1><a href="/dashboard">ppz</a> / <a href="/orgs/{{.OrgName}}">{{.OrgName}}</a> / new key</h1>
+        <div class="crumbs">copy this now — it will not be shown again</div>
+      </div>
+    </header>
+
+    <h2>API key</h2>
+    <pre data-new-key="{{.Plaintext}}" data-key-id="{{.KeyID}}">{{.Plaintext}}</pre>
+    <p><a href="/orgs/{{.OrgName}}">← back to {{.OrgName}}</a></p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,8 @@
+--- GET /oauth/device/verify (no approved flag) → renders the form ---
+form_button_present: true
+approved_message_present: false
+
+--- GET /oauth/device/verify?approved=1 → renders the success message ---
+form_button_present: false
+approved_message_present: true
+exit=0

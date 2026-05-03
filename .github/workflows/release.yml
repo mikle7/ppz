@@ -1,0 +1,36 @@
+name: Release
+
+# Triggered by tag push (v*). Builds every cmd/* binary for
+# linux/darwin × amd64/arm64 via goreleaser, uploads archives +
+# checksums to the matching GitHub Release.
+#
+# Tag with `make tag {patch|minor|major}` then `make tag push` to
+# fire this workflow.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # goreleaser needs this to create the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # goreleaser needs full history for changelog
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

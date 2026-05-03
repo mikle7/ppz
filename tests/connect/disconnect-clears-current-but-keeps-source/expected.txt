@@ -1,0 +1,6 @@
+cleared
+--- status ---
+current source: -
+--- ls ---
+chat.broadcast 0 0 - -
+exit=0

@@ -1,0 +1,5 @@
+--- a ---
+alpha-only.broadcast 0 0 - -
+--- b ---
+beta-only.broadcast 0 0 - -
+exit=0

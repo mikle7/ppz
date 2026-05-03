@@ -1,0 +1,7 @@
+--- form branch (no approved flag) → no success <h1> ---
+h1_present: false
+
+--- success branch (?approved=1) → renders hero <h1> + close-window copy ---
+h1_present: true
+close_window_copy: true
+exit=0

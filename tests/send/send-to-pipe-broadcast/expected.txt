@@ -1,0 +1,2 @@
+explicit hello
+exit=0

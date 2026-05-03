@@ -1,0 +1,3 @@
+--- watch agent-* — only matching rows ---
+agent-one.broadcast 1 1 RELATIVE agent message
+exit=0

@@ -1,0 +1,8 @@
+user_code_extracted: true
+cli_exit_code: 0
+--- daemon status ---
+login=ok
+
+--- ls works against the API ---
+ls=ok
+exit=0

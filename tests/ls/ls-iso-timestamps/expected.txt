@@ -1,0 +1,3 @@
+PIPE UNREAD BUFFERED LAST PAYLOAD
+chat.broadcast 1 1 TIMESTAMP iso row
+exit=0

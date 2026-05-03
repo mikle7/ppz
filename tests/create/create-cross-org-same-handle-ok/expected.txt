@@ -1,0 +1,5 @@
+created handle=shared subject=ORG_ALPHA.shared.broadcast
+current handle=shared
+created handle=shared subject=ORG_BETA.shared.broadcast
+current handle=shared
+exit=0

@@ -1,0 +1,6 @@
+daemon started pid=PID
+logged in url=http://ppz-server:8080 key=KEYPREFIX org=ORG_ALPHA
+--- status after auto-start login ---
+daemon: logged in (pid=PID)
+server: http://ppz-server:8080
+exit=0

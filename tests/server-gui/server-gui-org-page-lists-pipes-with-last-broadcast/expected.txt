@@ -1,0 +1,2 @@
+chat:broadcast:RELATIVE:hello gui
+exit=0

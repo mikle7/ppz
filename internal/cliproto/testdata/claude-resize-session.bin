@@ -1,0 +1,1341 @@
+[1m[7m%[27m[1m[0m                                                                                                        ]7;file://Mac/Users/jimmy[0m[27m[24m[Jjimmy@Mac ~ % [K[?2004hcclaude[?2004l
+7[r8[?25h[?25l[?2004h[?1004h[?2031h
+[38;5;220m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[1C[38;5;220m[1mAccessing[1Cworkspace:[22m[39m
+
+[1C[1m/Users/jimmy[22m
+
+[1CQuick[1Csafety[1Ccheck:[1CIs[1Cthis[1Ca[1Cproject[1Cyou[1Ccreated[1Cor[1Cone[1Cyou[1Ctrust?[1C(Like[1Cyour[1Cown[1Ccode,[1Ca[1Cwell-known
+[1Copen[1Csource[1Cproject,[1Cor[1Cwork[1Cfrom[1Cyour[1Cteam).[1CIf[1Cnot,[1Ctake[1Ca[1Cmoment[1Cto[1Creview[1Cwhat's[1Cin[1Cthis[1Cfolder
+[1Cfirst.
+
+[1CClaude[1CCode'll[1Cbe[1Cable[1Cto[1Cread,[1Cedit,[1Cand[1Cexecute[1Cfiles[1Chere.
+
+[1C[38;5;246mSecurity[1Cguide[39m
+
+[1C[38;5;153m❯[1C[38;5;246m1.[1C[38;5;153mYes,[1CI[1Ctrust[1Cthis[1Cfolder[39m
+[3C[38;5;246m2.[1C[39mNo,[1Cexit
+
+[1C[38;5;246mEnter[1Cto[1Cconfirm[1C·[1CEsc[1Cto[1Ccancel[39m
+[1C[4A[>0q[c[1D[4B[6C[4A[38;5;114mYes, I trust this folder[1C✔[39m
+
+
+
+[1C[4A[1D[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1A                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [1B                                                                                                        [17A]0;✳ Claude Code[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[68C◉[1Cxhigh[1C·[1C/effort[39m
+[2C[3A[2D[3B[85C[1A                 
+[2C[3A[2D[3B[2K[G[1A[2C[2Ac[7m [2B[27m                                                                                                        [3C[2A[3D[2B[3C[2Aa[7m [27m
+
+[4C[2A[4D[2B[4C[2An[7m [27m
+
+[5C[2A[5D[2B[5C[2A [7m [27m
+
+[6C[2A[6D[2B[6C[2Ay[7m [27m
+
+[7C[2A[7D[2B[7C[2Ao[7m [27m
+
+[8C[2A[8D[2B[8C[2Au[7m [27m
+
+[9C[2A[9D[2B[9C[2A [7m [27m
+
+[10C[2A[10D[2B[10C[2At[7m [27m
+
+[11C[2A[11D[2B[11C[2Ae[7m [27m
+
+[12C[2A[12D[2B[12C[2Al[7m [27m
+
+[13C[2A[13D[2B[13C[2Al[7m [27m
+
+[14C[2A[14D[2B[14C[2A [7m [27m
+
+[15C[2A[15D[2B[15C[2Am[7m [27m
+
+[16C[2A[16D[2B[16C[2Ae[7m [27m
+
+[17C[2A[17D[2B[17C[2A [7m [27m
+
+[18C[2A[18D[2B[18C[2Aa[7m [27m
+
+[19C[2A[19D[2B[19C[2A [7m [27m
+
+[20C[2A[20D[2B[20C[2As[7m [27m
+
+[21C[2A[21D[2B[21C[2At[7m [27m
+
+[22C[2A[22D[2B[22C[2Ao[7m [27m
+
+[23C[2A[23D[2B[23C[2Ar[7m [27m
+
+[24C[2A[24D[2B[24C[2Ay[7m [27m
+
+[25C[2A[25D[2B[25C[2A?[7m [27m
+
+[26C[2A]0;⠂ Claude Code[26D[2B[3A[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                              [1B[49m     [1C   [1C    [1C  [1C [1C       [1B[38;5;174m✶[39m [38;5;174mCooking… [39m                                                                                             
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A[2D[3B[6A[38;5;174m✻[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✽[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✻[1C[38;5;216mCo[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;216mo[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[1CC[2C[38;5;216mk[39m
+
+
+
+
+
+[2C[3A[2D[3B[3C[6A[38;5;174mo[2C[38;5;216mi[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;174mo[2C[38;5;216mn[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✳[4Ck[2C[38;5;216mg[39m
+
+
+
+
+
+[2C[3A[2D[3B[6C[6A[38;5;174mi[2C[38;5;216m…[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✢[6Cn[39m
+
+
+
+
+
+[2C[3A[2D[3B[8C[6A[38;5;174mg[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m·[8C…[39m
+
+
+
+
+
+[2C[3A]0;⠐ Claude Code]0;⠐ Chat and storytelling session[2D[3B[6A[38;5;174m✢[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✳[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✻[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✽[39m
+
+
+
+
+
+[2C[3A[2D[3B[2C[6A[38;5;216mC[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✻[2C[38;5;216mo[39m
+
+
+
+
+
+[2C[3A]0;⠂ Chat and storytelling session[2D[3B[4C[6A[38;5;216mo[39m
+
+
+
+
+
+[2C[3A[2D[3B[2C[6A[38;5;174mC[2C[38;5;216mk[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[2Co[2C[38;5;216mi[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;174mo[2C[38;5;216mn[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✳[4Ck[2C[38;5;216mg[39m
+
+
+
+
+
+[2C[3A[2D[3B[6C[6A[38;5;174mi[2C[38;5;216m…[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✢[6Cn[39m
+
+
+
+
+
+[2C[3A[2D[3B[8C[6A[38;5;174mg…[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m·[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✢[39m
+
+
+
+
+
+[2C[3A[2D[3B[11C[6A[38;5;246m(2s · ↓[1C1 tokens)[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✳[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[39m
+
+
+
+
+
+[2C[3A]0;⠐ Chat and storytelling session[2D[3B[6A[38;5;174m✻[39m
+
+
+
+
+
+[2C[3A[2D[3B[12C[6A[38;5;246m3[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;231m⏺[1C[39mSure.           [1C         
+
+
+
+
+
+[2C[3A]0;⠂ Chat and storytelling session[2D[3B[4A  A lighthouse keeper named Odette lived alone on a rock that the sea had been trying to swallow for two[1B   hundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater[1B  for ships that almost never came.                                                                     [2C[1B                
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠐ Chat and storytelling session]0;⠂ Chat and storytelling session[2D[3B[4A  One winter, a bottle washed up on the shore. Inside was a letter, in handwriting she didn't recognize,[1B   that[1Cread:[1C[3mThank you for the light last Tuesday. I would not have made it home.[1C[23mNo[1Csignature.[1CNo[1B  ship's name.                                                                                          [2C[1B                
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠐ Chat and storytelling session[2D[3B[4A  Odette had not lit the lamp the previous Tuesday. She'd been sick in bed, the tower dark, the wick    [1B  cold.[1B                                                                                                        [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠂ Chat and storytelling session[2D[3B[4A  She kept the letter in her pocket for the rest of her life, and every Tuesday after that she climbed  [1B  the[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,[1B  or whatever, had been keeping watch when she couldn't.                                                [2C[1B                
+[38;5;174m·[1CUnd[38;5;216mula[38;5;174mting…[1C[38;5;246m(8s[1C·[1C↓[1C206[1Ctokens)[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;✳ Chat and storytelling session[2D[3B[6A[38;5;246m✻[1CSautéed for 8s[39m     [1C           [3B❯ [2C[2B[38;5;246m? for shortcuts[39m 
+[2C[3A[2D[3B[2K[G[1A[2C[2As[7m [2B[27m                                                                                                        [3C[2A[3D[2B[3C[2An[7m [27m
+
+[4C[2A[4D[2B[4C[2At[7m [27m
+
+[5C[2A[5D[2B[4C[2A[7m [27m 
+
+[4C[2A[4D[2B[3C[2A[7m [27m 
+
+[3C[2A[3D[2B[2C[2A[7m [27m 
+
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[2K[G[1A[2C[2As[7m [2B[27m                                                                                                        [3C[2A[3D[2B[2C[2A[7m [27m 
+
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[2K[G[1A[2C[2Aa[7m [2B[27m                                                                                                        [3C[2A[3D[2B[3C[2An[7m [27m
+
+[4C[2A[4D[2B[4C[2Ao[7m [27m
+
+[5C[2A[5D[2B[5C[2At[7m [27m
+
+[6C[2A[6D[2B[6C[2Ah[7m [27m
+
+[7C[2A[7D[2B[7C[2Ae[7m [27m
+
+[8C[2A[8D[2B[8C[2Ar[7m [27m
+
+[9C[2A[9D[2B[9C[2A [7m [27m
+
+[10C[2A[10D[2B[10C[2Ap[7m [27m
+
+[11C[2A[11D[2B[11C[2Al[7m [27m
+
+[12C[2A[12D[2B[12C[2Ae[7m [27m
+
+[13C[2A[13D[2B[13C[2Aa[7m [27m
+
+[14C[2A[14D[2B[14C[2As[7m [27m
+
+[15C[2A[15D[2B[15C[2Ae[7m [27m
+
+[16C[2A]0;⠂ Chat and storytelling session[16D[2B[3A[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                        [1B[49m         [1C       [1B[38;5;174m·[39m [38;5;174mKneading… [39m                                                                                            
+[38;5;246m [1C⎿[1C Tip:[1CControl[1Cthis[1Csession[1Cfrom[1Chttps://claude.com/download#mobile[1C·[1Crun[1C[38;5;153m/remote-control[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A[2D[3B[7A[38;5;174m✢[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✳[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✶[1C[38;5;216mK[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[3C[7A[38;5;216mne[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✻[1CK[2C[38;5;216ma[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[3C[7A[38;5;174mn[2C[38;5;216md[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✽[3Ce[2C[38;5;216mi[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[5C[7A[38;5;174ma[2C[38;5;216mn[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[6C[7A[38;5;174md[2C[38;5;216mg[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7C[7A[38;5;174mi[2C[38;5;216m…[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[8C[7A[38;5;174mn[39m
+
+
+
+
+
+
+[2C[3A]0;⠐ Chat and storytelling session[2D[3B[7A[38;5;174m✻[8Cg[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[10C[7A[38;5;174m…[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✶[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✳[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✢[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m·[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✢[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✳[39m
+
+
+
+
+
+
+[2C[3A]0;⠂ Chat and storytelling session[2D[3B[7A[38;5;174m✶[1C[38;5;216mK[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[3C[7A[38;5;216mn[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✻[1CK[1C[38;5;216mea[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[3C[7A[38;5;174mn[2C[38;5;216md[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✽[3Ce[2C[38;5;216mi[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[5C[7A[38;5;174ma[2C[38;5;216mn[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[6C[7A[38;5;174mdin[3C[38;5;246m(2s · ↓[1C1 tokens)[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[20C[7A[38;5;246m2[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✻[19C[38;5;246m3[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[20C[7A[38;5;246m4[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✶[19C[38;5;246m5[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[20C[7A[38;5;246m6[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✳[19C[38;5;246m7[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[20C[7A[38;5;246m8[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✢[19C[38;5;246m9[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[20C[7A[38;5;246m10 tokens)[39m
+
+
+
+
+
+
+[2C[3A]0;⠐ Chat and storytelling session[2D[3B[7A[38;5;174m·[20C[38;5;246m1[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[13C[7A[38;5;246m3[7C2[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[21C[7A[38;5;246m3[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[7A[38;5;174m✢[20C[38;5;246m4[39m
+
+
+
+
+
+
+[2C[3A[2D[3B[2K[G[1A[6A[38;5;231m⏺[1C[39mThere was a clockmaker in a small[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.[1B                                                                                            [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[1B[38;5;246m❯ [39m[7m [27m                                                                                                     [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[1B[39m  [38;5;246mesc to interrupt[39m                                                                                      [1B                                                                                                        [2C[3A]0;⠂ Chat and storytelling session]0;⠐ Chat and storytelling session]0;⠂ Chat and storytelling session[2D[3B[4A  He hid the thirteenth hour between eleven and midnight, in a notch of brass no bigger than a          [1B  fingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1B  baker still opened at five — but once a day, for sixty unaccounted minutes, the town slipped sideways [2C[1Binto a quiet that[1Cnobody[1Cremembered[1Cafterward.
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠐ Chat and storytelling session]0;⠂ Chat and storytelling session[2D[3B[4A  In that hour, the clockmaker did the things he could not do in the other twelve. He wrote letters to  [1B  his[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout[1B  where it came from. He sat on the church steps and cried without anyone seeing.                       [2C[1B                
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A[2D[3B[4A  When he died, his apprentice opened the clock to clean it and found the thirteenth gear. She          [1B  understood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.[1B                                                                                                        [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠐ Chat and storytelling session]0;⠂ Chat and storytelling session[2D[3B[4A  Some say the clock is still running. Some say that's why, in certain mountain towns, you sometimes    [1B  feel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind[1B  happened in it, though you can't quite say what.                                                      [2C[1B                
+[38;5;174m✢[1CSeasoning…[1C[38;5;246m(9s[1C·[1C↓[1C355[1Ctokens)[39m
+[38;5;246m [1C⎿[1C Tip:[1CControl[1Cthis[1Csession[1Cfrom[1Chttps://claude.com/download#mobile[1C·[1Crun[1C[38;5;153m/remote-control[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;✳ Chat and storytelling session[2D[3B[2K[G[1A[6A[38;5;246m✻[1CWorked for 10[1C[39m    [1C           [1B                                                                                            [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[1B[39m❯ [7m [27m                                                                                                     [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────[1B[39m  [38;5;246m? for shortcuts[39m                                                                                       [1B                                                                                                        [2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m╭───[1CClaude[1CCode[1C[38;5;246mv2.1.123[1C[38;5;174m───────────────────────────────────────────────────────────────────────────────────────╮[39m
+[38;5;174m│[52C[2m│[1C[22m[1mWhat's[1Cnew[48C[22m│[39m
+[38;5;174m│[17C[39m[1mWelcome[1Cback[1CJames![16C[22m[2m[38;5;174m│[1C[39m[22mFixed[1COAuth[1Cauthentication[1Cfailing[1Cwith[1Ca[1C401[1Cretry[1Cloop…[1C[38;5;174m│[39m
+[38;5;174m│[52C[2m│[1C[39m[22mAdded[1C`ANTHROPIC_BEDROCK_SERVICE_TIER`[1Cenvironment[1Cvaria…[1C[38;5;174m│[39m
+[38;5;174m│[22C▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[21C[2m│[1C[39m[22mPasting[1Ca[1CPR[1CURL[1Cinto[1Cthe[1C`/resume`[1Csearch[1Cbox[1Cnow[1Cfinds…[1C[38;5;174m│[39m
+[38;5;174m│[23C[39m[48;5;174m       [22C[49m[2m[38;5;174m│[1C[22m[38;5;246m[3m/release-notes[1Cfor[1Cmore[35C[23m[38;5;174m│[39m
+[38;5;174m│[24C▘▘[1C▝▝[23C[2m│[59C[22m│[39m
+[38;5;174m│[8C[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[1C·[8C[2m[38;5;174m│[59C[22m│[39m
+[38;5;174m│[8C[38;5;246mjamesmiles@gmail.com's[1COrganization[9C[2m[38;5;174m│[59C[22m│[39m
+[38;5;174m│[20C[38;5;246m/Users/jimmy[20C[2m[38;5;174m│[59C[22m│[39m
+[38;5;174m╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                        [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred
+[2Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater[1Cfor[1Cships[1Cthat[1Calmost
+[3Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat
+[2Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo[1Cship's[1Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs
+[2Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,[1Cor[1Cwhatever,[1Chad[1Cbeen
+[2Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                  [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody
+[2Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker[1Cstill[1Copened[1Cat[1Cfive[1C—
+[2Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered
+[2Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead
+[2Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout[1Cwhere[1Cit[1Ccame[1Cfrom.[1CHe
+[2Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood
+[2Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca
+[2Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind[1Chappened[1Cin[1Cit,
+[2Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                                                                                                               [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark
+[2Cwater[1Cfor[1Cships[1Cthat[1Calmost[1Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat[1Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo
+[3Cship's[1Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor
+[2Cwhoever,[1Cor[1Cwhatever,[1Chad[1Cbeen[1Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                                                                                                         [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker
+[2Cstill[1Copened[1Cat[1Cfive[1C—[1Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered[1Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout
+[2Cwhere[1Cit[1Ccame[1Cfrom.[1CHe[1Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething
+[2Ckind[1Chappened[1Cin[1Cit,[1Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                                                                                                                   [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater
+[2Cfor[1Cships[1Cthat[1Calmost[1Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat[1Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo
+[2Cship's[1Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,
+[2Cor[1Cwhatever,[1Chad[1Cbeen[1Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                                                                                                             [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker
+[2Cstill[1Copened[1Cat[1Cfive[1C—[1Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered[1Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout
+[2Cwhere[1Cit[1Ccame[1Cfrom.[1CHe[1Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind
+[2Chappened[1Cin[1Cit,[1Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                                                                                                                     [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater[1Cfor
+[3Cships[1Cthat[1Calmost[1Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat[1Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo
+[2Cship's[1Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,[1Cor
+[2Cwhatever,[1Chad[1Cbeen[1Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                                                                                                               [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker[1Cstill
+[2Copened[1Cat[1Cfive[1C—[1Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered[1Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout[1Cwhere
+[2Cit[1Ccame[1Cfrom.[1CHe[1Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind
+[2Chappened[1Cin[1Cit,[1Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                                                                                                                       [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater[1Cfor
+[2Cships[1Cthat[1Calmost[1Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat[1Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo[1Cship's
+[2Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,[1Cor
+[2Cwhatever,[1Chad[1Cbeen[1Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                                                                                                                 [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker[1Cstill
+[2Copened[1Cat[1Cfive[1C—[1Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered[1Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout[1Cwhere[1Cit
+[3Ccame[1Cfrom.[1CHe[1Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind
+[2Chappened[1Cin[1Cit,[1Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                                                                                                                        [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater[1Cfor
+[2Cships[1Cthat[1Calmost[1Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat[1Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo[1Cship's
+[2Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,[1Cor
+[2Cwhatever,[1Chad[1Cbeen[1Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                                                                                                                  [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker[1Cstill
+[2Copened[1Cat[1Cfive[1C—[1Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered[1Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout[1Cwhere[1Cit
+[2Ccame[1Cfrom.[1CHe[1Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind
+[2Chappened[1Cin[1Cit,[1Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                                                                                                                         [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater[1Cfor
+[2Cships[1Cthat[1Calmost[1Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat[1Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo[1Cship's
+[2Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,[1Cor
+[2Cwhatever,[1Chad[1Cbeen[1Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                                                                                                                   [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker[1Cstill
+[2Copened[1Cat[1Cfive[1C—[1Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered[1Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout[1Cwhere[1Cit
+[2Ccame[1Cfrom.[1CHe[1Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind[1Chappened
+[3Cin[1Cit,[1Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[H[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[H[38;5;174m▗[48;5;174m[38;5;16m ▗   ▖ [49m[38;5;174m▖[2C[39m[1mClaude[1CCode[1C[22m[38;5;246mv2.1.123[39m
+[1C[48;5;174m       [3C[49m[38;5;246mOpus[1C4.7[1C(1M[1Ccontext)[1C·[1CClaude[1CMax[39m
+[2C[38;5;174m▘▘[1C▝▝[4C[38;5;246m/Users/jimmy[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231mcan you tell me a story?[39m                                                                                                                                                                                          [49m
+
+[38;5;231m⏺[1C[39mSure.
+
+[2CA[1Clighthouse[1Ckeeper[1Cnamed[1COdette[1Clived[1Calone[1Con[1Ca[1Crock[1Cthat[1Cthe[1Csea[1Chad[1Cbeen[1Ctrying[1Cto[1Cswallow[1Cfor[1Ctwo[1Chundred[1Cyears.[1CEvery[1Cnight[1Cshe[1Cclimbed[1Cthe[1Cspiral[1Cstairs,[1Clit[1Cthe[1Clamp,[1Cand[1Cwatched[1Cthe[1Cdark[1Cwater[1Cfor
+[2Cships[1Cthat[1Calmost[1Cnever[1Ccame.
+
+[2COne[1Cwinter,[1Ca[1Cbottle[1Cwashed[1Cup[1Con[1Cthe[1Cshore.[1CInside[1Cwas[1Ca[1Cletter,[1Cin[1Chandwriting[1Cshe[1Cdidn't[1Crecognize,[1Cthat[1Cread:[1C[3mThank[1Cyou[1Cfor[1Cthe[1Clight[1Clast[1CTuesday.[1CI[1Cwould[1Cnot[1Chave[1Cmade[1Cit[1Chome.[1C[23mNo[1Csignature.[1CNo[1Cship's
+[2Cname.
+
+[2COdette[1Chad[1Cnot[1Clit[1Cthe[1Clamp[1Cthe[1Cprevious[1CTuesday.[1CShe'd[1Cbeen[1Csick[1Cin[1Cbed,[1Cthe[1Ctower[1Cdark,[1Cthe[1Cwick[1Ccold.
+
+[2CShe[1Ckept[1Cthe[1Cletter[1Cin[1Cher[1Cpocket[1Cfor[1Cthe[1Crest[1Cof[1Cher[1Clife,[1Cand[1Cevery[1CTuesday[1Cafter[1Cthat[1Cshe[1Cclimbed[1Cthe[1Cstairs[1Cearly,[1Cand[1Clit[1Cthe[1Clamp[1Ctwice[1C—[1Conce[1Cfor[1Cthe[1Csailors[1Cshe[1Ccould[1Csee,[1Cand[1Conce[1Cfor[1Cwhoever,[1Cor
+[2Cwhatever,[1Chad[1Cbeen[1Ckeeping[1Cwatch[1Cwhen[1Cshe[1Ccouldn't.
+
+[38;5;246m✻[1CSautéed[1Cfor[1C8s[39m
+
+[48;5;237m[38;5;239m❯ [38;5;231manother please[39m                                                                                                                                                                                                    [49m
+
+[38;5;231m⏺[1C[39mThere[1Cwas[1Ca[1Cclockmaker[1Cin[1Ca[1Csmall[1Cmountain[1Ctown[1Cwho[1Cbuilt[1Ca[1Cclock[1Cwith[1Cthirteen[1Chours.
+
+[2CHe[1Chid[1Cthe[1Cthirteenth[1Chour[1Cbetween[1Celeven[1Cand[1Cmidnight,[1Cin[1Ca[1Cnotch[1Cof[1Cbrass[1Cno[1Cbigger[1Cthan[1Ca[1Cfingernail.[1CNobody[1Cnoticed.[1CThe[1Cclock[1Ckept[1Ctime[1Clike[1Cany[1Cother[1C—[1Cchimed[1Cat[1Cnoon,[1Cchimed[1Cat[1Csix,[1Cthe[1Cbaker[1Cstill
+[2Copened[1Cat[1Cfive[1C—[1Cbut[1Conce[1Ca[1Cday,[1Cfor[1Csixty[1Cunaccounted[1Cminutes,[1Cthe[1Ctown[1Cslipped[1Csideways[1Cinto[1Ca[1Cquiet[1Cthat[1Cnobody[1Cremembered[1Cafterward.
+
+[2CIn[1Cthat[1Chour,[1Cthe[1Cclockmaker[1Cdid[1Cthe[1Cthings[1Che[1Ccould[1Cnot[1Cdo[1Cin[1Cthe[1Cother[1Ctwelve.[1CHe[1Cwrote[1Cletters[1Cto[1Chis[1Cdead[1Cwife.[1CHe[1Cleft[1Cbread[1Con[1Cthe[1Cdoorstep[1Cof[1Cthe[1Cwidow[1Ctwo[1Cstreets[1Cover,[1Cwho[1Cnever[1Cfigured[1Cout[1Cwhere[1Cit
+[2Ccame[1Cfrom.[1CHe[1Csat[1Con[1Cthe[1Cchurch[1Csteps[1Cand[1Ccried[1Cwithout[1Canyone[1Cseeing.
+
+[2CWhen[1Che[1Cdied,[1Chis[1Capprentice[1Copened[1Cthe[1Cclock[1Cto[1Cclean[1Cit[1Cand[1Cfound[1Cthe[1Cthirteenth[1Cgear.[1CShe[1Cunderstood[1Cimmediately.[1CShe[1Cdid[1Cnot[1Cremove[1Cit.
+
+[2CSome[1Csay[1Cthe[1Cclock[1Cis[1Cstill[1Crunning.[1CSome[1Csay[1Cthat's[1Cwhy,[1Cin[1Ccertain[1Cmountain[1Ctowns,[1Cyou[1Csometimes[1Cfeel[1Cfor[1Ca[1Cmoment[1Cthat[1Cthe[1Cday[1Cwas[1Ca[1Clittle[1Clonger[1Cthan[1Cit[1Cshould[1Chave[1Cbeen[1C—[1Cand[1Cthat[1Csomething[1Ckind[1Chappened
+[2Cin[1Cit,[1Cthough[1Cyou[1Ccan't[1Cquite[1Csay[1Cwhat.
+
+[38;5;246m✻[1CWorked[1Cfor[1C10s[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ [7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A[2D[3B[2K[G[1A[2C[2Aa[7m [2B[27m                                                                                                                                                                                                                    [3C[2A[3D[2B[3C[2An[7m [27m
+
+[4C[2A[4D[2B[4C[2Ad[7m [27m
+
+[5C[2A[5D[2B[5C[2A [7m [27m
+
+[6C[2A[6D[2B[6C[2Aa[7m [27m
+
+[7C[2A[7D[2B[7C[2An[7m [27m
+
+[8C[2A[8D[2B[8C[2Ao[7m [27m
+
+[9C[2A[9D[2B[9C[2At[7m [27m
+
+[10C[2A[10D[2B[10C[2Ah[7m [27m
+
+[11C[2A[11D[2B[11C[2Ae[7m [27m
+
+[12C[2A[12D[2B[12C[2Ar[7m [27m
+
+[13C[2A[13D[2B[13C[2A?[7m [27m
+
+[14C[2A]0;⠂ Chat and storytelling session[14D[2B[3A[48;5;237m[38;5;239m❯ [38;5;231mand another?[39m                                                                                                                                                                                                      [1B[49m     [1C         [1B[38;5;174m✻[39m [38;5;174mWibbling… [39m                                                                                                                                                                                                        
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A[2D[3B[6A[38;5;174m✽[39m
+
+
+
+
+
+[2C[3A[2D[3B[2C[6A[38;5;216mW[39m
+
+
+
+
+
+[2C[3A[2D[3B[3C[6A[38;5;216mi[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;216mb[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✻[1CW[2C[38;5;216mb[39m
+
+
+
+
+
+[2C[3A[2D[3B[3C[6A[38;5;174mi[2C[38;5;216ml[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;174mb[2C[38;5;216mi[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[4Cb[2C[38;5;216mn[39m
+
+
+
+
+
+[2C[3A[2D[3B[6C[6A[38;5;174ml[2C[38;5;216mg[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✳[6Cin[1C[38;5;216m…[39m
+
+
+
+
+
+[2C[3A[2D[3B[9C[6A[38;5;174mg[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✢[9C…[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m·[39m
+
+
+
+
+
+[2C[3A]0;⠐ Chat and storytelling session[2D[3B[6A[38;5;174m✢[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✳[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✻[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✽[39m
+
+
+
+
+
+[2C[3A[2D[3B[2C[6A[38;5;216mW[39m
+
+
+
+
+
+[2C[3A[2D[3B[3C[6A[38;5;216mi[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;216mb[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✻[1CWi[1C[38;5;216mbl[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;174mb[2C[38;5;216mi[39m
+
+
+
+
+
+[2C[3A[2D[3B[2C[6A[38;5;216mWib[38;5;174mbli[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[39m
+
+
+
+
+
+[2C[3A]0;⠂ Chat and storytelling session[2D[3B[6A[38;5;174m✳[39m
+
+
+
+
+
+[2C[3A[2D[3B[4C[6A[38;5;174mb[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✢[39m
+
+
+
+
+
+[2C[3A[2D[3B[12C[6A[38;5;246m(2s · ↓[1C1 tokens)[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m·[2Ci[16C[38;5;246m2[39m
+
+
+
+
+
+[2C[3A[2D[3B[20C[6A[38;5;246m3[39m
+
+
+
+
+
+[2C[3A[2D[3B[2C[6A[38;5;174mW[17C[38;5;246m4[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✢[19C[38;5;246m5[39m
+
+
+
+
+
+[2C[3A[2D[3B[20C[6A[38;5;246m6[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✳[39m
+
+
+
+
+
+[2C[3A[2D[3B[20C[6A[38;5;246m7[39m
+
+
+
+
+
+[2C[3A[2D[3B[20C[6A[38;5;246m10 tokens)[39m
+
+
+
+
+
+[2C[3A[2D[3B[21C[6A[38;5;246m3[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✶[20C[38;5;246m4[39m
+
+
+
+
+
+[2C[3A[2D[3B[21C[6A[38;5;246m5[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;174m✻[39m
+
+
+
+
+
+[2C[3A[2D[3B[21C[6A[38;5;246m6[39m
+
+
+
+
+
+[2C[3A]0;⠐ Chat and storytelling session[2D[3B[6A[38;5;174m✽[20C[38;5;246m7[39m
+
+
+
+
+
+[2C[3A[2D[3B[21C[6A[38;5;246m8[39m
+
+
+
+
+
+[2C[3A[2D[3B[13C[6A[38;5;246m3[39m
+
+
+
+
+
+[2C[3A[2D[3B[6A[38;5;231m⏺[1C[39mA girl named Wren[1Cfound a door[1Cin[1Cthe[1Cback[1Cof[1Cher[1Cgrandmother's[1Cwardrobe,[1Cwhich[1Cwould[1Cbe[1Cunremarkable[1Cexcept[1Cthat[1Cthe[1Cdoor[1Cwas[1Conly[1Cfour[1Cinches[1Ctall.
+
+
+
+
+
+[2C[3A]0;⠂ Chat and storytelling session[2D[3B[4A  She knelt and put her eye to it. On the other side was a whole country — green hills, a river, a town with smoke curling from its chimneys — all of it tiny and perfect and going about its business without her. [1B   [2B[38;5;246m❯ [39m[7m [27m               
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠐ Chat and storytelling session]0;⠂ Chat and storytelling session[2D[3B[4A  She visited the door every day for a summer. She learned the rhythms of the little country: market day, the fishing boats coming in, a wedding once with bells so small they sounded like rain on a windowpane.   [1B  She[1Cnever[1Ctried[1Cto[1Cforce[1Cthe[1Cdoor[1Copen.[1CIt[1Cseemed[1Crude.[1B                                                                                                                                                                                                                    [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠐ Chat and storytelling session[2D[3B[4A  On the last day of August, she pressed a folded note against the gap at the bottom — [3mI see you. I hope you are well.[23m — and slid it through.                                                                       [1B   [2B[38;5;246m❯ [39m[7m [27m               
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠂ Chat and storytelling session]0;⠐ Chat and storytelling session[2D[3B[4A  The next morning a note came back. It was the size of a moth's wing, and she had to use her grandmother's reading glass to read it. It said: [3mWe have seen you too, all summer, watching. We were not sure if you [23m [1B  [3mwere a god or a window. Thank you for being kind either way.[1B[23m                                                                                                                                                                                                                    [1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠂ Chat and storytelling session]0;⠐ Chat and storytelling session[2D[3B[4A  Wren is grown now, with children of her own. The wardrobe is in her attic. Sometimes, late at night, she goes up and kneels by the little door, and slides through a note about how the world is going — the wars,[1B   the[1Cweather,[1Cthe[1Csmall[1Cgood[1Cthings[1C—[1Cbecause[1Cit[1Cseems[1Conly[1Cfair,[1Cafter[1Call[1Cthose[1Cyears[1Cof[1Cwatching,[1Cto[1Ckeep[1Cthem[1Cin[1Cthe[1Cloop.[1B                                                                                                                                                                                                                    [1B[38;5;174m✽[1CReticulating… [38;5;246m(11s · ↓[1C345 tokens)[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m[7m [27m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2C[38;5;246mesc[1Cto[1Cinterrupt[39m
+[2C[3A]0;⠂ Chat and storytelling session]0;✳ Chat and storytelling session[2D[3B[6A[38;5;246m✻[1CChurned for 11s[39m       [1C           [3B❯ [2C[2B[38;5;246m? for shortcuts[39m 
+[2C[3A[2D[3B[2K[G[1A[2C[2A[7ma[27mnd[1Canother?[2B                                                                                                                                                                                                                    [2C[2A[2D[2B[2C[2Aa[11C[7m [27m
+
+[14C[2A[14D[2B[2C[2A[7m [27m  [1C         
+
+[2C[38;5;246m?[1Cfor[1Cshortcuts[39m
+[2C[3A

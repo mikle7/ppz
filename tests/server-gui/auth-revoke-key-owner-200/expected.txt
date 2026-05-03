@@ -1,0 +1,5 @@
+--- POST revoke as foo (owner of alpha) ---
+status=200
+--- key state after revoke ---
+data-key-state="revoked"
+exit=0

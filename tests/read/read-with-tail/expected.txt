@@ -1,0 +1,3 @@
+before
+during
+exit=0

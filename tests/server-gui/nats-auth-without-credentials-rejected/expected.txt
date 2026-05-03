@@ -1,0 +1,3 @@
+--- raw nats.Connect with no creds ---
+rejected=true
+exit=0

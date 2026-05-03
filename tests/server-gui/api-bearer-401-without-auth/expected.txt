@@ -1,0 +1,9 @@
+--- GET /api/v1/sources without Authorization ---
+status=401
+
+--- with garbage scheme ---
+status=401
+
+--- with empty Bearer ---
+status=401
+exit=0

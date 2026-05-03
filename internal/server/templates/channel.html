@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ppz — {{.Org.Name}} / {{.Handle}} / {{.Pipe}}</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <div>
+        <h1><a href="/dashboard">ppz</a> / <a href="/orgs/{{.Org.Name}}">{{.Org.Name}}</a> / <code>{{.Handle}}</code> / <code>{{.Pipe}}</code></h1>
+        <div class="crumbs">subject <code>{{.Subject}}</code> · {{len .Messages}} message(s)</div>
+      </div>
+    </header>
+
+    <h2>Buffered messages</h2>
+    {{if .Messages}}
+    <table id="messages">
+      <thead>
+        <tr><th>id</th><th>at</th><th>payload</th></tr>
+      </thead>
+      <tbody>
+        {{range .Messages}}
+        <tr data-message="{{.ID}}:{{.CreatedAt}}:{{.Payload}}">
+          <td><code>{{.ID}}</code></td>
+          <td>{{.CreatedAt}}</td>
+          <td><pre>{{.Payload}}</pre></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="empty">No buffered messages on this pipe.</p>
+    {{end}}
+  </main>
+</body>
+</html>
