@@ -1,3 +1,0 @@
-status=404
-looks-like-static=false
-exit=0

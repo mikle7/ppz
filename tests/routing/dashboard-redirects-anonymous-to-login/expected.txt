@@ -1,3 +1,0 @@
-status=302
-location=/login?next=%2Fdashboard
-exit=0

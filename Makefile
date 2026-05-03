@@ -149,12 +149,12 @@ compose-down:
 
 e2e:
 	$(COMPOSE) build test-runner
-	$(COMPOSE) up -d --build postgres ppz-server caddy daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
 	$(COMPOSE) run --rm test-runner timeout 15m bash /tests/run.sh
 
 e2e-filter:
 	$(COMPOSE) build test-runner
-	$(COMPOSE) up -d --build postgres ppz-server caddy daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
 	$(COMPOSE) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/run.sh
 
 # Fast iteration mode. e2e-up prepares the stack once; e2e-run executes the
@@ -164,14 +164,14 @@ e2e-filter:
 # mounted into the test-runner, so test-script edits don't need a rebuild.
 e2e-up:
 	$(COMPOSE) build test-runner
-	$(COMPOSE) up -d --build postgres ppz-server caddy daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
 
 e2e-run:
 	$(COMPOSE) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/run.sh
 
 e2e-rebuild:
 	$(COMPOSE) build
-	$(COMPOSE) up -d --build --force-recreate postgres ppz-server caddy daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
 
 e2e-down:
 	$(COMPOSE) down -v --remove-orphans

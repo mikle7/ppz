@@ -73,27 +73,6 @@ services:
       - "4222:4222"   # NATS — needed by host CLI; set PPZ_NATS_URL=nats://localhost:4222
     networks: [ppz]
 
-  caddy:
-    image: caddy:2-alpine
-    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
-    volumes:
-      - ../site/public:/srv/pipescloud-site:ro
-      - ./Caddyfile.compose:/etc/caddy/Caddyfile:ro
-    depends_on:
-      ppz-server:
-        condition: service_healthy
-    healthcheck:
-      # Verifies Caddy is up AND can reverse-proxy /healthz to
-      # ppz-server. If the proxy is broken, this fails and dependents
-      # never start.
-      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q ok"]
-      interval: 1s
-      timeout: 3s
-      retries: 60
-    ports:
-      - "8088:80"     # host access for manual testing through the prod-shape edge
-    networks: [ppz]
-
   daemon-a:
     build:
       context: ..
@@ -156,13 +135,10 @@ services:
       dockerfile: compose/Dockerfile.testrunner
     environment:
       PPZ_SERVER_URL: http://ppz-server:8080
-      PPZ_PUBLIC_URL: http://caddy:80
       PPZ_DAEMON_A_HOME: /tmp/a
       PPZ_DAEMON_B_HOME: /tmp/b
     depends_on:
       ppz-server:
-        condition: service_healthy
-      caddy:
         condition: service_healthy
       daemon-a:
         condition: service_started

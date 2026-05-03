@@ -7,11 +7,6 @@ set -u
 set -o pipefail
 
 : "${PPZ_SERVER_URL:=http://ppz-server:8080}"
-# Public-facing URL — what an end user (browser, daemon, CLI) hits.
-# In compose this points at the Caddy edge (the same shape prod uses);
-# Caddy then either serves the pipescloud-site static files or proxies
-# to ppz-server. Tests under tests/routing/ exercise that boundary.
-: "${PPZ_PUBLIC_URL:=http://caddy:80}"
 : "${PPZ_DAEMON_A_HOME:=/tmp/a}"
 : "${PPZ_DAEMON_B_HOME:=/tmp/b}"
 : "${PPZ_DAEMON_A_SOCK:=$PPZ_DAEMON_A_HOME/daemon.sock}"
