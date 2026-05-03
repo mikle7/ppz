@@ -383,7 +383,24 @@ func flushInboxAlerts(ctx context.Context, pump *terminalInboxAlertPump) {
 //	    <h>.stdout --json` gives byte-faithful access to log consumers.
 //
 // One read, two consumers — same fan-out as `script(1)` / `screen`.
+// Publishing runs on a bounded worker so a slow daemon/NATS round-trip does
+// not delay local terminal rendering; the bound preserves backpressure for
+// busy sessions instead of dropping stdout history.
 func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer) {
+	publishCh := make(chan string, 64)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for payload := range publishCh {
+			_ = sendStreamLine(handle, "stdout", payload)
+		}
+	}()
+	defer func() {
+		close(publishCh)
+		wg.Wait()
+	}()
+
 	buf := make([]byte, 4096)
 	var pending []byte // trailing partial UTF-8 sequence carried across reads
 	for {
@@ -407,14 +424,14 @@ func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer)
 			pending = partial
 
 			if len(complete) > 0 {
-				_ = sendStreamLine(handle, "stdout", string(complete))
+				publishCh <- string(complete)
 			}
 		}
 		if err != nil {
 			// Flush any final partial bytes (even if invalid) — better
 			// to ship them than drop, parity with legacy behaviour.
 			if len(pending) > 0 {
-				_ = sendStreamLine(handle, "stdout", string(pending))
+				publishCh <- string(pending)
 				pending = nil
 			}
 			return
