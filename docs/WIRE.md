@@ -212,16 +212,17 @@ First invocation: `daemon started pid=PID`
 Already running:  `daemon already running pid=PID`
 Foreground (`--foreground`): same first line, then blocks.
 
-### `ppz status` — exactly four lines
+### `ppz status`
 Logged in with a current source:
 ```
-daemon: running pid=PID
-login: <URL> key=KEYPREFIX
-org: <org_id>
-current: <handle>
+daemon: logged in (pid=PID)
+last token refresh: <relative time|->
+server: <URL>
+org: <org_name_or_id>
+current source: <handle>
 ```
-Logged in, no current source: same with `current: -`.
-Logged in, no auth: `login: not logged in`, `org: -`, `current: -`.
+Logged in, no current source: same with `current source: -`.
+Logged in, no auth: `daemon: not logged in (pid=PID)` plus a login hint.
 Daemon not running (exit 11): `daemon: not running`.
 
 ### `ppz login URL -apikey K`

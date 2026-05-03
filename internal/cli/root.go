@@ -102,7 +102,7 @@ Terminal:
                                     --skip N, --since DUR.
 
 Operations:
-  ppz status                       show daemon, login, and current source
+  ppz status                       show daemon, token refresh, and current source
   ppz version                      print the binary's version + build sha
   ppz ls [--watch [PATTERN...]]    list sources × pipes (--watch blocks until
                                    unread on a matching handle; patterns use

@@ -1,4 +1,5 @@
 daemon: logged in (pid=PID)
+last token refresh: just now
 server: http://ppz-server:8080
 org: alpha
 current source: -
