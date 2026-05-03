@@ -7,8 +7,10 @@ ppz is an open-source tool for streaming pipes between agents,
 processes, and machines. It pairs a CLI + daemon on the user's
 side with a server that runs NATS / JetStream as the transport.
 
-Hosted ppz is available at [pipescloud.io](https://pipescloud.io)
-(operated separately under the same Apache-2.0 licensed code).
+Hosted ppz is available at [pipescloud.io](https://pipescloud.io).
+It's built on this Apache-2.0 core and adds proprietary hosted-only
+features (security, scalability, billing, team management, ops
+tooling). The OSS code here is fully self-hostable.
 
 ## Install
 
