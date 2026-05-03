@@ -18,8 +18,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nkeys"
 
-	"github.com/pipescloud/ppz/internal/clock"
 	"github.com/pipescloud/ppz/internal/cliproto"
+	"github.com/pipescloud/ppz/internal/clock"
 	"github.com/pipescloud/ppz/internal/envelope"
 	"github.com/pipescloud/ppz/internal/natsubj"
 )
@@ -211,12 +211,13 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 // in-memory state that doesn't survive. We rebuild it here on demand by
 // re-calling /auth/exchange.
 func (d *Daemon) ensureNATS(ctx context.Context) error {
-	if d.NC != nil && d.NC.IsConnected() {
-		return nil
-	}
 	creds, ok := d.State.Credentials()
 	if !ok {
 		return cliproto.New(cliproto.ENotLoggedIn)
+	}
+	d.ensureRefreshLoopFromCreds(creds)
+	if d.NC != nil && d.NC.IsConnected() {
+		return nil
 	}
 	if d.NATSURL == "" {
 		body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey})
@@ -254,9 +255,7 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	// process post-restart), boot it from the persisted creds. Exp
 	// is unknown — set to a near-past value so the loop fires
 	// immediately and refreshes from the bearer.
-	if d.Refresh == nil {
-		d.startRefreshLoop(creds.OrgID, creds.NATSUserJWT, creds.NATSUserSeed, time.Now().Add(-time.Minute).Unix())
-	}
+	d.ensureRefreshLoopFromCreds(creds)
 	nc, err := connectNATSWithRefresh(d.NATSURL, d.Refresh)
 	if err != nil {
 		return cliproto.New(cliproto.ENATSUnreachable)
@@ -266,6 +265,13 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	}
 	d.NC = nc
 	return nil
+}
+
+func (d *Daemon) ensureRefreshLoopFromCreds(creds *Credentials) {
+	if d.Refresh != nil || creds.NATSUserJWT == "" || creds.NATSUserSeed == "" {
+		return
+	}
+	d.startRefreshLoop(creds.OrgID, creds.NATSUserJWT, creds.NATSUserSeed, time.Now().Add(-time.Minute).Unix())
 }
 
 // authHTTP sets the bearer header on a request.

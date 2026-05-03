@@ -117,11 +117,16 @@ func PrintStatusWithEnv(w io.Writer, s StatusReply, envCurrent, currentJsonPath 
 	// don't lie, but also don't refuse to render). Treat both as the
 	// happy path; the next server-touching call will refresh the cache.
 	fmt.Fprintf(w, "daemon: %s (pid=%d)\n", c.green("logged in"), s.DaemonPID)
-	fmt.Fprintf(w, "server: %s\n", s.URL)
-	if name := s.OrgName; name != "" {
-		fmt.Fprintf(w, "org: %s\n", name)
+	if s.LastTokenRefreshAt != nil {
+		fmt.Fprintf(w, "last token refresh: %s\n", coloredTokenRefreshAge(c, *s.LastTokenRefreshAt, timeNow()))
 	} else {
-		fmt.Fprintf(w, "org: %s\n", s.OrgID)
+		fmt.Fprintf(w, "last token refresh: %s\n", c.dim("-"))
+	}
+	fmt.Fprintf(w, "server: %s\n", c.green(s.URL))
+	if name := s.OrgName; name != "" {
+		fmt.Fprintf(w, "org: %s\n", c.green(name))
+	} else {
+		fmt.Fprintf(w, "org: %s\n", c.green(s.OrgID))
 	}
 
 	daemonCurrent := s.Current
@@ -137,6 +142,15 @@ func PrintStatusWithEnv(w io.Writer, s StatusReply, envCurrent, currentJsonPath 
 	default:
 		fmt.Fprintf(w, "current source: %s\n", c.dim("-"))
 	}
+}
+
+func coloredTokenRefreshAge(c statusColors, t, now time.Time) string {
+	age := now.Sub(t)
+	text := RelativeTime(t, now)
+	if age >= 5*time.Minute {
+		return c.red(text)
+	}
+	return c.green(text)
 }
 
 func PrintLogin(w io.Writer, r LoginReply) {

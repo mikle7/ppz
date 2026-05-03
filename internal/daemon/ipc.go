@@ -111,6 +111,12 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		reply.KeyPrefix = d.State.KeyPrefix()
 		reply.OrgID = d.State.OrgID()
 		reply.OrgName = d.State.OrgName()
+		if d.Refresh != nil {
+			lastRefresh := d.Refresh.LastRefreshAt()
+			if !lastRefresh.IsZero() {
+				reply.LastTokenRefreshAt = &lastRefresh
+			}
+		}
 		// loginCheck is populated by callServer on every server-touching
 		// handler, plus SetLogin (login itself counts as a successful
 		// observation). If it's still empty here, no observation has

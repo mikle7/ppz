@@ -45,6 +45,7 @@ type RefreshLoop struct {
 	jwt     string
 	seed    string
 	expUnix int64
+	lastAt  time.Time
 	cancel  context.CancelFunc
 }
 
@@ -60,6 +61,7 @@ func (r *RefreshLoop) Start(ctx context.Context, jwt, seed string, expUnix int64
 	r.jwt = jwt
 	r.seed = seed
 	r.expUnix = expUnix
+	r.lastAt = time.Now()
 	r.cancel = cancel
 	r.mu.Unlock()
 
@@ -83,6 +85,15 @@ func (r *RefreshLoop) Current() (jwt, seed string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.jwt, r.seed
+}
+
+// LastRefreshAt returns when the loop last accepted fresh credentials.
+// Start counts as the first refresh because its credentials came from
+// /auth/exchange immediately before the loop was started.
+func (r *RefreshLoop) LastRefreshAt() time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lastAt
 }
 
 func (r *RefreshLoop) run(ctx context.Context) {
@@ -130,6 +141,7 @@ func (r *RefreshLoop) run(ctx context.Context) {
 		r.jwt = newJWT
 		r.seed = newSeed
 		r.expUnix = newExp
+		r.lastAt = time.Now()
 		r.mu.Unlock()
 	}
 }

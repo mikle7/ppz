@@ -4,15 +4,15 @@ import "time"
 
 // IPC method names. Keep in sync with WIRE.md §7.
 const (
-	IPCStatus     = "Status"
-	IPCLogin      = "Login"
-	IPCCreate     = "Create"
-	IPCSwitch     = "Switch"
-	IPCBroadcast  = "Broadcast"
-	IPCList       = "List"
-	IPCListWatch  = "ListWatch"
-	IPCSubscribe  = "Subscribe"
-	IPCRead       = "Read"
+	IPCStatus      = "Status"
+	IPCLogin       = "Login"
+	IPCCreate      = "Create"
+	IPCSwitch      = "Switch"
+	IPCBroadcast   = "Broadcast"
+	IPCList        = "List"
+	IPCListWatch   = "ListWatch"
+	IPCSubscribe   = "Subscribe"
+	IPCRead        = "Read"
 	IPCConnect     = "Connect"
 	IPCDisconnect  = "Disconnect"
 	IPCPipeCreate  = "PipeCreate"
@@ -36,15 +36,15 @@ const (
 // IPC field names alongside the verb refactor.
 type ReadRequest struct {
 	Handle    string `json:"handle"`
-	Channel   string `json:"channel"`               // pipe name: broadcast / stdin / stdout
-	Limit     int    `json:"limit,omitempty"`       // 0 = unlimited; non-zero = tail-N (reread only)
-	Skip      int    `json:"skip,omitempty"`        // drop the first N retained messages (reread only)
-	SinceMS   int64  `json:"since_ms,omitempty"`    // 0 = no time filter; >0 = only msgs newer than (now − this many ms) (reread only)
-	JSON      bool   `json:"json,omitempty"`        // emit envelope as JSON instead of payload text
+	Channel   string `json:"channel"`            // pipe name: broadcast / stdin / stdout
+	Limit     int    `json:"limit,omitempty"`    // 0 = unlimited; non-zero = tail-N (reread only)
+	Skip      int    `json:"skip,omitempty"`     // drop the first N retained messages (reread only)
+	SinceMS   int64  `json:"since_ms,omitempty"` // 0 = no time filter; >0 = only msgs newer than (now − this many ms) (reread only)
+	JSON      bool   `json:"json,omitempty"`     // emit envelope as JSON instead of payload text
 	Follow    bool   `json:"follow,omitempty"`
-	Session   string `json:"session,omitempty"`     // cursor key — defaults to "default" daemon-side
-	NoAdvance bool   `json:"no_advance,omitempty"`  // observational reads (terminal view) skip cursor advance
-	All       bool   `json:"all,omitempty"`         // forensic mode (`reread`): ignore the cursor (deliver everything) and don't advance it. Implies NoAdvance.
+	Session   string `json:"session,omitempty"`    // cursor key — defaults to "default" daemon-side
+	NoAdvance bool   `json:"no_advance,omitempty"` // observational reads (terminal view) skip cursor advance
+	All       bool   `json:"all,omitempty"`        // forensic mode (`reread`): ignore the cursor (deliver everything) and don't advance it. Implies NoAdvance.
 }
 
 // ReadEvent is the wire format of one streamed line in a Read response.
@@ -87,12 +87,13 @@ type StatusRequest struct {
 }
 
 type StatusReply struct {
-	DaemonPID int    `json:"daemon_pid"`
-	LoggedIn  bool   `json:"logged_in"`
-	URL       string `json:"url,omitempty"`
-	KeyPrefix string `json:"key_prefix,omitempty"`
-	OrgID     string `json:"org_id,omitempty"`
-	OrgName   string `json:"org_name,omitempty"`
+	DaemonPID          int        `json:"daemon_pid"`
+	LoggedIn           bool       `json:"logged_in"`
+	URL                string     `json:"url,omitempty"`
+	KeyPrefix          string     `json:"key_prefix,omitempty"`
+	OrgID              string     `json:"org_id,omitempty"`
+	OrgName            string     `json:"org_name,omitempty"`
+	LastTokenRefreshAt *time.Time `json:"last_token_refresh_at,omitempty"`
 	// LoginCheck is the daemon's last verification result against the
 	// server. "ok" means a recent server-touching call succeeded;
 	// "invalid" means the server returned E_INVALID_API_KEY (key
@@ -261,9 +262,9 @@ type AuthExchangeRequest struct {
 // prints. UUID + display name + role; no NATS-side fields here, this
 // endpoint is purely "which orgs am I in".
 type OrgInfo struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Role  string `json:"role,omitempty"` // owner / member / viewer / bot (Phase 3.6)
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role,omitempty"` // owner / member / viewer / bot (Phase 3.6)
 }
 
 type ListOrgsReply struct {
@@ -317,12 +318,12 @@ type PipeCreateRequest struct {
 // PipeCreateReply mirrors the server's resolved retention (after defaults
 // are filled in) so the CLI prints exactly what was provisioned.
 type PipeCreateReply struct {
-	Handle      string `json:"handle"`
-	Name        string `json:"name"`
-	StreamName  string `json:"stream_name"`
-	TTLSeconds  int    `json:"ttl_seconds"`
-	MaxMsgs     int    `json:"max_msgs"`
-	MaxBytes    int64  `json:"max_bytes"`
+	Handle     string `json:"handle"`
+	Name       string `json:"name"`
+	StreamName string `json:"stream_name"`
+	TTLSeconds int    `json:"ttl_seconds"`
+	MaxMsgs    int    `json:"max_msgs"`
+	MaxBytes   int64  `json:"max_bytes"`
 }
 
 type PipeDestroyRequest struct {

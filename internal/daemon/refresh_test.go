@@ -49,6 +49,66 @@ func TestRefreshTimer_FiresBeforeExp(t *testing.T) {
 	}
 }
 
+func TestRefreshLoop_TracksLastRefreshAt(t *testing.T) {
+	refreshed := make(chan struct{}, 1)
+	fn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+		select {
+		case refreshed <- struct{}{}:
+		default:
+		}
+		return "new-jwt", "new-seed", time.Now().Add(time.Hour).Unix(), nil
+	}
+
+	r := &RefreshLoop{OrgID: "test-org", Refresh: fn}
+
+	beforeStart := time.Now()
+	expSoon := time.Now().Add(500 * time.Millisecond).Unix()
+	if err := r.Start(context.Background(), "init-jwt", "init-seed", expSoon); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer r.Stop()
+
+	initialRefresh := r.LastRefreshAt()
+	if initialRefresh.IsZero() || initialRefresh.Before(beforeStart) {
+		t.Fatalf("LastRefreshAt after Start = %v, want non-zero at or after %v", initialRefresh, beforeStart)
+	}
+
+	select {
+	case <-refreshed:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("RefreshFn was not called within 2s")
+	}
+
+	afterRefresh := r.LastRefreshAt()
+	if !afterRefresh.After(initialRefresh) {
+		t.Fatalf("LastRefreshAt after refresh = %v, want after initial %v", afterRefresh, initialRefresh)
+	}
+}
+
+func TestEnsureRefreshLoopFromCredsStartsLoopFromPersistedCredentials(t *testing.T) {
+	d := New(t.TempDir(), "")
+	creds := Credentials{
+		URL:          "http://127.0.0.1:1",
+		APIKey:       "ppz_test_key",
+		OrgID:        "test-org",
+		NATSUserJWT:  "persisted-jwt",
+		NATSUserSeed: "persisted-seed",
+	}
+
+	d.ensureRefreshLoopFromCreds(&creds)
+	if d.Refresh == nil {
+		t.Fatalf("ensureRefreshLoopFromCreds did not start refresh loop")
+	}
+	t.Cleanup(d.Refresh.Stop)
+
+	if gotJWT, gotSeed := d.Refresh.Current(); gotJWT != "persisted-jwt" || gotSeed != "persisted-seed" {
+		t.Fatalf("refresh loop credentials = (%q, %q), want persisted credentials", gotJWT, gotSeed)
+	}
+	if got := d.Refresh.LastRefreshAt(); got.IsZero() {
+		t.Fatalf("LastRefreshAt is zero after starting from persisted credentials")
+	}
+}
+
 // TestRefreshTimer_HandlesUnauthorized: when RefreshFn returns
 // ErrUnauthorized, the loop stops + invokes OnUnauthorized so the
 // daemon can surface "session expired" via `ppz status`.
@@ -108,8 +168,10 @@ func TestRefreshTimer_HandlesUnauthorized(t *testing.T) {
 // Catches the "send on closed channel" panic class.
 func TestRefreshTimer_StopIsIdempotent(t *testing.T) {
 	r := &RefreshLoop{
-		OrgID:   "x",
-		Refresh: func(ctx context.Context, orgID string) (string, string, int64, error) { return "", "", 0, errors.New("never called") },
+		OrgID: "x",
+		Refresh: func(ctx context.Context, orgID string) (string, string, int64, error) {
+			return "", "", 0, errors.New("never called")
+		},
 	}
 	if err := r.Start(context.Background(), "j", "s", time.Now().Add(time.Hour).Unix()); err != nil {
 		t.Fatalf("Start: %v", err)
