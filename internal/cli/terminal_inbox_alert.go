@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -112,9 +113,28 @@ func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
 		return false
 	}
 	p.BeginAlertMode(now)
-	_, _ = io.WriteString(p.pty, alert)
+	_, _ = io.WriteString(p.pty, shellEchoCommand(alert))
 	p.EndAlertMode(now)
 	return true
+}
+
+func shellEchoCommand(message string) string {
+	return fmt.Sprintf("echo %s\n", shellSingleQuote(message))
+}
+
+func shellSingleQuote(s string) string {
+	out := "'"
+	for _, r := range s {
+		if r == '\'' {
+			out += `'\''`
+			continue
+		}
+		if r == '\r' || r == '\n' {
+			continue
+		}
+		out += string(r)
+	}
+	return out + "'"
 }
 
 func (p *terminalInboxAlertPump) BeginAlertMode(now time.Time) {

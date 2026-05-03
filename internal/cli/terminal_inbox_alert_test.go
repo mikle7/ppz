@@ -65,7 +65,7 @@ func TestTerminalInboxAlertStateMachineCoalescesMultipleUnreadMessages(t *testin
 	}
 }
 
-func TestTerminalInboxAlertPumpWritesInboxAlertToPTYStdinAfterIdle(t *testing.T) {
+func TestTerminalInboxAlertPumpWritesShellSafeInboxAlertToPTYStdinAfterIdle(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	var ptyStdin bytes.Buffer
 	pump := newTerminalInboxAlertPump(terminalInboxAlertConfig{
@@ -90,6 +90,12 @@ func TestTerminalInboxAlertPumpWritesInboxAlertToPTYStdinAfterIdle(t *testing.T)
 		t.Fatal("Flush after idle did not write alert to PTY stdin")
 	}
 	got := ptyStdin.String()
+	if !strings.HasPrefix(got, "echo '") {
+		t.Fatalf("PTY stdin alert = %q, want shell-safe echo command", got)
+	}
+	if !strings.HasSuffix(got, "'\n") {
+		t.Fatalf("PTY stdin alert = %q, want newline-terminated shell-safe echo command", got)
+	}
 	if !strings.Contains(got, "You have received a message") {
 		t.Fatalf("PTY stdin alert = %q, want inbox alert text", got)
 	}
