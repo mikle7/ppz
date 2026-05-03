@@ -1,15 +1,21 @@
 name: Release
 
-# Triggered by tag push (v*). Builds every cmd/* binary for
-# linux/darwin × amd64/arm64 via goreleaser, uploads archives +
-# checksums to the matching GitHub Release.
+# Manual distribution. Pick a tag from the workflow_dispatch input and
+# goreleaser will build every cmd/* binary for linux/darwin × amd64/arm64
+# and attach the archives + checksums to the matching GitHub Release.
 #
-# Tag with `make tag {patch|minor|major}` then `make tag push` to
-# fire this workflow.
+# Tags are minted automatically by auto-tag.yml on each merge to main
+# (Conventional Commits → semver bump). Distributing one is a separate,
+# explicit step — fire this workflow when you actually want the binaries
+# published.
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.17.0). Defaults to the latest tag."
+        required: false
+        default: ""
 
 permissions:
   contents: write   # goreleaser needs this to create the GitHub Release
@@ -21,6 +27,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # goreleaser needs full history for changelog
+
+      - name: Resolve tag
+        id: ref
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(git describe --tags --abbrev=0 --match='v*')
+          fi
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG does not exist" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "releasing $TAG"
+
+      - name: Check out tag
+        run: git checkout "${{ steps.ref.outputs.tag }}"
 
       - uses: actions/setup-go@v5
         with:

@@ -1,0 +1,127 @@
+name: Auto-tag
+
+# On push to main, parse Conventional Commits in the new range and bump
+# the latest semver tag accordingly:
+#
+#   feat:      → minor
+#   fix:       → patch
+#   feat!:, BREAKING CHANGE in body, or any `<type>!:` → major
+#   anything else (chore/docs/refactor/test/ci/...) → no tag
+#
+# The highest bump level seen across the new commit range wins. The
+# resulting tag is pushed but does NOT trigger a release — distribution
+# is a separate manual workflow_dispatch on Release.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # needs to push the new tag
+
+concurrency:
+  group: auto-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Compute bump from Conventional Commits
+        id: bump
+        run: |
+          set -euo pipefail
+
+          LAST_TAG=$(git describe --tags --abbrev=0 --match='v*' 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="${LAST_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          echo "range: $RANGE"
+
+          # Iterate the commit range; pick the highest bump.
+          # 3 = major, 2 = minor, 1 = patch, 0 = none.
+          highest=0
+          while IFS= read -r sha; do
+            [ -z "$sha" ] && continue
+            subject=$(git log -1 --format='%s' "$sha")
+            body=$(git log -1 --format='%b' "$sha")
+            echo "  $sha $subject"
+
+            # Breaking: `<type>!:` in subject, or `BREAKING CHANGE:` in body.
+            if echo "$subject" | grep -qE '^[a-zA-Z]+(\([^)]+\))?!:'; then
+              highest=3; break
+            fi
+            if echo "$body" | grep -qE '^BREAKING CHANGE:'; then
+              highest=3; break
+            fi
+            # Feature
+            if echo "$subject" | grep -qE '^feat(\([^)]+\))?:'; then
+              [ "$highest" -lt 2 ] && highest=2
+              continue
+            fi
+            # Fix
+            if echo "$subject" | grep -qE '^fix(\([^)]+\))?:'; then
+              [ "$highest" -lt 1 ] && highest=1
+              continue
+            fi
+          done < <(git rev-list --reverse "$RANGE")
+
+          case "$highest" in
+            3) bump=major ;;
+            2) bump=minor ;;
+            1) bump=patch ;;
+            *) bump=none  ;;
+          esac
+          echo "bump=$bump"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          echo "last_tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next tag
+        if: steps.bump.outputs.bump != 'none'
+        id: next
+        run: |
+          set -euo pipefail
+          LAST="${{ steps.bump.outputs.last_tag }}"
+          BUMP="${{ steps.bump.outputs.bump }}"
+          [ -z "$LAST" ] && LAST="v0.0.0"
+          BARE=${LAST#v}
+          MAJ=$(echo "$BARE" | cut -d. -f1)
+          MIN=$(echo "$BARE" | cut -d. -f2)
+          PAT=$(echo "$BARE" | cut -d. -f3)
+          case "$BUMP" in
+            major) MAJ=$((MAJ + 1)); MIN=0; PAT=0 ;;
+            minor) MIN=$((MIN + 1)); PAT=0 ;;
+            patch) PAT=$((PAT + 1)) ;;
+          esac
+          NEW="v${MAJ}.${MIN}.${PAT}"
+          echo "new=$NEW"
+          if git rev-parse "$NEW" >/dev/null 2>&1; then
+            echo "tag $NEW already exists; aborting" >&2
+            exit 1
+          fi
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Push tag
+        if: steps.bump.outputs.bump != 'none'
+        env:
+          NEW: ${{ steps.next.outputs.new }}
+          BUMP: ${{ steps.bump.outputs.bump }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEW" -m "$NEW ($BUMP bump)"
+          git push origin "$NEW"
+          echo "tagged $NEW"
+
+      - name: No-op summary
+        if: steps.bump.outputs.bump == 'none'
+        run: |
+          echo "No conventional-commits feat:/fix:/breaking found in range; not tagging."

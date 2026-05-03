@@ -61,6 +61,28 @@ make e2e            # full Docker-Compose integration suite
 make e2e-filter F='broadcast/*'   # subset
 ```
 
+## Releasing
+
+Tags are minted automatically on each merge to `main` from
+[Conventional Commits](https://www.conventionalcommits.org/) in the PR
+title / commit subjects:
+
+| Prefix                           | Bump   |
+|---                               |---     |
+| `feat:` / `feat(scope):`         | minor  |
+| `fix:` / `fix(scope):`           | patch  |
+| `feat!:` / `<type>!:` / `BREAKING CHANGE:` in body | major |
+| `chore:`, `docs:`, `refactor:`, `test:`, `ci:`, etc. | no tag |
+
+The highest bump level seen in the new commit range wins. Tagging is
+just tagging — it does **not** publish binaries. To cut a distribution,
+manually dispatch the **Release** workflow (Actions → Release → Run
+workflow) and pick the tag. That's when goreleaser builds the matrix
+and attaches the archives to the GitHub Release.
+
+Manual tagging via `make tag {patch|minor|major}` is still available
+for special cases.
+
 ## License
 
 Apache 2.0. See [`LICENSE`](LICENSE).
