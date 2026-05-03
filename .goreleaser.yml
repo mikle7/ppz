@@ -2,14 +2,15 @@ version: 2
 
 # ppz release pipeline.
 #
-# Triggered on tag push (v*) by .github/workflows/release.yml. Builds
-# every cmd/* binary for linux/darwin × amd64/arm64, archives them
-# per-platform, computes checksums, and uploads to the GitHub Release
-# the workflow creates.
+# Triggered on workflow_dispatch by .github/workflows/release.yml.
+# Builds ppz, ppz-server, ppz-desktop, and ppz-natsbootstrap for
+# linux/darwin × amd64/arm64, archives them per-platform, computes
+# checksums, and uploads to the matching GitHub Release.
 #
-# The CLI's `ppz` binary is the one most users care about; the others
-# (ppz-server, ppz-desktop, etc.) ship in the same archive so a single
-# download has everything needed for self-hosting.
+# install.sh is opinionated about WHICH of these to drop into a user's
+# PATH: by default just `ppz` + `ppz-desktop`; `PPZ_INCLUDE_SERVER=1`
+# adds `ppz-server` + `ppz-natsbootstrap` for self-hosters. The tarball
+# carries all four either way; install.sh just picks.
 
 before:
   hooks:
@@ -52,14 +53,11 @@ builds:
       - -X github.com/pipescloud/ppz/internal/version.Version={{.Version}}
       - -X github.com/pipescloud/ppz/internal/version.BuildSHA={{.ShortCommit}}
 
-  - id: ppz-seed
-    main: ./cmd/ppz-seed
-    binary: ppz-seed
-    env: [CGO_ENABLED=0]
-    goos: [linux, darwin]
-    goarch: [amd64, arm64]
-    flags: [-trimpath]
-    ldflags: [-s, -w]
+  # ppz-seed is intentionally NOT published in release tarballs.
+  # It only populates the OSS test fixtures (foo/bar/alpha/beta hardcoded
+  # in internal/seed/seed.go) and is built from source by the compose
+  # e2e harness when needed. Shipping it would mislead users into
+  # thinking it's a production data-bootstrapping tool — it isn't.
 
   - id: ppz-natsbootstrap
     main: ./cmd/ppz-natsbootstrap
@@ -72,7 +70,7 @@ builds:
 
 archives:
   - id: default
-    builds: [ppz, ppz-server, ppz-desktop, ppz-seed, ppz-natsbootstrap]
+    builds: [ppz, ppz-server, ppz-desktop, ppz-natsbootstrap]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format_overrides:

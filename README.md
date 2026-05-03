@@ -23,8 +23,19 @@ curl -fsSL https://raw.githubusercontent.com/pipescloud/ppz/main/install.sh | ba
 Detects your OS + arch, downloads the matching pre-built tarball
 from the latest [GitHub Release](https://github.com/pipescloud/ppz/releases),
 verifies the sha256, and drops the binaries into `~/.local/bin`. No
-Go toolchain required. Pin a specific version with `PPZ_VERSION=v0.17.0`
-or override the install dir with `PPZ_INSTALL_DIR=/usr/local/bin`.
+Go toolchain required.
+
+By default you get the **CLI client**: `ppz` + `ppz-desktop` (local
+web GUI). Self-hosters who want to run their own server can opt into
+the server bundle:
+
+```bash
+PPZ_INCLUDE_SERVER=1 curl -fsSL .../install.sh | bash
+# adds: ppz-server, ppz-natsbootstrap
+```
+
+Other knobs: `PPZ_VERSION=v0.17.0` to pin a tag, `PPZ_INSTALL_DIR=/usr/local/bin`
+to change the target directory.
 
 **From source (requires Go 1.22+):**
 
@@ -37,13 +48,13 @@ make build
 
 ## What's in the box
 
-| Binary | Purpose |
-|---|---|
-| `ppz`              | The user-facing CLI (`ppz source create`, `ppz broadcast`, `ppz read`, `ppz terminal …`). |
-| `ppz-server`       | Hosts the org/source/pipe state and embeds a NATS server. Self-hostable; pipescloud.io runs one. |
-| `ppz-desktop`      | Local web GUI for browsing pipes. |
-| `ppz-seed`         | Bootstraps a server with seed data (test / dev only). |
-| `ppz-natsbootstrap`| Generates the NATS NSC chain (operator + system account). |
+| Binary | Audience | Purpose |
+|---|---|---|
+| `ppz`               | CLI users (default) | The user-facing CLI (`ppz source create`, `ppz broadcast`, `ppz read`, `ppz terminal …`). |
+| `ppz-desktop`       | CLI users (default) | Local web GUI for browsing pipes. |
+| `ppz-server`        | Self-hosters (`PPZ_INCLUDE_SERVER=1`) | Hosts the org/source/pipe state and embeds a NATS server. pipescloud.io runs one. |
+| `ppz-natsbootstrap` | Self-hosters (`PPZ_INCLUDE_SERVER=1`) | One-shot helper that mints an ephemeral NATS NSC chain (operator + account JWTs) for a fresh server. Production usually pulls these from a secret manager instead. |
+| `ppz-seed`          | Source / e2e only | Populates the OSS test fixtures (`foo`/`bar` users, `alpha`/`beta` orgs). Built from source by the compose harness — not published in release tarballs. |
 
 ## Docs
 
