@@ -39,6 +39,59 @@ func TestRunRead_BareInboxResolvesToCurrentSourceInbox(t *testing.T) {
 	}
 }
 
+func TestRunRead_BareInboxPrefersEnvCurrentHandle(t *testing.T) {
+	t.Setenv("PPZ_SESSION", "read-inbox-test")
+	t.Setenv("PPZ_CURRENT_HANDLE", "env-current")
+	dir, err := os.MkdirTemp("/tmp", "ppz-read-inbox-")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "daemon.sock")
+	t.Setenv("PPZ_IPC_SOCKET", sock)
+
+	requests := serveReadInboxAliasDaemon(t, sock, "daemon-current")
+
+	if err := runRead("inbox", true, false, false, false, false, 0, 0, 0); err != nil {
+		t.Fatalf("runRead inbox: %v", err)
+	}
+
+	if len(*requests) != 1 {
+		t.Fatalf("read request count = %d, want 1", len(*requests))
+	}
+	got := (*requests)[0]
+	if got.Handle != "env-current" || got.Channel != "inbox" {
+		t.Fatalf("read inbox resolved to %q.%q, want env-current.inbox", got.Handle, got.Channel)
+	}
+}
+
+func TestRunReread_BareInboxPrefersEnvCurrentHandle(t *testing.T) {
+	t.Setenv("PPZ_SESSION", "read-inbox-test")
+	t.Setenv("PPZ_CURRENT_HANDLE", "env-current")
+	dir, err := os.MkdirTemp("/tmp", "ppz-reread-inbox-")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "daemon.sock")
+	t.Setenv("PPZ_IPC_SOCKET", sock)
+
+	requests := serveReadInboxAliasDaemon(t, sock, "daemon-current")
+
+	if err := runRead("inbox", true, false, false, false, true, 0, 0, 0); err != nil {
+		t.Fatalf("runRead reread inbox: %v", err)
+	}
+
+	if len(*requests) != 1 {
+		t.Fatalf("read request count = %d, want 1", len(*requests))
+	}
+	got := (*requests)[0]
+	if got.Handle != "env-current" || got.Channel != "inbox" || !got.All {
+		t.Fatalf("reread inbox request = handle=%q channel=%q all=%v, want env-current.inbox all=true",
+			got.Handle, got.Channel, got.All)
+	}
+}
+
 func TestRunRead_BareInboxWithoutCurrentSourceErrors(t *testing.T) {
 	t.Setenv("PPZ_SESSION", "read-inbox-test")
 	dir, err := os.MkdirTemp("/tmp", "ppz-read-inbox-")

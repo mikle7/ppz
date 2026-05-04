@@ -35,7 +35,7 @@ func TestTerminalInboxAlertStateMachineInjectsAfterIdle(t *testing.T) {
 	sm.ObserveInboxUnread(now.Add(time.Second))
 
 	got := sm.ReadyAlert(now.Add(16 * time.Second))
-	if !strings.Contains(got, "You have received a message") {
+	if !strings.Contains(got, "Please run 'ppz read inbox' and action messages") {
 		t.Fatalf("ReadyAlert after idle = %q, want inbox alert text", got)
 	}
 	if !strings.Contains(got, "ppz read inbox") {
@@ -90,17 +90,20 @@ func TestTerminalInboxAlertPumpWritesShellSafeInboxAlertToPTYStdinAfterIdle(t *t
 		t.Fatal("Flush after idle did not write alert to PTY stdin")
 	}
 	got := ptyStdin.String()
-	if !strings.HasPrefix(got, "echo '") {
-		t.Fatalf("PTY stdin alert = %q, want shell-safe echo command", got)
+	if !strings.HasPrefix(got, "ppz alert '") {
+		t.Fatalf("PTY stdin alert = %q, want shell-safe ppz alert command", got)
 	}
-	if !strings.HasSuffix(got, "'\n") {
-		t.Fatalf("PTY stdin alert = %q, want newline-terminated shell-safe echo command", got)
+	if !strings.HasSuffix(got, "'\x1b[13u") {
+		t.Fatalf("PTY stdin alert = %q, want Claude CSI-Enter-terminated ppz alert command", got)
 	}
-	if !strings.Contains(got, "You have received a message") {
+	if !strings.Contains(got, "Please run ") || !strings.Contains(got, " and action messages") {
 		t.Fatalf("PTY stdin alert = %q, want inbox alert text", got)
 	}
 	if !strings.Contains(got, "ppz read inbox") {
 		t.Fatalf("PTY stdin alert = %q, want ppz read inbox guidance", got)
+	}
+	if !strings.Contains(got, `'\''ppz read inbox'\''`) {
+		t.Fatalf("PTY stdin alert = %q, want shell-escaped quoted command guidance", got)
 	}
 	if strings.Contains(got, "secret inbox payload") {
 		t.Fatalf("PTY stdin alert leaked inbox payload: %q", got)
@@ -126,7 +129,7 @@ func TestTerminalInboxAlertPumpCoalescesInboxMessagesIntoOnePTYAlert(t *testing.
 		t.Fatal("Flush after idle did not write coalesced alert")
 	}
 	first := ptyStdin.String()
-	if strings.Count(first, "You have received a message") != 1 {
+	if strings.Count(first, "ppz alert ") != 1 {
 		t.Fatalf("PTY stdin after coalesced alert = %q, want exactly one alert", first)
 	}
 	if wrote := pump.Flush(now.Add(17 * time.Second)); wrote {
@@ -180,7 +183,7 @@ func TestTerminalInboxAlertPumpCooldownSuppressesImmediateRepeatedAlerts(t *test
 	if wrote := pump.Flush(now.Add(47 * time.Second)); !wrote {
 		t.Fatal("Flush after cooldown did not write pending repeated alert")
 	}
-	if strings.Count(ptyStdin.String(), "You have received a message") != 2 {
+	if strings.Count(ptyStdin.String(), "ppz alert ") != 2 {
 		t.Fatalf("PTY stdin after cooldown = %q, want two total alerts", ptyStdin.String())
 	}
 }

@@ -71,6 +71,7 @@ func cmdCompletion(args []string) error {
 // alphabetical so it scans easily; "completion" / "__complete" are
 // intentionally omitted (operator-internal, not for everyday use).
 var topLevelVerbs = []string{
+	"alert",
 	"broadcast",
 	"daemon",
 	"login",

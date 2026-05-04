@@ -161,16 +161,11 @@ func cmdTerminalShare(args []string) error {
 	var handle string
 	var rest []string
 	if bare {
-		// Resolve current source from daemon.
-		var st cliproto.StatusReply
-		if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
-			cliproto.StatusRequest{Session: sessionID()}, &st); err != nil {
+		resolved, err := effectiveCurrentHandle()
+		if err != nil {
 			return err
 		}
-		if st.Current == "" {
-			return cliproto.New(cliproto.ENoCurrentSource)
-		}
-		handle = st.Current
+		handle = resolved
 		rest = args
 	} else {
 		handle = args[0]
@@ -225,11 +220,6 @@ func cmdTerminalShare(args []string) error {
 		return fmt.Errorf("pty open: %w", err)
 	}
 
-	// Disable just the input-echo bits on the slave. Keep OPOST (\n→\r\n)
-	// and ICANON intact so `ls` etc. render normally and shells with
-	// readline still get cooked input where appropriate.
-	disablePTYEcho(tty.Fd())
-
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	cmd.Env = append(os.Environ(),
 		"PPZ_CURRENT_HANDLE="+handle,
@@ -260,6 +250,10 @@ func cmdTerminalShare(args []string) error {
 	// concrete pty size on .stdctrl, and the wrapped child renders for
 	// some real geometry instead of the kernel's 0×0 default.
 	stdinIsTTY := term.IsTerminal(int(os.Stdin.Fd()))
+	if !stdinIsTTY {
+		restorePTYEcho := setPTYInputEcho(ptmx.Fd(), false)
+		defer restorePTYEcho()
+	}
 	if stdinIsTTY {
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 		if err == nil {
@@ -282,7 +276,7 @@ func cmdTerminalShare(args []string) error {
 	}
 
 	var wg sync.WaitGroup
-	inboxAlerts := newTerminalInboxAlertPump(terminalInboxAlertConfig{
+	inboxAlerts := newTerminalInboxAlertPumpForPTY(terminalInboxAlertConfig{
 		IdleAfter: 15 * time.Second,
 		Cooldown:  30 * time.Second,
 		Message:   terminalInboxAlertMessage,
@@ -384,10 +378,10 @@ func flushInboxAlerts(ctx context.Context, pump *terminalInboxAlertPump) {
 //
 // One read, two consumers — same fan-out as `script(1)` / `screen`.
 // Publishing runs on a bounded worker so a slow daemon/NATS round-trip does
-// not delay local terminal rendering; the bound preserves backpressure for
-// busy sessions instead of dropping stdout history.
+// not delay local terminal rendering for typical bursts. The 512-slot bound
+// caps pending publish memory at roughly 2 MiB (512 × 4096-byte reads).
 func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer) {
-	publishCh := make(chan string, 64)
+	publishCh := make(chan string, 512)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

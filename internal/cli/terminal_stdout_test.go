@@ -51,6 +51,50 @@ func TestPublishAndDisplayStdoutDisplayDoesNotWaitForPublish(t *testing.T) {
 	}
 }
 
+func TestPublishAndDisplayStdoutDisplayHandlesBurstWithinPublishBuffer(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "ppz-stdout-publish-fill-")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "daemon.sock")
+	t.Setenv("PPZ_IPC_SOCKET", sock)
+
+	releasePublish, published := serveBlockingStdoutPublishDaemon(t, sock)
+	display := newRecordingWriter()
+	chunks := make([][]byte, 512)
+	for i := range chunks {
+		chunks[i] = []byte{byte('A' + i%26)}
+	}
+	chunks[0] = []byte("first")
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		publishAndDisplayStdout("term", &chunkReader{chunks: chunks}, display)
+	}()
+
+	wantDisplay := strings.Builder{}
+	for _, chunk := range chunks {
+		wantDisplay.Write(chunk)
+	}
+	if !display.waitContains(wantDisplay.String(), 200*time.Millisecond) {
+		close(releasePublish)
+		t.Fatalf("display stalled within 512-slot publish buffer; got %d bytes, want %d",
+			len(display.String()), len(wantDisplay.String()))
+	}
+
+	close(releasePublish)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("publishAndDisplayStdout did not finish after publish was released")
+	}
+	if got := len(published.snapshot()); got != len(chunks) {
+		t.Fatalf("published payload count = %d, want %d", got, len(chunks))
+	}
+}
+
 type chunkReader struct {
 	chunks [][]byte
 }

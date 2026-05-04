@@ -14,7 +14,6 @@ import (
 	"syscall"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
-	"github.com/pipescloud/ppz/internal/daemon"
 )
 
 // cmdRead: ppz read <handle>.<pipe> [--tail --json --tty --raw]
@@ -184,15 +183,11 @@ func runRead(target string, asJSON, follow, tty, raw, all bool, limit, skip int,
 }
 
 func currentInboxTarget() (string, error) {
-	var st cliproto.StatusReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
-		cliproto.StatusRequest{Session: sessionID()}, &st); err != nil {
+	handle, err := effectiveCurrentHandle()
+	if err != nil {
 		return "", err
 	}
-	if st.Current == "" {
-		return "", cliproto.New(cliproto.ENoCurrentSource)
-	}
-	return st.Current + ".inbox", nil
+	return handle + ".inbox", nil
 }
 
 // splitReadArgs lets `ppz read TGT --tail` and `ppz read --tail TGT` both

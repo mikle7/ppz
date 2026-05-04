@@ -3,13 +3,14 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
-const terminalInboxAlertMessage = "You have received a message. Read unread messages with: ppz read inbox\n"
+const terminalInboxAlertMessage = "Please run 'ppz read inbox' and action messages\n"
 
 type terminalInboxAlertConfig struct {
 	IdleAfter time.Duration
@@ -85,6 +86,7 @@ type terminalInboxAlertPump struct {
 	mu     sync.Mutex
 	sm     *terminalInboxAlertStateMachine
 	pty    io.Writer
+	write  func(string)
 	alert  bool
 	buffer []byte
 }
@@ -96,7 +98,20 @@ func newTerminalInboxAlertPump(cfg terminalInboxAlertConfig, pty io.Writer) *ter
 	return &terminalInboxAlertPump{
 		sm:  newTerminalInboxAlertStateMachine(cfg),
 		pty: pty,
+		write: func(message string) {
+			_, _ = io.WriteString(pty, shellEchoCommand(message))
+		},
 	}
+}
+
+func newTerminalInboxAlertPumpForPTY(cfg terminalInboxAlertConfig, pty *os.File) *terminalInboxAlertPump {
+	pump := newTerminalInboxAlertPump(cfg, pty)
+	pump.write = func(message string) {
+		restore := setPTYInputEcho(pty.Fd(), false)
+		defer restore()
+		_, _ = io.WriteString(pty, shellEchoCommand(message))
+	}
+	return pump
 }
 
 func (p *terminalInboxAlertPump) ObserveUserInput(now time.Time, input []byte) {
@@ -113,13 +128,13 @@ func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
 		return false
 	}
 	p.BeginAlertMode(now)
-	_, _ = io.WriteString(p.pty, shellEchoCommand(alert))
+	p.write(alert)
 	p.EndAlertMode(now)
 	return true
 }
 
 func shellEchoCommand(message string) string {
-	return fmt.Sprintf("echo %s\n", shellSingleQuote(message))
+	return fmt.Sprintf("ppz alert %s\x1b[13u", shellSingleQuote(message))
 }
 
 func shellSingleQuote(s string) string {
