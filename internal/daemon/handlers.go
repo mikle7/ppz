@@ -215,6 +215,19 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 		return cliproto.New(cliproto.ENotLoggedIn)
 	}
 	d.ensureRefreshLoopFromCreds(creds)
+	if d.Refresh != nil {
+		refreshed, err := d.Refresh.RefreshNowIfDue(ctx, time.Now())
+		if errors.Is(err, ErrUnauthorized) {
+			return cliproto.New(cliproto.EInvalidAPIKey)
+		}
+		if err != nil {
+			return cliproto.New(cliproto.EServerUnreachable)
+		}
+		if refreshed && d.NC != nil {
+			d.NC.Close()
+			d.NC = nil
+		}
+	}
 	if d.NC != nil && d.NC.IsConnected() {
 		return nil
 	}
@@ -650,24 +663,27 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 	// Aggregate per-pipe info from JetStream (route B). List stream metadata
 	// once, then fetch latest payload previews only for non-empty streams.
 	if err := d.ensureNATS(ctx); err != nil {
-		// No NATS = can't get per-pipe stats. Return what we have.
-		writeIPC(conn, cliproto.ListReply{Sources: lr.Sources})
+		if e, ok := err.(*cliproto.Error); ok {
+			writeIPCErr(conn, e)
+		} else {
+			writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		}
 		return
 	}
 	js, err := jetstream.New(d.NC)
 	if err != nil {
-		writeIPC(conn, cliproto.ListReply{Sources: lr.Sources})
+		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
 	}
 	orgID, err := uuid.Parse(d.State.OrgID())
 	if err != nil {
-		writeIPC(conn, cliproto.ListReply{Sources: lr.Sources})
+		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
 		return
 	}
 
 	enriched, err := enrichSourcesWithPipeInfo(ctx, js, lr.Sources, orgID, req.Session, nil, cursorSnapshot(d.Cursors, req.Session))
 	if err != nil {
-		writeIPC(conn, cliproto.ListReply{Sources: lr.Sources})
+		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
 	}
 

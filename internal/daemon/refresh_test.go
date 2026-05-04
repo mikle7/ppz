@@ -109,6 +109,68 @@ func TestEnsureRefreshLoopFromCredsStartsLoopFromPersistedCredentials(t *testing
 	}
 }
 
+func TestRefreshLoopRefreshNowIfDueRefreshesExpiredCredentialSynchronously(t *testing.T) {
+	var calls int32
+	now := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	fn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+		atomic.AddInt32(&calls, 1)
+		if orgID != "test-org" {
+			t.Fatalf("RefreshFn orgID = %q, want test-org", orgID)
+		}
+		return "fresh-jwt", "fresh-seed", now.Add(time.Hour).Unix(), nil
+	}
+
+	r := &RefreshLoop{OrgID: "test-org", Refresh: fn}
+	if err := r.Start(context.Background(), "expired-jwt", "expired-seed", now.Add(-time.Hour).Unix()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer r.Stop()
+
+	refreshed, err := r.RefreshNowIfDue(context.Background(), now)
+	if err != nil {
+		t.Fatalf("RefreshNowIfDue: %v", err)
+	}
+	if !refreshed {
+		t.Fatal("RefreshNowIfDue refreshed=false, want true for expired credential")
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("RefreshFn calls = %d, want 1", got)
+	}
+	gotJWT, gotSeed := r.Current()
+	if gotJWT != "fresh-jwt" || gotSeed != "fresh-seed" {
+		t.Fatalf("Current after RefreshNowIfDue = (%q, %q), want fresh credentials", gotJWT, gotSeed)
+	}
+	if got := r.LastRefreshAt(); got.IsZero() {
+		t.Fatal("LastRefreshAt after RefreshNowIfDue is zero")
+	}
+}
+
+func TestRefreshLoopRefreshNowIfDueSkipsFreshCredential(t *testing.T) {
+	var calls int32
+	now := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	fn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+		atomic.AddInt32(&calls, 1)
+		return "unexpected", "unexpected", now.Add(time.Hour).Unix(), nil
+	}
+
+	r := &RefreshLoop{OrgID: "test-org", Refresh: fn}
+	if err := r.Start(context.Background(), "current-jwt", "current-seed", now.Add(time.Hour).Unix()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer r.Stop()
+
+	refreshed, err := r.RefreshNowIfDue(context.Background(), now)
+	if err != nil {
+		t.Fatalf("RefreshNowIfDue: %v", err)
+	}
+	if refreshed {
+		t.Fatal("RefreshNowIfDue refreshed=true, want false for fresh credential")
+	}
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("RefreshFn calls = %d, want 0", got)
+	}
+}
+
 // TestRefreshTimer_HandlesUnauthorized: when RefreshFn returns
 // ErrUnauthorized, the loop stops + invokes OnUnauthorized so the
 // daemon can surface "session expired" via `ppz status`.

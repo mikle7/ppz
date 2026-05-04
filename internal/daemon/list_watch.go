@@ -41,7 +41,11 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 		return
 	}
 	if err := d.ensureNATS(ctx); err != nil {
-		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+		if e, ok := err.(*cliproto.Error); ok {
+			writeIPCErr(conn, e)
+		} else {
+			writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		}
 		return
 	}
 
