@@ -13,5 +13,6 @@ import (
 func cmdVersion(args []string) error {
 	_ = args
 	fmt.Fprintf(os.Stdout, "ppz %s (%s)\n", version.Version, version.BuildSHA)
+	maybeNotifyUpdate()
 	return nil
 }

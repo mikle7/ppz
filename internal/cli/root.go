@@ -43,6 +43,8 @@ func Run(args []string) error {
 		return cmdStatus(rest)
 	case "version":
 		return cmdVersion(rest)
+	case "upgrade":
+		return cmdUpgrade(rest)
 	case "broadcast":
 		return cmdBroadcast(rest)
 	case "ls":
@@ -104,6 +106,7 @@ Terminal:
 Operations:
   ppz status                       show daemon, token refresh, and current source
   ppz version                      print the binary's version + build sha
+  ppz upgrade                      install the latest ppz CLI release
   ppz ls [--watch [PATTERN...]]    list sources × pipes (--watch blocks until
                                    unread on a matching handle; patterns use
                                    '*' quoted or % unquoted as the wildcard)

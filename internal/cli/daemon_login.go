@@ -22,13 +22,13 @@ import (
 // Two auth paths:
 //   - With  -apikey K  → V1 path, daemon stores the key as the bearer
 //   - Without -apikey  → V2 device flow (a la `gh auth login`):
-//       1. POST URL/oauth/device/code → get user_code + device_code
-//       2. Print user_code + verification URL, ask the user to visit
-//          it in a browser and click "Approve"
-//       3. Poll URL/oauth/device/token until approved → bearer token
-//       4. Hand the bearer to the daemon's existing Login IPC (which
-//          stores it and uses it as `Authorization: Bearer <value>`
-//          for all subsequent API calls)
+//     1. POST URL/oauth/device/code → get user_code + device_code
+//     2. Print user_code + verification URL, ask the user to visit
+//     it in a browser and click "Approve"
+//     3. Poll URL/oauth/device/token until approved → bearer token
+//     4. Hand the bearer to the daemon's existing Login IPC (which
+//     stores it and uses it as `Authorization: Bearer <value>`
+//     for all subsequent API calls)
 //
 // Auto-starts the daemon if it isn't running.
 func cmdDaemonLogin(args []string) error {
@@ -66,6 +66,7 @@ func cmdDaemonLogin(args []string) error {
 		return err
 	}
 	cliproto.PrintLogin(os.Stdout, reply)
+	maybeNotifyUpdate()
 	return nil
 }
 

@@ -35,5 +35,6 @@ func cmdStatus(args []string) error {
 	}
 	envCurrent := os.Getenv("PPZ_CURRENT_HANDLE")
 	cliproto.PrintStatusWithEnv(os.Stdout, st, envCurrent, st.CurrentPath, useColor())
+	maybeNotifyUpdate()
 	return nil
 }
