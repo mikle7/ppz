@@ -42,9 +42,14 @@ to change the target directory.
 ```bash
 git clone https://github.com/pipescloud/ppz
 cd ppz
-make build
-# binaries land in ./bin
+make build      # binaries → ./bin/
+make install    # ./bin/* → ~/.local/bin/ (same path as install.sh)
 ```
+
+`make install` lands in `~/.local/bin` to match the `install.sh` curl
+one-liner — running either flow always overwrites the same files, so
+there's no shadowing risk if you mix them. Override with
+`INSTALL_BIN=/path/to/dir`.
 
 ## What's in the box
 
