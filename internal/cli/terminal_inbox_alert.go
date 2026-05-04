@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,7 +99,7 @@ func newTerminalInboxAlertPump(cfg terminalInboxAlertConfig, pty io.Writer) *ter
 		sm:  newTerminalInboxAlertStateMachine(cfg),
 		pty: pty,
 		write: func(message string) {
-			_, _ = io.WriteString(pty, shellEchoCommand(message))
+			_, _ = io.WriteString(pty, claudeSubmitInput(message))
 		},
 	}
 }
@@ -109,7 +109,7 @@ func newTerminalInboxAlertPumpForPTY(cfg terminalInboxAlertConfig, pty *os.File)
 	pump.write = func(message string) {
 		restore := setPTYInputEcho(pty.Fd(), false)
 		defer restore()
-		_, _ = io.WriteString(pty, shellEchoCommand(message))
+		_, _ = io.WriteString(pty, claudeSubmitInput(message))
 	}
 	return pump
 }
@@ -133,23 +133,8 @@ func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
 	return true
 }
 
-func shellEchoCommand(message string) string {
-	return fmt.Sprintf("ppz alert %s\x1b[13u", shellSingleQuote(message))
-}
-
-func shellSingleQuote(s string) string {
-	out := "'"
-	for _, r := range s {
-		if r == '\'' {
-			out += `'\''`
-			continue
-		}
-		if r == '\r' || r == '\n' {
-			continue
-		}
-		out += string(r)
-	}
-	return out + "'"
+func claudeSubmitInput(message string) string {
+	return strings.TrimRight(message, "\r\n") + "\x1b[13u"
 }
 
 func (p *terminalInboxAlertPump) BeginAlertMode(now time.Time) {

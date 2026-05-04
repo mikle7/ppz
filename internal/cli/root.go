@@ -43,8 +43,6 @@ func Run(args []string) error {
 		return cmdStatus(rest)
 	case "version":
 		return cmdVersion(rest)
-	case "alert":
-		return cmdAlert(rest)
 	case "broadcast":
 		return cmdBroadcast(rest)
 	case "ls":
@@ -104,7 +102,6 @@ Terminal:
                                     --skip N, --since DUR.
 
 Operations:
-  ppz alert MESSAGE                 print MESSAGE to stdout (used by terminal inbox alerts)
   ppz status                       show daemon, token refresh, and current source
   ppz version                      print the binary's version + build sha
   ppz ls [--watch [PATTERN...]]    list sources × pipes (--watch blocks until
