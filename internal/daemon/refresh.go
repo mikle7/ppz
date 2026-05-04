@@ -96,6 +96,25 @@ func (r *RefreshLoop) LastRefreshAt() time.Time {
 	return r.lastAt
 }
 
+// RefreshNowIfDue refreshes synchronously when the cached credential is already
+// inside its refresh window. It covers machines waking from sleep: the timer
+// goroutine may not have run yet, but the next command must not continue with
+// an expired JWT.
+func (r *RefreshLoop) RefreshNowIfDue(ctx context.Context, now time.Time) (bool, error) {
+	r.mu.Lock()
+	exp := r.expUnix
+	r.mu.Unlock()
+
+	fireAt := time.Unix(exp, 0).Add(-time.Duration(skewSeconds) * time.Second)
+	if now.Before(fireAt) {
+		return false, nil
+	}
+	if err := r.refreshNow(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *RefreshLoop) run(ctx context.Context) {
 	for {
 		// Sleep until exp - skew, with a small floor so we never
@@ -117,14 +136,10 @@ func (r *RefreshLoop) run(ctx context.Context) {
 		case <-time.After(delay):
 		}
 
-		newJWT, newSeed, newExp, err := r.Refresh(ctx, r.OrgID)
-		if errors.Is(err, ErrUnauthorized) {
-			if r.OnUnauthorized != nil {
-				r.OnUnauthorized(r.OrgID)
+		if err := r.refreshNow(ctx); err != nil {
+			if errors.Is(err, ErrUnauthorized) {
+				return
 			}
-			return
-		}
-		if err != nil {
 			// Transient — back off and retry. The cached creds are
 			// still the previous (still-valid until exp) values, so
 			// callers' nats.UserJWT callback continues working until
@@ -136,12 +151,26 @@ func (r *RefreshLoop) run(ctx context.Context) {
 				continue
 			}
 		}
-
-		r.mu.Lock()
-		r.jwt = newJWT
-		r.seed = newSeed
-		r.expUnix = newExp
-		r.lastAt = time.Now()
-		r.mu.Unlock()
 	}
+}
+
+func (r *RefreshLoop) refreshNow(ctx context.Context) error {
+	newJWT, newSeed, newExp, err := r.Refresh(ctx, r.OrgID)
+	if errors.Is(err, ErrUnauthorized) {
+		if r.OnUnauthorized != nil {
+			r.OnUnauthorized(r.OrgID)
+		}
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	r.jwt = newJWT
+	r.seed = newSeed
+	r.expUnix = newExp
+	r.lastAt = time.Now()
+	r.mu.Unlock()
+	return nil
 }
