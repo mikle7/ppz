@@ -1,4 +1,4 @@
-.PHONY: help build install install-system uninstall-system test compose-build compose-up compose-down e2e e2e-filter e2e-up e2e-run e2e-rebuild e2e-down dev dev-down clean tag patch minor major undo push
+.PHONY: help build install test compose-build compose-up compose-down e2e e2e-filter e2e-up e2e-run e2e-rebuild e2e-down dev dev-down clean tag patch minor major undo push
 
 # `make tag {patch|minor|major}`  — bump the latest semver tag and create
 #                                   an annotated git tag at HEAD (local
@@ -15,11 +15,12 @@
 # doesn't try to build them.
 TAG_ACTION := $(filter patch minor major undo push,$(MAKECMDGOALS))
 
-# Where `make install-system` copies the user-facing CLI. /usr/local/bin
-# is on the default macOS + most Linux PATHs out of the box and isn't
-# managed by Homebrew, so dropping a binary in there won't fight with
-# `brew`.
-SYSTEM_BIN ?= /usr/local/bin
+# Where `make install` drops binaries. Matches install.sh's default so
+# the two flows are interchangeable — running either always overwrites
+# the same files. Older versions had a separate `make install-system`
+# pointing at /usr/local/bin which created shadowing footguns when both
+# flows had been run; that target is gone.
+INSTALL_BIN ?= $(HOME)/.local/bin
 
 COMPOSE := docker compose -f compose/docker-compose.yml
 
@@ -33,10 +34,10 @@ LDFLAGS := -X github.com/pipescloud/ppz/internal/version.Version=$(VERSION) \
 
 help:
 	@echo "Targets:"
-	@echo "  build             Build all four binaries into ./bin/"
-	@echo "  install           Install binaries into \$$(go env GOBIN) (or ~/go/bin)"
-	@echo "  install-system    Copy ./bin/ppz to \$$(SYSTEM_BIN) (default /usr/local/bin) — requires sudo"
-	@echo "  uninstall-system  Remove ppz from \$$(SYSTEM_BIN) — requires sudo"
+	@echo "  build             Build all binaries into ./bin/"
+	@echo "  install           Build + copy binaries to \$$(INSTALL_BIN) (default ~/.local/bin)"
+	@echo "                    Same path as install.sh — the curl one-liner — so the two flows"
+	@echo "                    overwrite each other instead of shadowing."
 	@echo "  test              Run Go unit tests"
 	@echo "  compose-build     Build all docker images"
 	@echo "  compose-up        Start the e2e environment (postgres, server, daemons, GUIs)"
@@ -71,41 +72,44 @@ build:
 	@echo "Built $(VERSION) ($(SHA)) into ./bin/:"
 	@ls -1 bin/
 
-install:
-	go install -ldflags "$(LDFLAGS)" ./cmd/ppz ./cmd/ppz-server ./cmd/ppz-desktop ./cmd/ppz-seed ./cmd/ppz-natsbootstrap
-	@dest=$$(go env GOBIN); [ -n "$$dest" ] || dest="$$(go env GOPATH)/bin"; \
-		echo "Installed $(VERSION) ($(SHA)) into $$dest/"; \
-		echo "(if 'ppz' is not on your PATH, add: export PATH=\"$$dest:\$$PATH\" to your shell rc, or use 'make install-system')"
-
-# Build + drop the user-facing CLI into a system PATH location. Only
-# installs `ppz` itself — `ppz-server` / `ppz-desktop` / `ppz-seed` are
-# operator/dev tools, not user-facing, so they stay out of /usr/local/bin.
-install-system: build
-	@if [ ! -w "$(SYSTEM_BIN)" ]; then \
-		echo "Installing into $(SYSTEM_BIN) (requires sudo)…"; \
-		sudo install -m 0755 ./bin/ppz "$(SYSTEM_BIN)/ppz"; \
-	else \
-		install -m 0755 ./bin/ppz "$(SYSTEM_BIN)/ppz"; \
-	fi
-	@echo "Installed $(VERSION) ($(SHA)) → $(SYSTEM_BIN)/ppz"
+# Build + drop every binary in ./bin/ into $(INSTALL_BIN) (default
+# ~/.local/bin — same as install.sh). Lands all five (ppz, ppz-desktop,
+# ppz-server, ppz-seed, ppz-natsbootstrap) so devs hacking on the full
+# stack get the operator tools too; install.sh subsets to ppz +
+# ppz-desktop because end users don't need the rest.
+#
+# Wires zsh/bash completion into the user's rc file (idempotent — the
+# marker comment guards against duplicates).
+install: build
+	@mkdir -p "$(INSTALL_BIN)"
+	@for b in ppz ppz-desktop ppz-server ppz-seed ppz-natsbootstrap; do \
+		install -m 0755 "./bin/$$b" "$(INSTALL_BIN)/$$b"; \
+	done
+	@echo "Installed $(VERSION) ($(SHA)) → $(INSTALL_BIN)/"
+	@case ":$$PATH:" in \
+		*:"$(INSTALL_BIN)":*) ;; \
+		*) echo "Heads-up: $(INSTALL_BIN) is not on \$$PATH. Add to your shell rc:"; \
+		   echo "    export PATH=\"$(INSTALL_BIN):\$$PATH\"" ;; \
+	esac
 	@resolved=$$(command -v ppz 2>/dev/null || true); \
-	if [ -n "$$resolved" ] && [ "$$resolved" != "$(SYSTEM_BIN)/ppz" ]; then \
-		echo "WARNING: 'ppz' resolves to $$resolved before $(SYSTEM_BIN)/ppz on PATH"; \
-		echo "         install there instead with: make install-system SYSTEM_BIN=$$(dirname "$$resolved")"; \
+	if [ -n "$$resolved" ] && [ "$$resolved" != "$(INSTALL_BIN)/ppz" ]; then \
+		echo "WARNING: 'ppz' resolves to $$resolved before $(INSTALL_BIN)/ppz on PATH"; \
+		echo "         remove the shadow: rm '$$resolved' (or sudo rm if it's a system path)"; \
 	fi
-	@# Tab completion: append a one-line eval to the user's shell rc so
-	@# new shells pick up `ppz` completion automatically. Idempotent —
-	@# guarded by a marker so re-running install-system is safe. The
-	@# eval re-runs `ppz completion <shell>` on every shell start, so
-	@# adding new verbs or changing the completion script doesn't need
-	@# re-installation; only the binary does.
+	@# Shell completion: append a one-line eval to the user's rc so new
+	@# shells pick up `ppz` completion automatically. The eval re-runs
+	@# `ppz completion <shell>` on every shell start, so new verbs land
+	@# without re-running this target — only binary changes need a re-
+	@# install. Marker text recognises both the new and the legacy
+	@# (`make install-system`) form so users aren't double-wired.
 	@case "$$SHELL" in \
 		*/zsh)  shell=zsh;  rc="$$HOME/.zshrc";  ;; \
 		*/bash) shell=bash; rc="$$HOME/.bashrc"; ;; \
 		*) echo "(skipping completion: \$$SHELL=$$SHELL not zsh/bash)"; exit 0 ;; \
 	esac; \
-	marker='# ppz: shell completion (added by make install-system)'; \
-	if [ -f "$$rc" ] && grep -Fq "$$marker" "$$rc"; then \
+	marker='# ppz: shell completion (added by make install)'; \
+	legacy='# ppz: shell completion (added by make install-system)'; \
+	if [ -f "$$rc" ] && (grep -Fq "$$marker" "$$rc" || grep -Fq "$$legacy" "$$rc"); then \
 		echo "Shell completion already enabled in $$rc"; \
 	else \
 		printf '\n%s\neval "$$(ppz completion %s)"\n' "$$marker" "$$shell" >> "$$rc"; \
@@ -113,32 +117,6 @@ install-system: build
 		echo "Open a new shell or run: source $$rc"; \
 	fi
 	@echo "Verify with: ppz version"
-
-uninstall-system:
-	@if [ ! -e "$(SYSTEM_BIN)/ppz" ]; then \
-		echo "Nothing to uninstall ($(SYSTEM_BIN)/ppz not found)."; \
-	elif [ ! -w "$(SYSTEM_BIN)" ]; then \
-		echo "Removing $(SYSTEM_BIN)/ppz (requires sudo)…"; \
-		sudo rm -f "$(SYSTEM_BIN)/ppz"; \
-	else \
-		rm -f "$(SYSTEM_BIN)/ppz"; \
-	fi
-	@# Strip the completion eval from the user's rc file. Removes both
-	@# the marker comment and the next non-blank line (the eval).
-	@case "$$SHELL" in \
-		*/zsh)  rc="$$HOME/.zshrc";  ;; \
-		*/bash) rc="$$HOME/.bashrc"; ;; \
-		*) exit 0 ;; \
-	esac; \
-	marker='# ppz: shell completion (added by make install-system)'; \
-	if [ -f "$$rc" ] && grep -Fq "$$marker" "$$rc"; then \
-		tmp="$$rc.ppz-uninstall.tmp"; \
-		awk -v m="$$marker" '\
-			$$0 == m {skip=1; next} \
-			skip > 0 {skip--; next} \
-			{print}' "$$rc" > "$$tmp" && mv "$$tmp" "$$rc"; \
-		echo "Removed completion line from $$rc"; \
-	fi
 
 test:
 	go test -timeout 30s ./...
@@ -198,7 +176,7 @@ dev:
 	    exit 1; \
 	fi
 	$(DEV_COMPOSE) up -d --build ppz-server
-	$(MAKE) install-system
+	$(MAKE) install
 	@ppz daemon stop 2>/dev/null || true
 	@ppz daemon start
 	@echo ""
