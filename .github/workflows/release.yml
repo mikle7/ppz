@@ -58,3 +58,30 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish update manifest
+        env:
+          TAG: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout main
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("update/manifest.json")
+          manifest = json.loads(path.read_text())
+          manifest["latest_version"] = os.environ["TAG"]
+          path.write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+          if git diff --quiet -- update/manifest.json; then
+            echo "update manifest already points at ${TAG}"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update/manifest.json
+          git commit -m "chore: publish ${TAG} update manifest"
+          git push origin main

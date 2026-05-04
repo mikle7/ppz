@@ -30,6 +30,7 @@ func TestUsageMentionsInboxAliases(t *testing.T) {
 		"ppz read inbox",
 		"ppz send <handle> PAYLOAD",
 		"shorthand for <handle>.inbox",
+		"ppz upgrade",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("usage output missing %q:\n%s", want, text)

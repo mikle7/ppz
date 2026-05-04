@@ -37,6 +37,18 @@ PPZ_INCLUDE_SERVER=1 curl -fsSL .../install.sh | bash
 Other knobs: `PPZ_VERSION=v0.17.0` to pin a tag, `PPZ_INSTALL_DIR=/usr/local/bin`
 to change the target directory.
 
+Upgrade an installed CLI in place with:
+
+```bash
+ppz upgrade
+```
+
+`ppz upgrade` reuses the same installer and target directory defaults as
+the curl one-liner. Release builds of `ppz login`, `ppz status`, and
+`ppz version` also check a lightweight manifest on GitHub and print a
+non-blocking update notice when a newer CLI is available. Set
+`PPZ_UPDATE_CHECK=0` to suppress those notices.
+
 **From source (requires Go 1.22+):**
 
 ```bash

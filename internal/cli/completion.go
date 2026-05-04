@@ -82,6 +82,7 @@ var topLevelVerbs = []string{
 	"source",
 	"status",
 	"terminal",
+	"upgrade",
 	"version",
 }
 
