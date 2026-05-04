@@ -130,10 +130,35 @@ main() {
 			msg "Heads-up: daemon restart failed. Run: ppz daemon start"
 		fi
 	fi
+	# Three flavours of "where will the user's shell find ppz?":
+	#   1. $INSTALL_DIR not on PATH at all → tell them to add it.
+	#   2. $INSTALL_DIR on PATH but an older ppz earlier on PATH wins
+	#      the lookup → SHADOWING. The new binary is on disk but every
+	#      `ppz …` invocation hits the old one. Common when the user
+	#      previously did `make install-system` (→ /usr/local/bin/ppz)
+	#      or `go install` (→ ~/go/bin/ppz).
+	#   3. $INSTALL_DIR on PATH and `command -v ppz` resolves to it →
+	#      happy path.
+	resolved=""
+	command -v ppz >/dev/null 2>&1 && resolved=$(command -v ppz)
+	target="$INSTALL_DIR/ppz"
 	case ":$PATH:" in
 		*:"$INSTALL_DIR":*)
-			msg ""
-			msg "Verify:  ppz version"
+			if [ -n "$resolved" ] && [ "$resolved" != "$target" ]; then
+				msg ""
+				msg "WARNING: ${target} is shadowed by an older ppz earlier on \$PATH:"
+				msg "    ${resolved}"
+				msg "Your shell will keep running the old version until you fix this."
+				msg "Either remove the shadow:"
+				msg "    rm '${resolved}'   # (or sudo rm, if it's a system path)"
+				msg "Or put ${INSTALL_DIR} earlier on \$PATH in your shell rc:"
+				msg "    export PATH=\"${INSTALL_DIR}:\$PATH\""
+				msg ""
+				msg "Then run 'hash -r' (or open a new shell) and: ppz version"
+			else
+				msg ""
+				msg "Verify:  ppz version"
+			fi
 			;;
 		*)
 			msg ""
