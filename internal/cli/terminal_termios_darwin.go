@@ -10,19 +10,27 @@ const (
 	ttySetTermios = unix.TIOCSETA
 )
 
-// disablePTYEcho clears the line discipline's ECHO bits on the PTY so
-// input bytes (user keystrokes + local-terminal replies to escape
-// queries) don't reflect back to master read and end up republished
-// to .stdout / .raw. Other Lflag bits — ICANON, ISIG — are left alone
-// so cooked-mode line buffering and Ctrl-C-style signals still work.
+// setPTYInputEcho toggles the PTY line discipline's ECHO bits and returns a
+// restore function for the previous termios state.
 //
 // On Darwin the line discipline is shared between master and slave,
 // so writing termios on the master fd applies to both.
-func disablePTYEcho(fd uintptr) {
+func setPTYInputEcho(fd uintptr, enabled bool) func() {
 	t, err := unix.IoctlGetTermios(int(fd), unix.TIOCGETA)
 	if err != nil {
-		return
+		return func() {}
 	}
-	t.Lflag &^= unix.ECHO | unix.ECHOE | unix.ECHOK | unix.ECHONL | unix.ECHOCTL | unix.ECHOKE
-	_ = unix.IoctlSetTermios(int(fd), unix.TIOCSETA, t)
+	before := *t
+	if enabled {
+		t.Lflag |= unix.ECHO | unix.ECHOE | unix.ECHOK | unix.ECHONL | unix.ECHOCTL | unix.ECHOKE
+	} else {
+		t.Lflag &^= unix.ECHO | unix.ECHOE | unix.ECHOK | unix.ECHONL | unix.ECHOCTL | unix.ECHOKE
+	}
+	if err := unix.IoctlSetTermios(int(fd), unix.TIOCSETA, t); err != nil {
+		return func() {}
+	}
+	return func() {
+		restore := before
+		_ = unix.IoctlSetTermios(int(fd), unix.TIOCSETA, &restore)
+	}
 }

@@ -58,20 +58,14 @@ func cmdPipeCreate(args []string) error {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
 	if handle == "" {
-		// Bare name uses current source. Daemon resolves on receipt — but
-		// it's cleaner to send the explicit handle from here once we know
-		// it, so the IPC payload is self-describing. We don't have access
-		// to the current source on the CLI side without an IPC round-trip;
-		// leave it blank and let the daemon fill in.
-		var st cliproto.StatusReply
-		if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
-			cliproto.StatusRequest{Session: sessionID()}, &st); err != nil {
+		// Bare names use the effective current source. PPZ_CURRENT_HANDLE
+		// wins inside terminal-share children; otherwise fall back to the
+		// daemon/session current.
+		resolved, err := effectiveCurrentHandle()
+		if err != nil {
 			return err
 		}
-		if st.Current == "" {
-			return cliproto.New(cliproto.ENoCurrentSource)
-		}
-		handle = st.Current
+		handle = resolved
 	}
 
 	req := cliproto.PipeCreateRequest{Handle: handle, Name: name}
@@ -109,15 +103,11 @@ func cmdPipeDestroy(args []string) error {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
 	if handle == "" {
-		var st cliproto.StatusReply
-		if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
-			cliproto.StatusRequest{Session: sessionID()}, &st); err != nil {
+		resolved, err := effectiveCurrentHandle()
+		if err != nil {
 			return err
 		}
-		if st.Current == "" {
-			return cliproto.New(cliproto.ENoCurrentSource)
-		}
-		handle = st.Current
+		handle = resolved
 	}
 
 	var reply cliproto.PipeDestroyReply
