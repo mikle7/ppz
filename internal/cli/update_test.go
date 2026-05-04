@@ -2,11 +2,15 @@ package cli
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/pipescloud/ppz/internal/version"
 )
 
 func TestIsNewerVersion(t *testing.T) {
@@ -78,5 +82,63 @@ func TestRunInstallScriptDownloadsAndExecutesInstaller(t *testing.T) {
 	}
 	if string(got) != "ok" {
 		t.Fatalf("installer output = %q, want ok", got)
+	}
+}
+
+func TestFetchUpdateManifestUsesConfiguredRawManifestURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/manifest.json" {
+			t.Fatalf("manifest request path = %q, want /manifest.json", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"latest_version":"v9.9.9","install_url":"https://example.test/install.sh"}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PPZ_UPDATE_MANIFEST_URL", server.URL+"/manifest.json")
+
+	manifest, err := fetchUpdateManifest(context.Background())
+	if err != nil {
+		t.Fatalf("fetchUpdateManifest: %v", err)
+	}
+	if manifest.LatestVersion != "v9.9.9" {
+		t.Fatalf("LatestVersion = %q, want v9.9.9", manifest.LatestVersion)
+	}
+	if manifest.InstallURL != "https://example.test/install.sh" {
+		t.Fatalf("InstallURL = %q, want configured installer", manifest.InstallURL)
+	}
+}
+
+func TestMaybeNotifyUpdatePrintsNoticeForReleaseBuild(t *testing.T) {
+	oldVersion := version.Version
+	version.Version = "v1.2.3"
+	t.Cleanup(func() { version.Version = oldVersion })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"latest_version":"v1.2.4"}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PPZ_UPDATE_MANIFEST_URL", server.URL)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = w
+	maybeNotifyUpdate()
+	_ = w.Close()
+	os.Stderr = oldStderr
+	t.Cleanup(func() { os.Stderr = oldStderr })
+
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("close stderr reader: %v", err)
+	}
+	text := string(out)
+	if !strings.Contains(text, "update available: ppz v1.2.4 (current v1.2.3); run 'ppz upgrade'") {
+		t.Fatalf("update notice = %q, want newer-version upgrade hint", text)
 	}
 }
