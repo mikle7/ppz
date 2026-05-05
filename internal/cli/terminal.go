@@ -466,9 +466,9 @@ func publishWinsize(handle string, ptmx *os.File) {
 }
 
 // forwardStdin opens an IPC Read with follow=true on <handle>.stdin and
-// pipes every received message into the PTY master (with a trailing \n).
-// The receiver appends \n because shell programs reading from a tty expect
-// newline-terminated input lines.
+// pipes every received message into the PTY master verbatim. Callers are
+// responsible for including whatever terminator they need (e.g. via
+// ppz command which appends \n or --claude etc.).
 func forwardStdin(ctx context.Context, handle string, master *os.File) {
 	conn, err := net.Dial("unix", ipcSocket())
 	if err != nil {
@@ -500,13 +500,7 @@ func forwardStdin(ctx context.Context, handle string, master *os.File) {
 		if evt.Message == nil {
 			continue
 		}
-		// Append a newline if the payload doesn't already end with one —
-		// stdin readers in shells expect line-delimited input.
-		payload := evt.Message.Payload
-		if !strings.HasSuffix(payload, "\n") {
-			payload += "\n"
-		}
-		_, _ = io.WriteString(master, payload)
+		_, _ = io.WriteString(master, evt.Message.Payload)
 	}
 }
 
