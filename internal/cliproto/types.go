@@ -88,6 +88,7 @@ type StatusRequest struct {
 
 type StatusReply struct {
 	DaemonPID          int        `json:"daemon_pid"`
+	DaemonVersion      string     `json:"daemon_version,omitempty"`
 	LoggedIn           bool       `json:"logged_in"`
 	URL                string     `json:"url,omitempty"`
 	KeyPrefix          string     `json:"key_prefix,omitempty"`

@@ -1,7 +1,7 @@
 --- ls fails (server rejects the revoked key) ---
 error: E_INVALID_API_KEY: invalid api key
 --- status reflects the cached invalid state ---
-daemon: authentication error (pid=PID)
+daemon: authentication error (pid=PID), VERSION (latest)
 server: http://ppz-server:8080
 hint: run 'ppz login URL -apikey K' to refresh
 exit=0

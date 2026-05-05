@@ -187,7 +187,7 @@ Methods (Phase 1.5 reality — verbs unchanged in this phase):
 
 | Method | Params | Result |
 |---|---|---|
-| `Status` | `{}` | `{"daemon_pid":int,"logged_in":bool,"url":str?,"key_prefix":str?,"org_id":str?,"current":str?}` |
+| `Status` | `{}` | `{"daemon_pid":int,"daemon_version":str?,"logged_in":bool,"url":str?,"key_prefix":str?,"org_id":str?,"current":str?}` |
 | `Login` | `{"url":str,"api_key":str}` | `{"url":str,"key_prefix":str,"org_id":str}` |
 | `Create` | `{"handle":str,"kind":str}` | `{"handle":str,"subject":str,"kind":str}` |
 | `Switch` | `{"handle":str}` | `{"handle":str}` |
@@ -215,14 +215,14 @@ Foreground (`--foreground`): same first line, then blocks.
 ### `ppz status`
 Logged in with a current source:
 ```
-daemon: logged in (pid=PID)
+daemon: logged in (pid=PID), <daemon_version> (<latest|not latest>)
 last token refresh: <relative time|->
 server: <URL>
 org: <org_name_or_id>
 current source: <handle>
 ```
 Logged in, no current source: same with `current source: -`.
-Logged in, no auth: `daemon: not logged in (pid=PID)` plus a login hint.
+Logged in, no auth: `daemon: not logged in (pid=PID), <daemon_version> (<latest|not latest>)` plus a login hint.
 Daemon not running (exit 11): `daemon: not running`.
 
 ### `ppz login URL -apikey K`

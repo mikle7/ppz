@@ -8,6 +8,7 @@ import (
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 	"github.com/pipescloud/ppz/internal/daemon"
+	"github.com/pipescloud/ppz/internal/version"
 )
 
 // useColor returns true when stdout is an interactive terminal AND the
@@ -34,7 +35,7 @@ func cmdStatus(args []string) error {
 		return err
 	}
 	envCurrent := os.Getenv("PPZ_CURRENT_HANDLE")
-	cliproto.PrintStatusWithEnv(os.Stdout, st, envCurrent, st.CurrentPath, useColor())
+	cliproto.PrintStatusWithEnvAndCLIVersion(os.Stdout, st, envCurrent, st.CurrentPath, useColor(), version.Version)
 	maybeNotifyUpdate()
 	return nil
 }
