@@ -96,10 +96,31 @@
           <label>Add member by user_id <input name="user_id" required></label>
           <button type="submit">Add member</button>
         </form>
-        <button type="button" disabled
-                data-todo="invite"
-                title="Invite by email — coming in v2">Invite by email</button>
       </div>
+      {{if .IsOwner}}
+      <div data-users-subsection="invites">
+        <h3>Invitations</h3>
+        {{if .PendingInvites}}
+        <ul class="tidy" id="pending-invites">
+          {{range .PendingInvites}}
+          <li data-invite-id="{{.ID}}" data-invitee="{{.InviteeUsername}}">
+            <strong>{{.InviteeUsername}}</strong>
+            <small>· pending · {{.CreatedAt.Format "2006-01-02T15:04:05Z"}}</small>
+            <form method="post" action="/orgs/{{$.Org.ID}}/invites/{{.ID}}/revoke" class="inline">
+              <button type="submit">Revoke</button>
+            </form>
+          </li>
+          {{end}}
+        </ul>
+        {{else}}
+        <p class="empty">No pending invitations.</p>
+        {{end}}
+        <form method="post" action="/orgs/{{.Org.ID}}/invites">
+          <label>Invite by GitHub username <input name="username" required></label>
+          <button type="submit">Send invite</button>
+        </form>
+      </div>
+      {{end}}
     </section>
     {{end}}
 

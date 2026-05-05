@@ -86,7 +86,11 @@ func (d *Daemon) authExchangeRefresh(ctx context.Context, orgID string) (string,
 	if !ok {
 		return "", "", 0, ErrUnauthorized
 	}
-	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey})
+	// Phase 4: thread the persisted OrgID so the refresh stays bound to
+	// the org the user is currently switched to. Empty OrgID falls back
+	// to the server's "first owned org" default — preserves behaviour
+	// for daemons that haven't yet switched.
+	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey, OrgID: d.State.OrgID()})
 	req, err := http.NewRequestWithContext(ctx, "POST", creds.URL+"/api/v1/auth/exchange", bytes.NewReader(body))
 	if err != nil {
 		return "", "", 0, err

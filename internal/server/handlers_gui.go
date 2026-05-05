@@ -47,13 +47,26 @@ func (s *Server) handleGUILanding(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := withTimeout(r)
 	defer cancel()
-	orgs, err := db.ListOrganisationsForUser(ctx, s.Pool, UserIDFromCtx(r.Context()))
+	uid := UserIDFromCtx(r.Context())
+	orgs, err := db.ListOrganisationsForUser(ctx, s.Pool, uid)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	// Phase 4: pending invitations for the logged-in user, joined
+	// against the user's username (invites target a username, not a
+	// user_id). Failure here doesn't block the dashboard — render
+	// without the section and log via the standard 500 path only on
+	// outright user-lookup failure.
+	var invites []db.InviteWithOrg
+	if user, err := db.GetUser(ctx, s.Pool, uid); err == nil {
+		invites, _ = db.ListPendingInvitesForUsername(ctx, s.Pool, user.Username)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "index.html", map[string]any{"Orgs": orgs}); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "index.html", map[string]any{
+		"Orgs":    orgs,
+		"Invites": invites,
+	}); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
 }
@@ -223,15 +236,30 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	// Phase 4: pending invitations for this org. Only used on the
+	// "users" tab — but cheap enough to fetch unconditionally so the
+	// template can stay simple.
+	allInvites, _ := db.ListInvitesForOrg(ctx, s.Pool, org.ID)
+	pendingInvites := make([]db.Invite, 0, len(allInvites))
+	for _, inv := range allInvites {
+		if inv.Status == db.InviteStatusPending {
+			pendingInvites = append(pendingInvites, inv)
+		}
+	}
+	// Owner-only flag for showing the invite-create form on the users
+	// tab. Non-owners see members but not the controls.
+	isOwner := UserIDFromCtx(r.Context()) == org.OwnerUserID
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(w, "org.html", map[string]any{
-		"Org":       org,
-		"Keys":      keys,
-		"Sources":   rows,
-		"Owner":     owner,
-		"Members":   members,
-		"ActiveTab": tab,
+		"Org":            org,
+		"Keys":           keys,
+		"Sources":        rows,
+		"Owner":          owner,
+		"Members":        members,
+		"PendingInvites": pendingInvites,
+		"IsOwner":        isOwner,
+		"ActiveTab":      tab,
 	}); err != nil {
 		http.Error(w, err.Error(), 500)
 	}

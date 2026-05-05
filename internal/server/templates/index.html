@@ -14,6 +14,23 @@
       </div>
     </header>
 
+    {{if .Invites}}
+    <h2>Invitations</h2>
+    <ul class="tidy" id="invites">
+      {{range .Invites}}
+      <li data-invite="{{.ID}}">
+        <span>Pending invitation to <strong>{{.OrganisationName}}</strong></span>
+        <form method="post" action="/invites/{{.ID}}/accept" style="display:inline">
+          <button type="submit">Accept</button>
+        </form>
+        <form method="post" action="/invites/{{.ID}}/decline" style="display:inline">
+          <button type="submit">Decline</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+
     <h2>Organisations</h2>
     <ul class="tidy" id="orgs">
       {{range .Orgs}}
