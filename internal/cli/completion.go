@@ -72,9 +72,11 @@ func cmdCompletion(args []string) error {
 // intentionally omitted (operator-internal, not for everyday use).
 var topLevelVerbs = []string{
 	"broadcast",
+	"command",
 	"daemon",
 	"login",
 	"ls",
+	"org",
 	"pipe",
 	"read",
 	"reread",
@@ -89,6 +91,7 @@ var topLevelVerbs = []string{
 var subverbs = map[string][]string{
 	"source":   {"create", "switch", "clear", "destroy"},
 	"daemon":   {"start", "stop", "login", "logout"},
+	"org":      {"list", "switch", "invite"},
 	"pipe":     {"create", "destroy"},
 	"terminal": {"share", "watch", "read"},
 }
@@ -157,6 +160,12 @@ func cmdComplete(args []string) error {
 
 	// `terminal {share|watch|read} <handle>` — complete handles.
 	if verb == "terminal" && len(prior) == 2 && terminalHandleSubverbs[prior[1]] {
+		emitHandles(cur)
+		return nil
+	}
+
+	// `command <handle>` — complete handles.
+	if verb == "command" && len(prior) == 1 {
 		emitHandles(cur)
 		return nil
 	}
