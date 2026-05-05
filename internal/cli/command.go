@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
@@ -32,6 +33,13 @@ func cmdCommand(args []string) error {
 		return err
 	}
 	rest := fs.Args()
+	// Go's flag package stops at the first non-flag argument, so flags placed
+	// after positional args would otherwise be silently ignored.
+	for _, a := range rest {
+		if strings.HasPrefix(a, "-") {
+			return fmt.Errorf("ppz command: unknown flag %s (flags must precede positional arguments)", a)
+		}
+	}
 	if len(rest) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: ppz command <handle> [instruction] [--claude|--cr|--crlf|--newline|--none]")
 		os.Exit(2)
