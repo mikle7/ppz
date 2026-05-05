@@ -1,3 +1,3 @@
-daemon: not logged in (pid=PID)
+daemon: not logged in (pid=PID), VERSION (latest)
 hint: run 'ppz login URL -apikey K'
 exit=0

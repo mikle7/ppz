@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
+	"github.com/pipescloud/ppz/internal/version"
 )
 
 // IPC wire format (per WIRE.md §7): newline-delimited JSON. One req per
@@ -103,7 +104,8 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 	var req cliproto.StatusRequest
 	_ = json.Unmarshal(params, &req) // optional body — empty is fine
 	reply := cliproto.StatusReply{
-		DaemonPID: os.Getpid(),
+		DaemonPID:     os.Getpid(),
+		DaemonVersion: version.Version,
 	}
 	if creds, ok := d.State.Credentials(); ok {
 		reply.LoggedIn = true

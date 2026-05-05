@@ -97,18 +97,22 @@ func newStatusColors(enabled bool) statusColors {
 // color toggles ANSI colour escapes. The CLI flips it on for interactive
 // stdout and off for pipes / NO_COLOR / e2e fixtures.
 func PrintStatusWithEnv(w io.Writer, s StatusReply, envCurrent, currentJsonPath string, color bool) {
+	PrintStatusWithEnvAndCLIVersion(w, s, envCurrent, currentJsonPath, color, "")
+}
+
+func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, currentJsonPath string, color bool, cliVersion string) {
 	c := newStatusColors(color)
 	if s.DaemonPID == 0 {
 		fmt.Fprintf(w, "daemon: %s\n", c.red("not running"))
 		return
 	}
 	if !s.LoggedIn {
-		fmt.Fprintf(w, "daemon: %s (pid=%d)\n", c.red("not logged in"), s.DaemonPID)
+		fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.red("not logged in"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion))
 		fmt.Fprintln(w, "hint: run 'ppz login URL -apikey K'")
 		return
 	}
 	if s.LoginCheck == LoginCheckInvalid {
-		fmt.Fprintf(w, "daemon: %s (pid=%d)\n", c.red("authentication error"), s.DaemonPID)
+		fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.red("authentication error"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion))
 		fmt.Fprintf(w, "server: %s\n", s.URL)
 		fmt.Fprintln(w, "hint: run 'ppz login URL -apikey K' to refresh")
 		return
@@ -116,7 +120,7 @@ func PrintStatusWithEnv(w io.Writer, s StatusReply, envCurrent, currentJsonPath 
 	// LoginCheck is "ok" or "" (probe failed for transient reasons —
 	// don't lie, but also don't refuse to render). Treat both as the
 	// happy path; the next server-touching call will refresh the cache.
-	fmt.Fprintf(w, "daemon: %s (pid=%d)\n", c.green("logged in"), s.DaemonPID)
+	fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.green("logged in"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion))
 	if s.LastTokenRefreshAt != nil {
 		fmt.Fprintf(w, "last token refresh: %s\n", coloredTokenRefreshAge(c, *s.LastTokenRefreshAt, timeNow()))
 	} else {
@@ -142,6 +146,30 @@ func PrintStatusWithEnv(w io.Writer, s StatusReply, envCurrent, currentJsonPath 
 	default:
 		fmt.Fprintf(w, "current source: %s\n", c.dim("-"))
 	}
+}
+
+func daemonVersionSuffix(c statusColors, daemonVersion, cliVersion string) string {
+	if strings.TrimSpace(cliVersion) == "" {
+		return ""
+	}
+	display := strings.TrimSpace(daemonVersion)
+	if display == "" {
+		display = "unknown"
+	}
+	if versionsMatch(display, cliVersion) {
+		return fmt.Sprintf(", %s (latest)", c.green(display))
+	}
+	return fmt.Sprintf(", %s (not latest)", c.red(display))
+}
+
+func versionsMatch(a, b string) bool {
+	return normaliseVersionForCompare(a) == normaliseVersionForCompare(b)
+}
+
+func normaliseVersionForCompare(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "v")
+	return v
 }
 
 func coloredTokenRefreshAge(c statusColors, t, now time.Time) string {

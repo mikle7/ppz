@@ -43,4 +43,8 @@ sed_args+=(-e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)
 # so dev / tagged / dirty builds all diff against the same expected.txt.
 sed_args+=(-e 's/^ppz [^ ]+ \([^)]+\)$/ppz VERSION (SHA)/')
 
+# `ppz status` daemon line includes the daemon build version. Normalize it so
+# tagged, dirty, and local builds all diff against the same expected.txt.
+sed_args+=(-e 's/^(daemon: .*\(pid=PID\), )[^ ]+ \(((not )?latest)\)$/\1VERSION (\2)/')
+
 exec sed "${sed_args[@]}"
