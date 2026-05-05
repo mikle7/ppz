@@ -55,6 +55,8 @@ func Run(args []string) error {
 		return cmdReread(rest)
 	case "send":
 		return cmdSend(rest)
+	case "command":
+		return cmdCommand(rest)
 	case "completion":
 		return cmdCompletion(rest)
 	case "__complete":
@@ -125,6 +127,9 @@ Operations:
                                    flags. Never advances the cursor.
   ppz send TGT PAYLOAD             publish PAYLOAD to <handle>.<pipe>
   ppz send <handle> PAYLOAD        shorthand for <handle>.inbox
+  ppz command <handle> [INSTR]     send INSTR to <handle>.stdin (100 ms delay),
+                                   then send a trailing control sequence (default \n).
+                                   Flags: --claude (\\x1b[13u) --cr --crlf --newline
 
 Shell integration:
   ppz completion bash              tab-completion script for bash
