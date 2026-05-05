@@ -50,6 +50,17 @@ func (s Source) Pipes() []string {
 	}
 }
 
+// IsAutoPipe reports whether name is an auto-provisioned pipe for this source
+// kind (i.e. JetStream-only, not stored in the pipes table).
+func (s Source) IsAutoPipe(name string) bool {
+	for _, p := range s.Pipes() {
+		if p == name {
+			return true
+		}
+	}
+	return false
+}
+
 // ErrHandleTaken is returned when a (org, handle) row already exists.
 var ErrHandleTaken = errors.New("handle taken")
 
