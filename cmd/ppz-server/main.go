@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/pipescloud/ppz/internal/server"
+	"github.com/pipescloud/ppz/internal/version"
 )
 
 func main() {
@@ -30,6 +31,7 @@ func main() {
 		NATSOperatorSeed:     envOr("PPZ_NATS_OPERATOR_SEED", ""),
 		NATSOperatorJWT:      envOr("PPZ_NATS_OPERATOR_JWT", ""),
 		NATSSystemAccountJWT: envOr("PPZ_NATS_SYSTEM_ACCOUNT_JWT", ""),
+		Version:              version.Version,
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

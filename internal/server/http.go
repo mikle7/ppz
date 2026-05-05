@@ -15,7 +15,11 @@ func (s *Server) Routes() *http.ServeMux {
 
 	// Health.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("ok"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":  "ok",
+			"version": s.Version,
+		})
 	})
 
 	// API (auth required except for /auth/exchange which authenticates via body).
