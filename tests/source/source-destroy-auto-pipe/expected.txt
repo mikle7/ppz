@@ -1,0 +1,7 @@
+--- before destroy ---
+apple.broadcast 0 0 - -
+apple.inbox 0 0 - -
+destroyed pipe=apple.broadcast
+destroyed pipe=apple.inbox
+--- after destroy ---
+exit=0
