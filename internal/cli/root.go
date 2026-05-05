@@ -57,6 +57,8 @@ func Run(args []string) error {
 		return cmdSend(rest)
 	case "command":
 		return cmdCommand(rest)
+	case "org", "orgs":
+		return cmdOrg(rest)
 	case "completion":
 		return cmdCompletion(rest)
 	case "__complete":

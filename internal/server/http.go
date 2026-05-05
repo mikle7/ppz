@@ -24,6 +24,18 @@ func (s *Server) Routes() *http.ServeMux {
 	// which is also un-authed). When auth lands across the surface,
 	// this can be folded into requireAuth too.
 	mux.HandleFunc("POST /api/v1/keys/{id}/revoke", s.handleRevokeKey)
+	// Org / invite API (Phase 4 — multi-org).  These take a bearer
+	// (any authed) but require an OAuth user identity at the handler
+	// layer; API keys 403 because they're org-scoped.
+	mux.HandleFunc("GET /api/v1/orgs", s.requireBearer(s.handleAPIListOrgs))
+	mux.HandleFunc("POST /api/v1/orgs", s.requireBearer(s.handleAPICreateOrg))
+	mux.HandleFunc("POST /api/v1/orgs/{slug}/invites", s.requireBearer(s.handleAPICreateInvite))
+	mux.HandleFunc("GET /api/v1/orgs/{slug}/invites", s.requireBearer(s.handleAPIListInvitesForOrg))
+	mux.HandleFunc("POST /api/v1/orgs/{slug}/invites/{id}/revoke", s.requireBearer(s.handleAPIRevokeInvite))
+	mux.HandleFunc("GET /api/v1/invites", s.requireBearer(s.handleAPIListMyInvites))
+	mux.HandleFunc("POST /api/v1/invites/{id}/accept", s.requireBearer(s.handleAPIAcceptInvite))
+	mux.HandleFunc("POST /api/v1/invites/{id}/decline", s.requireBearer(s.handleAPIDeclineInvite))
+
 	mux.HandleFunc("POST /api/v1/sources", s.requireAPIKey(s.handleCreateSource))
 	mux.HandleFunc("GET /api/v1/sources", s.requireAPIKey(s.handleListSources))
 	mux.HandleFunc("GET /api/v1/sources/{handle}", s.requireAPIKey(s.handleGetSource))
@@ -67,6 +79,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /users", s.requireSession(s.handleCreateUser))
 	mux.HandleFunc("POST /orgs/{id}/members", s.requireSession(s.handleAddMember))
 	mux.HandleFunc("POST /orgs/{id}/members/{uid}/remove", s.requireSession(s.handleRemoveMember))
+	mux.HandleFunc("POST /orgs/{id}/invites", s.requireSession(s.handleGUICreateInvite))
+	mux.HandleFunc("POST /orgs/{id}/invites/{iid}/revoke", s.requireSession(s.handleGUIRevokeInvite))
+	mux.HandleFunc("POST /invites/{id}/accept", s.requireSession(s.handleGUIAcceptInvite))
+	mux.HandleFunc("POST /invites/{id}/decline", s.requireSession(s.handleGUIDeclineInvite))
 	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/pipes/{pipe}", s.requireSession(s.handleGUIPipePage))
 	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/terminal", s.requireSession(s.handleGUITerminalPage))
 	// WebSocket for terminal stream — leaving un-auth'd for now (RED phase

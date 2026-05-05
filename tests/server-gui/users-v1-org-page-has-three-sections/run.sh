@@ -22,6 +22,8 @@ printf '%s' "$page" | grep -oE 'data-users-subsection="owner"' | head -1
 echo "--- users section: members subregion ---"
 printf '%s' "$page" | grep -oE 'data-users-subsection="members"' | head -1
 
+echo "--- users section: invites subregion (Phase 4) ---"
+printf '%s' "$page" | grep -oE 'data-users-subsection="invites"' | head -1
+
 echo "--- v2-only buttons are placeholders (data-todo) ---"
-printf '%s' "$page" | grep -oE 'data-todo="invite"' | head -1
 printf '%s' "$page" | grep -oE 'data-todo="transfer-ownership"' | head -1

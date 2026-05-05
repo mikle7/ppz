@@ -1,0 +1,5 @@
+invites_section_present: true
+alpha_invite_present:    true
+accept_form_present:     true
+decline_form_present:    true
+exit=0

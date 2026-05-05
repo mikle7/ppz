@@ -4,7 +4,8 @@ id="section-users"
 data-users-subsection="owner"
 --- users section: members subregion ---
 data-users-subsection="members"
+--- users section: invites subregion (Phase 4) ---
+data-users-subsection="invites"
 --- v2-only buttons are placeholders (data-todo) ---
-data-todo="invite"
 data-todo="transfer-ownership"
 exit=0

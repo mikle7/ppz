@@ -35,6 +35,9 @@ if command -v psql >/dev/null 2>&1; then
   PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -v ON_ERROR_STOP=0 >/dev/null 2>&1 <<'SQL' || true
 TRUNCATE TABLE pipes;
 TRUNCATE TABLE sources CASCADE;
+-- Phase 4: invites are scenario-local; clear them so a prior run's
+-- declined/revoked rows don't bleed into the next scenario's count.
+DELETE FROM invites;
 DELETE FROM api_keys WHERE label NOT IN ('alpha-primary','alpha-secondary','beta-primary');
 -- Un-revoke seeded keys so each scenario starts with all three usable.
 UPDATE api_keys SET revoked_at = NULL WHERE revoked_at IS NOT NULL;

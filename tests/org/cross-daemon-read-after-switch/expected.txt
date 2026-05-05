@@ -1,0 +1,3 @@
+source_x_org: gamma
+hello from gamma
+exit=0

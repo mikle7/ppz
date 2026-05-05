@@ -1,0 +1,4 @@
+revoke_status:200
+post_revoke_status: revoked
+accept_after_revoke:409
+exit=0
