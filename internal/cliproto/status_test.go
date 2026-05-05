@@ -179,3 +179,19 @@ func TestPrintStatus_ColorsDaemonVersionByCLIMatch(t *testing.T) {
 		})
 	}
 }
+
+func TestPrintStatus_ClarifiesUnknownDaemonVersion(t *testing.T) {
+	var b bytes.Buffer
+	PrintStatusWithEnvAndCLIVersion(&b, StatusReply{
+		DaemonPID: 12953,
+		LoggedIn:  true,
+		URL:       "https://pipescloud.io",
+		OrgName:   "jamesmiles",
+		Current:   "foo",
+	}, "", "", false, "v0.18.0")
+
+	wantLine := "daemon: logged in (pid=12953), version unknown (not latest)\n"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantLine)) {
+		t.Fatalf("status output missing clarified unknown daemon version\nwant line: %q\ngot:\n%q", wantLine, got)
+	}
+}

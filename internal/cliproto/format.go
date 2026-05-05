@@ -154,7 +154,7 @@ func daemonVersionSuffix(c statusColors, daemonVersion, cliVersion string) strin
 	}
 	display := strings.TrimSpace(daemonVersion)
 	if display == "" {
-		display = "unknown"
+		display = "version unknown"
 	}
 	if versionsMatch(display, cliVersion) {
 		return fmt.Sprintf(", %s (latest)", c.green(display))
