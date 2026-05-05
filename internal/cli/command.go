@@ -23,23 +23,27 @@ import (
 //	--newline  \n        (explicit; same as the default)
 //	--none               no trailing sequence — sends instruction only
 func cmdCommand(args []string) error {
-	fs := flag.NewFlagSet("command", flag.ExitOnError)
+	// Go's flag package stops at the first non-flag argument, so we
+	// pre-separate flags from positional args to support any ordering.
+	fs := flag.NewFlagSet("command", flag.ContinueOnError)
 	useClaude  := fs.Bool("claude", false, "trailing sequence: XTerm CSI-u submit \\x1b[13u")
 	useCR      := fs.Bool("cr", false, "trailing sequence: carriage-return \\r")
 	useCRLF    := fs.Bool("crlf", false, "trailing sequence: carriage-return + newline \\r\\n")
 	useNewline := fs.Bool("newline", false, "trailing sequence: newline \\n (same as default)")
 	useNone    := fs.Bool("none", false, "no trailing sequence — send instruction only")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	rest := fs.Args()
-	// Go's flag package stops at the first non-flag argument, so flags placed
-	// after positional args would otherwise be silently ignored.
-	for _, a := range rest {
+
+	var flagArgs, rest []string
+	for _, a := range args {
 		if strings.HasPrefix(a, "-") {
-			return fmt.Errorf("ppz command: unknown flag %s (flags must precede positional arguments)", a)
+			flagArgs = append(flagArgs, a)
+		} else {
+			rest = append(rest, a)
 		}
 	}
+	if err := fs.Parse(flagArgs); err != nil {
+		return err
+	}
+
 	if len(rest) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: ppz command <handle> [instruction] [--claude|--cr|--crlf|--newline|--none]")
 		os.Exit(2)
