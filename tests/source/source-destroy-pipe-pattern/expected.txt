@@ -1,11 +1,15 @@
 --- before destroy ---
 apple.broadcast 0 0 - -
 apple.custom 0 0 - -
+apple.inbox 0 0 - -
 banana.broadcast 0 0 - -
 banana.custom 0 0 - -
+banana.inbox 0 0 - -
 destroyed pipe=apple.custom
 destroyed pipe=banana.custom
 --- after destroy ---
 apple.broadcast 0 0 - -
+apple.inbox 0 0 - -
 banana.broadcast 0 0 - -
+banana.inbox 0 0 - -
 exit=0

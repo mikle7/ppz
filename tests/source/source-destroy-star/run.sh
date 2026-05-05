@@ -12,4 +12,4 @@ ppz_a ls | ls_normalize
 ppz_a source destroy '*' | sort
 
 echo "--- after destroy ---"
-ppz_a ls || echo "empty"
+ppz_a ls | { grep '' || echo "empty"; }

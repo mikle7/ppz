@@ -1,4 +1,5 @@
 0 sources destroyed
 --- apple still exists ---
 apple.broadcast 0 0 - -
+apple.inbox 0 0 - -
 exit=0
