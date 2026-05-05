@@ -68,10 +68,10 @@ func TestComplete_PrefixFilter(t *testing.T) {
 	}
 }
 
-// TestComplete_Subverb: `ppz source <tab>` returns the three subverbs.
+// TestComplete_Subverb: `ppz source <tab>` returns all four subverbs.
 func TestComplete_Subverb(t *testing.T) {
 	got := captureComplete(t, []string{"source", ""})
-	want := []string{"create", "switch", "clear"}
+	want := []string{"create", "switch", "clear", "destroy"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}

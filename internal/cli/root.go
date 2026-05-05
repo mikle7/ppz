@@ -86,6 +86,12 @@ Sources (the addressable top-level entity):
                                    (errors if HANDLE already exists)
   ppz source switch HANDLE         set an existing HANDLE as the current source
   ppz source clear                 clear the current source (source stays)
+  ppz source destroy PATTERN       destroy sources or pipes matching PATTERN
+                                   bare pattern: destroys matching sources
+                                   handle.pipe pattern: destroys matching pipes
+                                   glob wildcards: * ? [abc] (path.Match rules)
+                                   examples: destroy '*'  destroy 'agent-*'
+                                             destroy '*.stdout'  destroy apple
 
 Pipes (sub-buckets on a source):
   ppz pipe create [HANDLE.]NAME [--ttl=DUR --max-msgs=N --max-bytes=B]

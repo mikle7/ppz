@@ -1,0 +1,9 @@
+--- before destroy ---
+agent-one.broadcast 0 0 - -
+agent-two.broadcast 0 0 - -
+other.broadcast 0 0 - -
+destroyed source=agent-one
+destroyed source=agent-two
+--- after destroy ---
+other.broadcast 0 0 - -
+exit=0

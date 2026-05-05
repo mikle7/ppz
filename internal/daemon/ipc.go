@@ -87,6 +87,8 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handlePipeCreate(ctx, conn, req.Params)
 	case cliproto.IPCPipeDestroy:
 		d.handlePipeDestroy(ctx, conn, req.Params)
+	case cliproto.IPCSourceDestroy:
+		d.handleSourceDestroy(ctx, conn, req.Params)
 	default:
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: "unknown method " + req.Method})
 	}
