@@ -121,6 +121,20 @@ ul.tidy li {
 ul.tidy li:last-child { border-bottom: 0; }
 ul.tidy li:hover { background: var(--row-hover); }
 
+/* Invitations row: text on the left, action buttons clustered on
+   the right. The .actions wrapper holds the two inline forms so we
+   can `margin-left: auto` once instead of per-form. */
+#invites li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+#invites .actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
 /* Tables */
 table {
   width: 100%;

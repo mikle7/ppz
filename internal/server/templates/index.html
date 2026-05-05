@@ -20,12 +20,14 @@
       {{range .Invites}}
       <li data-invite="{{.ID}}">
         <span>Pending invitation to <strong>{{.OrganisationName}}</strong></span>
-        <form method="post" action="/invites/{{.ID}}/accept" style="display:inline">
-          <button type="submit">Accept</button>
-        </form>
-        <form method="post" action="/invites/{{.ID}}/decline" style="display:inline">
-          <button type="submit">Decline</button>
-        </form>
+        <span class="actions">
+          <form method="post" action="/invites/{{.ID}}/accept" class="inline">
+            <button type="submit">Accept</button>
+          </form>
+          <form method="post" action="/invites/{{.ID}}/decline" class="inline">
+            <button type="submit">Decline</button>
+          </form>
+        </span>
       </li>
       {{end}}
     </ul>

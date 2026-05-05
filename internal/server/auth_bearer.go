@@ -114,11 +114,17 @@ func (s *Server) resolveBearer(ctx context.Context, tok string) (AuthedCaller, b
 // existing org-scoped write surface (handlers_api.go) that takes a
 // db.APIKey directly. Now backed by requireBearer.
 //
-// When the bearer is an OAuth token (no API key, just a user
-// identity), we synthesise an APIKey with OrganisationID set to the
-// caller's first owned org. This is the interim "auto-org" behaviour
-// flagged in docs/AUTH-V2.md — proper multi-org selection is a V3
-// concern (e.g., ?org=… on each call, or a chosen-org cookie).
+// Org resolution for OAuth bearers (Phase 4 — multi-org):
+//
+//  1. If the request carries `?org=<uuid>`, validate the user is a
+//     member or owner of that org and use it. Reject with 403 if
+//     not — silent fallback would be a confused-deputy bug.
+//  2. Otherwise fall back to FirstOwnedOrgFor (Phase 2 default — the
+//     auto-org assigned to fresh GitHub signups).
+//
+// The daemon stamps `?org=<id>` on every API call once the user has
+// switched orgs (`ppz org switch <name>`), so post-switch source
+// create / broadcast / list all land in the chosen tenant.
 func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 	return s.requireBearer(func(w http.ResponseWriter, r *http.Request) {
 		caller := CallerFromCtx(r.Context())
@@ -126,8 +132,22 @@ func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 			h(w, r, *caller.APIKey)
 			return
 		}
-		// OAuth path → look up the user's first owned org and
-		// synthesise an APIKey for downstream handlers.
+		// OAuth path.
+		if raw := r.URL.Query().Get("org"); raw != "" {
+			orgID, err := uuid.Parse(raw)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "org is not a valid uuid"})
+				return
+			}
+			if !db.IsMemberOrOwner(r.Context(), s.Pool, orgID, caller.UserID) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a member of org"})
+				return
+			}
+			h(w, r, db.APIKey{OrganisationID: orgID})
+			return
+		}
+		// Fallback: caller's first owned org. Used by daemons that
+		// haven't switched (or haven't been updated to send ?org=).
 		org, err := db.FirstOwnedOrgFor(r.Context(), s.Pool, caller.UserID)
 		if err != nil {
 			writeJSON(w, http.StatusForbidden, map[string]string{
@@ -135,7 +155,6 @@ func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 			})
 			return
 		}
-		synth := db.APIKey{OrganisationID: org.ID}
-		h(w, r, synth)
+		h(w, r, db.APIKey{OrganisationID: org.ID})
 	})
 }

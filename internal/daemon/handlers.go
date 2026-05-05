@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -301,6 +302,15 @@ func (d *Daemon) authHTTP(req *http.Request) error {
 }
 
 // callServer is a thin JSON-in / JSON-out helper for daemon → server calls.
+//
+// Phase 4: when the daemon has a stored OrgID (set by login or `org
+// switch`), we stamp it as `?org=<id>` on every call. The server's
+// requireAPIKey middleware uses it to scope OAuth-bearer requests to
+// the right tenant; without this, /api/v1/sources etc. would silently
+// fall back to FirstOwnedOrgFor and the source would land in the
+// wrong org. API-key callers also get the param, which the server
+// validates against the key's org (a mismatch is an explicit error,
+// preferred to silent ambiguity).
 func (d *Daemon) callServer(ctx context.Context, method, path string, body any, out any) *cliproto.Error {
 	creds, ok := d.State.Credentials()
 	if !ok {
@@ -311,7 +321,15 @@ func (d *Daemon) callServer(ctx context.Context, method, path string, body any, 
 		b, _ := json.Marshal(body)
 		bodyReader = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, creds.URL+path, bodyReader)
+	url := creds.URL + path
+	if orgID := d.State.OrgID(); orgID != "" {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		url += sep + "org=" + orgID
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()}
 	}
