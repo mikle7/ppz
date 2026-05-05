@@ -15,8 +15,9 @@ const (
 	IPCRead        = "Read"
 	IPCConnect     = "Connect"
 	IPCDisconnect  = "Disconnect"
-	IPCPipeCreate  = "PipeCreate"
-	IPCPipeDestroy = "PipeDestroy"
+	IPCPipeCreate    = "PipeCreate"
+	IPCPipeDestroy   = "PipeDestroy"
+	IPCSourceDestroy = "SourceDestroy"
 )
 
 // Source kinds, mirrored from internal/db so non-db callers can use them.
@@ -335,6 +336,14 @@ type PipeDestroyRequest struct {
 type PipeDestroyReply struct {
 	Handle string `json:"handle"`
 	Name   string `json:"name"`
+}
+
+type SourceDestroyRequest struct {
+	Handle string `json:"handle"`
+}
+
+type SourceDestroyReply struct {
+	Handle string `json:"handle"`
 }
 
 // HTTPError is the body shape of a non-2xx HTTP response.

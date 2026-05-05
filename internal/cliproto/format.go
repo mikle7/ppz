@@ -222,6 +222,10 @@ func PrintPipeDestroy(w io.Writer, r PipeDestroyReply) {
 	fmt.Fprintf(w, "destroyed pipe=%s.%s\n", r.Handle, r.Name)
 }
 
+func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {
+	fmt.Fprintf(w, "destroyed source=%s\n", r.Handle)
+}
+
 // PrintList prints `ppz ls` output: one line per (source, pipe), sorted
 // by handle then pipe name. Format:
 //

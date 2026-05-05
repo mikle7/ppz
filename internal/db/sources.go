@@ -115,6 +115,21 @@ func ListSourcesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Source,
 	return out, rows.Err()
 }
 
+// DeleteSource removes a source row. The pipes FK is ON DELETE CASCADE so
+// pipe rows are removed automatically. JetStream stream cleanup is the
+// caller's responsibility. Returns ErrNotFound when (org, handle) doesn't exist.
+func DeleteSource(ctx context.Context, p *Pool, orgID uuid.UUID, handle string) error {
+	tag, err := p.Exec(ctx,
+		`DELETE FROM sources WHERE organisation_id = $1 AND handle = $2`, orgID, handle)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // UpdateLastBroadcast records the most recent broadcast for this source.
 // Called by the server-side subscriber on every message. Idempotent on
 // identical inputs.

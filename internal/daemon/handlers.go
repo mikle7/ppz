@@ -453,6 +453,32 @@ func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params jso
 	writeIPC(conn, reply)
 }
 
+// handleSourceDestroy proxies `ppz source destroy HANDLE` to the server.
+// On success it clears every session whose current equals the destroyed
+// handle and removes it from the known-pipes cache.
+func (d *Daemon) handleSourceDestroy(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.SourceDestroyRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+	if _, ok := d.State.Credentials(); !ok {
+		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
+		return
+	}
+	if err := natsubj.ValidateHandle(req.Handle); err != nil {
+		writeIPCErr(conn, cliproto.NewInvalidHandle(req.Handle))
+		return
+	}
+	if e := d.callServer(ctx, "DELETE", "/api/v1/sources/"+req.Handle, nil, nil); e != nil {
+		writeIPCErr(conn, e)
+		return
+	}
+	d.State.ForgetPipe(req.Handle)
+	_ = d.State.ClearCurrentForHandle(req.Handle)
+	writeIPC(conn, cliproto.SourceDestroyReply{Handle: req.Handle})
+}
+
 // handlePipeDestroy proxies `ppz pipe destroy` to the server.
 func (d *Daemon) handlePipeDestroy(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	var req cliproto.PipeDestroyRequest

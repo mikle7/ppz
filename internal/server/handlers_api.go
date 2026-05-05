@@ -340,6 +340,60 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 	})
 }
 
+// handleDestroySource: DELETE /api/v1/sources/{handle}
+//
+// Removes the source row (CASCADE removes pipe rows) then best-effort deletes
+// all JetStream streams (auto-provisioned + user-created). Returns 204.
+func (s *Server) handleDestroySource(w http.ResponseWriter, r *http.Request, key db.APIKey) {
+	handle := r.PathValue("handle")
+	if err := natsubj.ValidateHandle(handle); err != nil {
+		writeErr(w, cliproto.NewInvalidHandle(handle))
+		return
+	}
+	ctx, cancel := withTimeout(r)
+	defer cancel()
+
+	src, err := db.GetSourceByHandle(ctx, s.Pool, key.OrganisationID, handle)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeErr(w, cliproto.NewSourceNotFound(handle))
+			return
+		}
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+
+	// Snapshot user-created pipe names before CASCADE removes them.
+	userPipes, err := db.ListPipesForSource(ctx, s.Pool, src.ID)
+	if err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+
+	if err := db.DeleteSource(ctx, s.Pool, key.OrganisationID, handle); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeErr(w, cliproto.NewSourceNotFound(handle))
+			return
+		}
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+
+	// Stream cleanup is best-effort — the DB row is already gone so orphaned
+	// streams are storage waste only, not a correctness problem.
+	js, err := s.JSFor(ctx, key.OrganisationID)
+	if err == nil {
+		for _, p := range userPipes {
+			_ = deletePipeStream(ctx, js, key.OrganisationID, handle, p.Name)
+		}
+		for _, p := range src.Pipes() {
+			_ = deletePipeStream(ctx, js, key.OrganisationID, handle, p)
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleDestroyPipe: DELETE /api/v1/sources/{handle}/pipes/{name}
 //
 // Removes the row + the JetStream stream. Returns 204 on success.

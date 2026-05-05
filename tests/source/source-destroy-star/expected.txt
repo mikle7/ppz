@@ -1,0 +1,10 @@
+--- before destroy ---
+alpha.broadcast 0 0 - -
+alpha.inbox 0 0 - -
+beta.broadcast 0 0 - -
+beta.inbox 0 0 - -
+destroyed source=alpha
+destroyed source=beta
+--- after destroy ---
+empty
+exit=0

@@ -1,0 +1,7 @@
+--- before destroy ---
+apple.broadcast 0 0 - -
+apple.inbox 0 0 - -
+destroyed source=apple
+--- after destroy ---
+no apple rows
+exit=0

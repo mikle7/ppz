@@ -171,6 +171,32 @@ func (s *State) RememberPipe(handle string) {
 	s.knownPipes[handle] = struct{}{}
 }
 
+// ForgetPipe removes a handle from the known-pipes cache. Called after a
+// source is destroyed so the cache doesn't return stale hits.
+func (s *State) ForgetPipe(handle string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.knownPipes, handle)
+}
+
+// ClearCurrentForHandle drops every session whose current equals handle.
+// Called after a source destroy so stale per-session pointers don't linger.
+func (s *State) ClearCurrentForHandle(handle string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	changed := false
+	for sess, h := range s.current {
+		if h == handle {
+			delete(s.current, sess)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return s.persistCurrentLocked()
+}
+
 func (s *State) KnowsPipe(handle string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
