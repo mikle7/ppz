@@ -88,6 +88,19 @@ func TestCmdCommand_NewlineFlag(t *testing.T) {
 	assertStdinRequest(t, (*reqs)[1], "myhost", "\n")
 }
 
+func TestCmdCommand_NoneFlag(t *testing.T) {
+	reqs := setupCommandDaemon(t)
+
+	if err := cmdCommand([]string{"--none", "myhost", "ping"}); err != nil {
+		t.Fatalf("cmdCommand --none: %v", err)
+	}
+
+	if len(*reqs) != 1 {
+		t.Fatalf("want 1 request (instruction only, no ctrl seq), got %d", len(*reqs))
+	}
+	assertStdinRequest(t, (*reqs)[0], "myhost", "ping")
+}
+
 func setupCommandDaemon(t *testing.T) *[]cliproto.BroadcastRequest {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "ppz-command-")
