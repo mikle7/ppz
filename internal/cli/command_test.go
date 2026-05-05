@@ -101,6 +101,32 @@ func TestCmdCommand_NoneFlag(t *testing.T) {
 	assertStdinRequest(t, (*reqs)[0], "myhost", "ping")
 }
 
+func TestCmdCommand_ClaudeFlagAfterPositionalArgs(t *testing.T) {
+	reqs := setupCommandDaemon(t)
+
+	if err := cmdCommand([]string{"myhost", "do something", "--claude"}); err != nil {
+		t.Fatalf("cmdCommand flag after positional args: %v", err)
+	}
+
+	if len(*reqs) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(*reqs))
+	}
+	assertStdinRequest(t, (*reqs)[1], "myhost", "\x1b[13u")
+}
+
+func TestCmdCommand_NoneFlagAfterPositionalArgs(t *testing.T) {
+	reqs := setupCommandDaemon(t)
+
+	if err := cmdCommand([]string{"myhost", "ping", "--none"}); err != nil {
+		t.Fatalf("cmdCommand --none after positional args: %v", err)
+	}
+
+	if len(*reqs) != 1 {
+		t.Fatalf("want 1 request (instruction only), got %d", len(*reqs))
+	}
+	assertStdinRequest(t, (*reqs)[0], "myhost", "ping")
+}
+
 func TestCmdCommand_FlagAfterPositionalArgsErrors(t *testing.T) {
 	// Go's flag package stops at the first non-flag arg; flags that appear
 	// after positional args would otherwise be silently ignored.
