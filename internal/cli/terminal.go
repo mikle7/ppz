@@ -221,9 +221,7 @@ func cmdTerminalShare(args []string) error {
 	}
 
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-	cmd.Env = append(os.Environ(),
-		"PPZ_CURRENT_HANDLE="+handle,
-	)
+	cmd.Env = terminalShareEnv(handle)
 	cmd.Stdin = tty
 	cmd.Stdout = tty
 	cmd.Stderr = tty
@@ -449,6 +447,17 @@ func sendStreamLine(handle, channel, payload string) error {
 // viewer) read the latest stdctrl message + follow updates to keep
 // xterm.js sized to match the source pty — bytes laid out for one width
 // can't render right at another.
+// terminalShareEnv builds the child process environment for `ppz terminal share`.
+// It injects PPZ_CURRENT_HANDLE so ppz verbs default to this source, and
+// PPZ_SESSION=<handle> so all subprocesses within the pty (even those that
+// call setsid and get a fresh Unix session id) share the same cursor session.
+func terminalShareEnv(handle string) []string {
+	return append(os.Environ(),
+		"PPZ_CURRENT_HANDLE="+handle,
+		"PPZ_SESSION="+handle,
+	)
+}
+
 func publishWinsize(handle string, ptmx *os.File) {
 	rows, cols, err := pty.Getsize(ptmx)
 	if err != nil {
