@@ -1,0 +1,5 @@
+decline_status:200
+reinvite_status:200
+declined 1
+pending 1
+exit=0

@@ -1,0 +1,4 @@
+accept_status:200
+invite_status: accepted
+membership_rows: 1
+exit=0
