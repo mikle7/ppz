@@ -43,13 +43,7 @@ func cmdOrgList(args []string) error {
 	if err := daemon.Call(ipcSocket(), cliproto.IPCOrgList, struct{}{}, &reply); err != nil {
 		return err
 	}
-	for _, o := range reply.Orgs {
-		role := o.Role
-		if role == "" {
-			role = "member"
-		}
-		fmt.Fprintf(os.Stdout, "%s\t%s\n", o.Name, role)
-	}
+	cliproto.PrintOrgList(os.Stdout, reply.Orgs, useColor())
 	return nil
 }
 

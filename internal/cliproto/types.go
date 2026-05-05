@@ -273,6 +273,11 @@ type OrgInfo struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Role string `json:"role,omitempty"` // owner / member / viewer / bot (Phase 3.6)
+	// Current is true for the org the daemon is currently bound to
+	// (per `ppz org switch`). Set by the daemon's IPCOrgList handler
+	// after the server returns the membership list — the server has
+	// no notion of "current org" since that's daemon-side state.
+	Current bool `json:"current,omitempty"`
 }
 
 type ListOrgsReply struct {

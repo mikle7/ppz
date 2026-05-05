@@ -24,6 +24,16 @@ func (d *Daemon) handleOrgList(ctx context.Context, conn net.Conn, _ json.RawMes
 		writeIPCErr(conn, e)
 		return
 	}
+	// Annotate the org the daemon is currently bound to. The server
+	// doesn't know — that's daemon-side state set by login / org
+	// switch — so we stamp it here before handing back to the CLI.
+	if cur := d.State.OrgID(); cur != "" {
+		for i := range reply.Orgs {
+			if reply.Orgs[i].ID == cur {
+				reply.Orgs[i].Current = true
+			}
+		}
+	}
 	writeIPC(conn, reply)
 }
 
