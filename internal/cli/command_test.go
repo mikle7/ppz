@@ -101,6 +101,15 @@ func TestCmdCommand_NoneFlag(t *testing.T) {
 	assertStdinRequest(t, (*reqs)[0], "myhost", "ping")
 }
 
+func TestCmdCommand_FlagAfterPositionalArgsErrors(t *testing.T) {
+	// Go's flag package stops at the first non-flag arg; flags that appear
+	// after positional args would otherwise be silently ignored.
+	err := cmdCommand([]string{"blue", "hello world", "--unknown"})
+	if err == nil {
+		t.Fatal("expected error for flag after positional args, got nil")
+	}
+}
+
 func setupCommandDaemon(t *testing.T) *[]cliproto.BroadcastRequest {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "ppz-command-")
