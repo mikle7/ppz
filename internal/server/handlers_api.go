@@ -420,11 +420,19 @@ func (s *Server) handleDestroyPipe(w http.ResponseWriter, r *http.Request, key d
 
 	if err := db.DeletePipe(ctx, s.Pool, src.ID, name); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			writeErr(w, cliproto.NewPipeNotFound(name, handle))
+			// Auto-provisioned pipes (broadcast, inbox, etc.) are
+			// JetStream-only — not in the pipes table. Allow destroying
+			// them directly via stream deletion rather than returning
+			// E_PIPE_NOT_FOUND for pipes the user can see in ppz ls.
+			if !src.IsAutoPipe(name) {
+				writeErr(w, cliproto.NewPipeNotFound(name, handle))
+				return
+			}
+			// fall through to JetStream cleanup below
+		} else {
+			writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 			return
 		}
-		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
-		return
 	}
 	js, err := s.JSFor(ctx, key.OrganisationID)
 	if err != nil {
