@@ -1,0 +1,7 @@
+count: 200
+first: msg-001
+last: msg-200
+unique: 200
+in_order: true
+under_5s: yes
+exit=0

@@ -9,10 +9,17 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -o /out/ppz ./cmd/ppz
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+# iproute2 ships `tc` — used only by the e2e-wan suite, which needs to
+# install a netem qdisc on this container's eth0. Negligible image
+# bloat (~2 MB) and no runtime cost when the WAN overlay isn't active.
+RUN apk add --no-cache ca-certificates iproute2
 RUN adduser -D -u 1000 ppz
 COPY --from=build /out/ppz /usr/local/bin/ppz
+COPY compose/wan-entrypoint.sh /wan-entrypoint.sh
+RUN chmod 0755 /wan-entrypoint.sh
 USER ppz
 WORKDIR /home/ppz
 ENV PPZ_HOME=/home/ppz
 # No ENTRYPOINT — the compose command provides the full argv ("ppz daemon start --foreground").
+# WAN overlay sets entrypoint=/wan-entrypoint.sh which applies a netem
+# qdisc and execs the same argv.

@@ -1,0 +1,21 @@
+# WAN-mode overlay for the e2e suite.
+#
+# Layers on top of compose/docker-compose.yml; together they spin up
+# the same stack with one twist: daemon-a's egress traffic is shaped
+# with `tc netem delay $PPZ_WAN_DELAY` (default 200 ms) so we can
+# assert hot paths stay efficient under realistic operator-to-server
+# latency.
+#
+# Used by `make e2e-wan{,-up,-run,-rebuild}`. Tests live under
+# tests/wan/* — the standard tests/run.sh skips this directory so
+# WAN scenarios never run under the unprimed (no-latency) stack.
+
+services:
+  daemon-a:
+    user: root
+    cap_add: [NET_ADMIN]
+    entrypoint: ["/wan-entrypoint.sh"]
+    environment:
+      PPZ_HOME: /home/ppz
+      PPZ_IPC_SOCKET: /home/ppz/daemon.sock
+      PPZ_WAN_DELAY: "200ms"
