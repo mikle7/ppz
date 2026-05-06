@@ -478,7 +478,37 @@ func publishWinsize(handle string, ptmx *os.File) {
 // pipes every received message into the PTY master verbatim. Callers are
 // responsible for including whatever terminator they need (e.g. via
 // ppz command which appends \n or --claude etc.).
+//
+// Resilient to daemon restarts: if the IPC connection drops (daemon
+// stop/crash/upgrade), we sleep with backoff and redial. We use
+// NoAdvance=true (the daemon's cursor never moves), so on redial the
+// daemon redelivers every retained message; we skip ones we've
+// already written to the PTY by tracking message IDs in a bounded
+// ring. Without dedupe, every reconnect would replay history into
+// the wrapped child.
 func forwardStdin(ctx context.Context, handle string, master *os.File) {
+	seen := newSeenIDRing(1024)
+
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		streamForwardStdinOnce(ctx, handle, master, seen)
+		if ctx.Err() != nil {
+			return
+		}
+		// Brief pause before redialling so we don't spin against a
+		// daemon that's just been stopped and hasn't been started
+		// back up yet.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
+
+func streamForwardStdinOnce(ctx context.Context, handle string, master *os.File, seen *seenIDRing) {
 	conn, err := net.Dial("unix", ipcSocket())
 	if err != nil {
 		return
@@ -496,8 +526,16 @@ func forwardStdin(ctx context.Context, handle string, master *os.File) {
 	}
 
 	// Close the connection when the parent ctx ends so the daemon stops
-	// streaming.
-	go func() { <-ctx.Done(); _ = conn.Close() }()
+	// streaming and Scan() unblocks.
+	stopCloser := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stopCloser:
+		}
+	}()
+	defer close(stopCloser)
 
 	dec := bufio.NewScanner(conn)
 	dec.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -509,8 +547,52 @@ func forwardStdin(ctx context.Context, handle string, master *os.File) {
 		if evt.Message == nil {
 			continue
 		}
+		if seen.has(evt.Message.ID) {
+			continue
+		}
 		_, _ = io.WriteString(master, evt.Message.Payload)
+		seen.add(evt.Message.ID)
 	}
+}
+
+// seenIDRing keeps a bounded set of message IDs, evicting oldest first.
+// Used by forwardStdin to skip retained-message redelivery after a
+// daemon-restart redial.
+type seenIDRing struct {
+	mu    sync.Mutex
+	order []string
+	idx   int
+	set   map[string]struct{}
+	cap   int
+}
+
+func newSeenIDRing(capacity int) *seenIDRing {
+	return &seenIDRing{
+		order: make([]string, capacity),
+		set:   make(map[string]struct{}, capacity),
+		cap:   capacity,
+	}
+}
+
+func (r *seenIDRing) has(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.set[id]
+	return ok
+}
+
+func (r *seenIDRing) add(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.set[id]; ok {
+		return
+	}
+	if old := r.order[r.idx]; old != "" {
+		delete(r.set, old)
+	}
+	r.order[r.idx] = id
+	r.set[id] = struct{}{}
+	r.idx = (r.idx + 1) % r.cap
 }
 
 func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxAlertPump) {
