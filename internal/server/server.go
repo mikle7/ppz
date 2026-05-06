@@ -45,6 +45,10 @@ type Config struct {
 	// MUST be false in production.
 	DevLogin bool
 
+	// Version is injected via -ldflags at build time and surfaced in
+	// /healthz and the dashboard footer.
+	Version string
+
 	// Auth V2 §Phase 3.5 — NSC/JWT decentralized NATS auth.
 	// Operator seed is the runtime secret (signs new per-org
 	// Account JWTs as orgs are provisioned). Operator JWT is
@@ -79,6 +83,8 @@ type Server struct {
 	GitHubTokenURL     string
 	GitHubUserURL      string
 	DevLogin           bool
+
+	Version string // set via -ldflags at build time; shown in /healthz and dashboard footer
 }
 
 func Run(ctx context.Context, cfg Config) error {
@@ -125,6 +131,7 @@ func Run(ctx context.Context, cfg Config) error {
 		GitHubTokenURL:     defaultIfEmpty(cfg.GitHubTokenURL, "https://github.com/login/oauth/access_token"),
 		GitHubUserURL:      defaultIfEmpty(cfg.GitHubUserURL, "https://api.github.com/user"),
 		DevLogin:           cfg.DevLogin,
+		Version:            cfg.Version,
 	}
 	srv.AccountPool = newAccountPool(srv)
 	defer srv.AccountPool.Close()

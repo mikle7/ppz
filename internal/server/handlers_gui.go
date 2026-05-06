@@ -34,12 +34,17 @@ func resolveOrg(ctx context.Context, pool *db.Pool, idOrSlug string) (db.Organis
 	return db.GetOrganisationByName(ctx, pool, idOrSlug)
 }
 
+// base returns a map pre-populated with fields available to every template.
+func (s *Server) base() map[string]any {
+	return map[string]any{"Version": s.Version}
+}
+
 // handleGUILanding renders the marketing landing at `/`. Logo + tagline
 // + two animated terminal demos. No DB calls — fully static. The
 // operator-facing org index lives at `/dashboard`.
 func (s *Server) handleGUILanding(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "landing.html", nil); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "landing.html", s.base()); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
 }
@@ -63,10 +68,10 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 		invites, _ = db.ListPendingInvitesForUsername(ctx, s.Pool, user.Username)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "index.html", map[string]any{
-		"Orgs":    orgs,
-		"Invites": invites,
-	}); err != nil {
+	data := s.base()
+	data["Orgs"] = orgs
+	data["Invites"] = invites
+	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
 }
@@ -251,16 +256,16 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 	isOwner := UserIDFromCtx(r.Context()) == org.OwnerUserID
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "org.html", map[string]any{
-		"Org":            org,
-		"Keys":           keys,
-		"Sources":        rows,
-		"Owner":          owner,
-		"Members":        members,
-		"PendingInvites": pendingInvites,
-		"IsOwner":        isOwner,
-		"ActiveTab":      tab,
-	}); err != nil {
+	data := s.base()
+	data["Org"] = org
+	data["Keys"] = keys
+	data["Sources"] = rows
+	data["Owner"] = owner
+	data["Members"] = members
+	data["PendingInvites"] = pendingInvites
+	data["IsOwner"] = isOwner
+	data["ActiveTab"] = tab
+	if err := tmpl.ExecuteTemplate(w, "org.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
 }
