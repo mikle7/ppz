@@ -132,25 +132,64 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		if req.SinceMS > 0 {
 			sinceCutoff = time.Now().Add(-time.Duration(req.SinceMS) * time.Millisecond)
 		}
-		for seq := startSeq; seq <= info.State.LastSeq; seq++ {
-			msg, err := stream.GetMsg(ctx, seq)
-			if err != nil {
-				continue // expired by retention
+		// Drain via a single Fetch() on an ephemeral pull consumer
+		// instead of N synchronous stream.GetMsg(seq) calls. Fetch
+		// pulls the entire window in one batch, so 200 messages take
+		// 1 round-trip, not 200. (The per-seq path was catastrophic
+		// over WAN: 200ms RTT × N messages = several minutes for a
+		// few hundred retained items.)
+		//
+		// Snapshot the upper bound at request time so a fresh write
+		// during drain can't push us past the requested window.
+		historicalEnd := info.State.LastSeq
+		expected := int(historicalEnd - startSeq + 1)
+		consumer, cerr := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+			FilterSubject:     natsubj.Subject(orgID, req.Handle, req.Channel),
+			DeliverPolicy:     jetstream.DeliverByStartSequencePolicy,
+			OptStartSeq:       startSeq,
+			AckPolicy:         jetstream.AckNonePolicy,
+			InactiveThreshold: 30 * time.Second,
+		})
+		if cerr != nil {
+			writeReadErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+			return
+		}
+		// Best-effort cleanup; the InactiveThreshold catches anything
+		// we leak.
+		defer func() { _ = stream.DeleteConsumer(ctx, consumer.CachedInfo().Name) }()
+
+		drained := 0
+		for drained < expected {
+			batch, ferr := consumer.Fetch(expected-drained, jetstream.FetchMaxWait(5*time.Second))
+			if ferr != nil {
+				break
 			}
-			env, err := envelope.Unmarshal(msg.Data)
-			if err != nil {
-				continue
+			any := false
+			for msg := range batch.Messages() {
+				any = true
+				md, mderr := msg.Metadata()
+				if mderr != nil {
+					drained++
+					continue
+				}
+				env, eerr := envelope.Unmarshal(msg.Data())
+				if eerr == nil && (sinceCutoff.IsZero() || !env.CreatedAt.Before(sinceCutoff)) {
+					retained = append(retained, cliproto.ReadMessage{
+						ID:        env.ID,
+						Handle:    env.Handle,
+						Payload:   env.Payload,
+						CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+					})
+					lastSeqSeen = md.Sequence.Stream
+				}
+				drained++
 			}
-			if !sinceCutoff.IsZero() && env.CreatedAt.Before(sinceCutoff) {
-				continue
+			if err := batch.Error(); err != nil {
+				break
 			}
-			retained = append(retained, cliproto.ReadMessage{
-				ID:        env.ID,
-				Handle:    env.Handle,
-				Payload:   env.Payload,
-				CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-			})
-			lastSeqSeen = seq
+			if !any {
+				break
+			}
 		}
 	}
 	if req.Skip > 0 && req.Skip < len(retained) {

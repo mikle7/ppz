@@ -43,7 +43,7 @@ for dir in "${scenarios[@]}"; do
   # which boots compose with the latency overlay. They'd false-pass
   # here (no latency injected) — skip outright.
   case "$rel" in
-    wan/*) continue ;;
+    wan|wan/*) continue ;;
   esac
   # shellcheck disable=SC2053
   if [[ "$rel" != $filter && "$rel" != $filter/* ]]; then

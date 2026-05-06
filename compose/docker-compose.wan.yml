@@ -12,7 +12,10 @@
 
 services:
   daemon-a:
-    user: root
+    # Keep the same uid (1000 / ppz) as the standard image so files
+    # written to the shared volume (credentials, sock) are readable
+    # when the standard suite runs against the same volume next.
+    # NET_ADMIN cap is sufficient to run `tc` even as a non-root user.
     cap_add: [NET_ADMIN]
     entrypoint: ["/wan-entrypoint.sh"]
     environment:
