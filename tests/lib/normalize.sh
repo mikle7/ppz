@@ -39,6 +39,14 @@ sed_args+=(-e 's/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/UU
 # RFC3339 timestamp (Z or +HH:MM offset, optional fractional seconds).
 sed_args+=(-e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})/TIMESTAMP/g')
 
+# Bare HH:MM:SS at the very start of a line (after optional leading
+# spaces). Used by `ppz read` tabular default for inbox-shaped pipes —
+# the timestamp varies per run but the rest of the row is stable, so
+# normalising the leading clock to HH:MM:SS makes the format diffable.
+# Anchored to BOL so other clock-like substrings in payloads aren't
+# rewritten.
+sed_args+=(-e 's/^([[:space:]]*)[0-9]{2}:[0-9]{2}:[0-9]{2}/\1HH:MM:SS/')
+
 # `ppz version` output: "ppz <version> (<sha>)" — normalize to a stable token
 # so dev / tagged / dirty builds all diff against the same expected.txt.
 sed_args+=(-e 's/^ppz [^ ]+ \([^)]+\)$/ppz VERSION (SHA)/')

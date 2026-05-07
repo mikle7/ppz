@@ -1,0 +1,3 @@
+HH:MM:SS  chat          first message
+HH:MM:SS  chat          second message
+exit=0

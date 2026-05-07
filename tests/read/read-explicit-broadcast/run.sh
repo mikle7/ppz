@@ -10,4 +10,4 @@ ppz_a broadcast -m "msg-2" >/dev/null
 ppz_a broadcast -m "msg-3" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-3" >/dev/null
 
-ppz_a read chat.broadcast
+ppz_a read --bare chat.broadcast

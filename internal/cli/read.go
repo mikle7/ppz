@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
@@ -46,22 +47,23 @@ func cmdRead(args []string) error {
 	follow := fs.Bool("tail", false, "drain unread messages then keep streaming live until SIGINT")
 	tty := fs.Bool("tty", false, "render concatenated payloads through a virtual terminal (vt10x); best for <handle>.stdout from a wrapped pty")
 	raw := fs.Bool("raw", false, "write payload bytes verbatim with no message separator; concatenates the full byte stream")
+	bare := fs.Bool("bare", false, "force legacy payload-only output (script-stable opt-out from the v0.23 tabular default on inbox-shaped pipes)")
 	target, flagArgs, err := splitReadArgs(args, false)
 	if err != nil || target == "" {
-		fmt.Fprintln(os.Stderr, "usage: ppz read <handle>.<pipe> [--tail --json --tty --raw]")
+		fmt.Fprintln(os.Stderr, "usage: ppz read <handle>.<pipe> [--tail --json --tty --raw --bare]")
 		fmt.Fprintln(os.Stderr, "  (filter flags -l/--skip/--since live on `ppz reread`)")
 		os.Exit(2)
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
 	}
-	return runRead(target, *asJSON, *follow, *tty, *raw, false /* all */, 0, 0, 0)
+	return runRead(target, *asJSON, *follow, *tty, *raw, *bare, false /* all */, 0, 0, 0)
 }
 
 // runRead is the shared engine for `ppz read` and `ppz reread`. The two
 // verbs differ only in flag surface and the `all` toggle (which the
 // daemon uses to skip cursor consultation + advance).
-func runRead(target string, asJSON, follow, tty, raw, all bool, limit, skip int, sinceMS int64) error {
+func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, skip int, sinceMS int64) error {
 	if tty && follow {
 		fmt.Fprintln(os.Stderr, "ppz read: --tty and --tail are mutually exclusive (use 'ppz terminal watch' for live render)")
 		os.Exit(2)
@@ -76,6 +78,10 @@ func runRead(target string, asJSON, follow, tty, raw, all bool, limit, skip int,
 	}
 	if tty && raw {
 		fmt.Fprintln(os.Stderr, "ppz read: --tty and --raw are mutually exclusive")
+		os.Exit(2)
+	}
+	if bare && (asJSON || tty || raw) {
+		fmt.Fprintln(os.Stderr, "ppz read: --bare is mutually exclusive with --json/--tty/--raw")
 		os.Exit(2)
 	}
 	if target == "inbox" {
@@ -168,6 +174,8 @@ func runRead(target string, asJSON, follow, tty, raw, all bool, limit, skip int,
 			collected = append(collected, evt.Message.Payload...)
 		case raw:
 			fmt.Fprint(os.Stdout, evt.Message.Payload)
+		case !bare && cliproto.IsTabularReadPipe(channel):
+			cliproto.FormatReadMessage(os.Stdout, *evt.Message, time.Local)
 		default:
 			fmt.Fprintln(os.Stdout, evt.Message.Payload)
 		}

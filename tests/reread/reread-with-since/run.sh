@@ -12,4 +12,4 @@ sleep 1.2
 ppz_a broadcast -m "new" >/dev/null
 wait_for 20 "ppz_a ls | grep -q '^chat.*new'" >/dev/null
 
-ppz_a reread chat.broadcast --since 500ms
+ppz_a reread --bare chat.broadcast --since 500ms

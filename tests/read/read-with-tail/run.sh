@@ -16,7 +16,7 @@ rm -f "$OUT" "$PID_FILE"
 
 # Start the follower in the background. ppz_a is a shell function so we
 # inline the env var that selects daemon-a.
-PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" ppz read live.broadcast --tail >"$OUT" 2>&1 &
+PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" ppz read --bare live.broadcast --tail >"$OUT" 2>&1 &
 echo $! >"$PID_FILE"
 # Wait for the follower to drain the retained "before" message before
 # we publish "during" — that way "during" arrives via the live path,

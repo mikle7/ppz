@@ -177,6 +177,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 					retained = append(retained, cliproto.ReadMessage{
 						ID:        env.ID,
 						Sender:    env.Sender,
+						Subject:   env.Subject,
 						Payload:   env.Payload,
 						CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 					})
@@ -242,6 +243,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		evt := cliproto.ReadEvent{Message: &cliproto.ReadMessage{
 			ID:        env.ID,
 			Sender:    env.Sender,
+			Subject:   env.Subject,
 			Payload:   env.Payload,
 			CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		}}

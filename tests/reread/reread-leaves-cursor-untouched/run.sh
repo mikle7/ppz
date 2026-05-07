@@ -18,13 +18,13 @@ ppz_a broadcast -m "msg-3" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-3" >/dev/null
 
 echo "--- reread: delivers all 3 ---"
-ppz_a reread chat.broadcast
+ppz_a reread --bare chat.broadcast
 
 echo "--- ls after reread: unread still 3 (cursor not advanced) ---"
 ppz_a ls | ls_normalize
 
 echo "--- subsequent default read: still drains all 3 ---"
-ppz_a read chat.broadcast
+ppz_a read --bare chat.broadcast
 
 echo "--- ls after default read: unread=0 ---"
 ppz_a ls | ls_normalize

@@ -10,4 +10,4 @@ ppz_a broadcast -m "hello" >/dev/null
 ppz_a broadcast -m "world" >/dev/null
 wait_for 20 "ppz_a ls | grep -q world" >/dev/null
 
-ppz_a read chat.broadcast --json | jq -c '{sender, payload}'
+ppz_a read chat.broadcast --json | jq -c '{sender, subject, payload}'

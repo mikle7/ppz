@@ -16,17 +16,29 @@ const MaxBytes = 65536 // 64 KiB cap on the encoded envelope.
 // publisher had no current source set (e.g. `ppz send <dest>` from a
 // session that never connected). Distinct from the destination handle,
 // which is encoded only in the NATS subject (per WIRE.md §3).
+//
+// Subject is an optional header-line, separate from the payload. Two
+// roles:
+//   - User-set: free-form text rendered as `[subject] payload` in the
+//     `ppz read` tabular default for inbox-shaped pipes. No CLI surface
+//     to set this in v0.23.0 — reserved for the next phase.
+//   - System-set: subjects starting with `ack:` are reserved for daemon-
+//     emitted protocol messages (e.g. `ack:read`) that the read
+//     formatter renders specially. Always serialised, even when empty,
+//     so receivers see a stable wire shape.
 type Message struct {
 	ID        string    `json:"id"`
 	Sender    string    `json:"sender"`
+	Subject   string    `json:"subject"`
 	Payload   string    `json:"payload"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func New(sender, payload string, now time.Time) Message {
+func New(sender, subject, payload string, now time.Time) Message {
 	return Message{
 		ID:        uuid.NewString(),
 		Sender:    sender,
+		Subject:   subject,
 		Payload:   payload,
 		CreatedAt: now.UTC(),
 	}

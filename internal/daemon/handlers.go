@@ -655,7 +655,7 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 	// source). Empty string when this session has never connected to
 	// a source — sender is nullable per WIRE.md §3.
 	sender := d.State.Current(req.Session)
-	env := envelope.New(sender, req.Payload, clock.Now())
+	env := envelope.New(sender, req.MsgSubject, req.Payload, clock.Now())
 	data, err := env.Marshal()
 	if err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
