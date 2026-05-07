@@ -28,8 +28,7 @@ func TestUsageMentionsInboxAliases(t *testing.T) {
 	text := string(out)
 	for _, want := range []string{
 		"ppz read inbox",
-		"ppz send <handle> PAYLOAD",
-		"shorthand for <handle>.inbox",
+		"bare handle → <handle>.inbox",
 		"ppz upgrade",
 	} {
 		if !strings.Contains(text, want) {

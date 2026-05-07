@@ -77,72 +77,98 @@ func Run(args []string) error {
 func usage(w *os.File) {
 	fmt.Fprintln(w, `ppz — pipes for agents
 
-Daemon (desktop-wide lifecycle):
+Messaging (the verbs you use most):
+  ppz status                       daemon state, current source, last token refresh
+  ppz ls [--watch [PATTERN...]]    list sources × pipes; --watch blocks until
+                                   unread arrives on a matching handle
+                                   (patterns use '*' quoted or % unquoted)
+  ppz read TGT [--tail --json --tty --raw --bare]
+                                   read NEW messages from <handle>.<pipe>;
+                                   'ppz read inbox' reads <current>.inbox.
+                                   Default for inbox / broadcast pipes is the
+                                   v0.23 tabular format —
+                                     HH:MM:SS  <sender|->  <body>
+                                   where <body> is "[subject] payload" for
+                                   user subjects, "ack:read → <id8>" for
+                                   system ack messages, or just the payload.
+                                   --bare forces legacy payload-only output
+                                   (script-stable opt-out).
+                                   --tail keeps streaming live until SIGINT.
+                                   --tty / --raw / --json: shared with reread.
+  ppz send TGT PAYLOAD [--subject S] [--in-reply-to ID] [--request-ack]
+                                   publish PAYLOAD to <handle>.<pipe>;
+                                   bare handle → <handle>.inbox.
+                                   Success line goes to STDERR (since v0.25 —
+                                   was stdout; scripts redirecting stdout
+                                   no longer swallow it).
+                                   --subject S        envelope-level header;
+                                                      'ack:' prefix reserved.
+                                   --in-reply-to ID   thread / reply linkage.
+                                   --request-ack      receiver's daemon emits
+                                                      'ack:read' back to YOUR
+                                                      inbox when their cursor
+                                                      advances (best-effort,
+                                                      non-blocking — see Acks).
+  ppz broadcast [-m TEXT]          publish to <current>.broadcast
+                                   (stdin form streams one message per line)
+  ppz reread TGT [-l N --skip N --since DUR --json --tty --raw --bare]
+                                   forensic / replay: every retained message;
+                                   ignores and never advances the cursor.
+  ppz command H [INSTR]            send INSTR to H.stdin (100 ms delay),
+                                   then send a trailing control sequence
+                                   (--claude (\\x1b[13u) / --cr / --crlf / --newline / --none)
+
+Acks (read receipts, v0.25):
+  Use 'ppz send … --request-ack' when you need to know the recipient saw
+  your message. Their daemon auto-emits an 'ack:read' envelope back to your
+  inbox carrying in_reply_to=<your-msg-id>. The tabular read formatter
+  renders these as 'ack:read → <id8>' so you can correlate at a glance.
+  Best-effort: a missing ack is indistinguishable from "not yet read".
+  If you need strict guarantees, layer your own re-send-on-timeout.
+  The 'ack:' subject prefix is reserved — the CLI and daemon both reject
+  user attempts to set it (E_INVALID_SUBJECT).
+
+Setup (once per workstation):
   ppz daemon start                 start the local daemon
   ppz daemon stop                  stop the local daemon (idempotent)
-  ppz daemon login URL -apikey K   log the daemon into a server with an api key
-                                   (or use the 'ppz login' shortcut)
-  ppz daemon logout                clear the stored credential
   ppz login URL -apikey K          shortcut for 'ppz daemon login'
+  ppz daemon login URL -apikey K   log the daemon into a server with an api key
+  ppz daemon logout                clear the stored credential
 
-Sources (the addressable top-level entity):
-  ppz source create HANDLE         create a new source + set as current
+Sources (your addressable identities):
+  ppz source create HANDLE         create + set as current
                                    (errors if HANDLE already exists)
-  ppz source switch HANDLE         set an existing HANDLE as the current source
+  ppz source switch HANDLE         set an existing HANDLE as current
   ppz source clear                 clear the current source (source stays)
-  ppz source destroy PATTERN       destroy sources or pipes matching PATTERN
-                                   bare pattern: destroys matching sources
-                                   handle.pipe pattern: destroys matching pipes
+  ppz source destroy PATTERN       glob-destroy sources or pipes
+                                   bare pattern → matching sources
+                                   handle.pipe pattern → matching pipes
                                    glob wildcards: * ? [abc] (path.Match rules)
                                    examples: destroy '*'  destroy 'agent-*'
                                              destroy '*.stdout'  destroy apple
 
-Pipes (sub-buckets on a source):
+Pipes (custom sub-buckets on a source):
   ppz pipe create [HANDLE.]NAME [--ttl=DUR --max-msgs=N --max-bytes=B]
   ppz pipe destroy [HANDLE.]NAME
 
 Terminal:
-  ppz terminal share H [-- CMD ...] run CMD (or $SHELL) in a pty bound to source H —
-                                    bidirectional: stdout published, stdin subscribed
-  ppz terminal watch H              follow H.stdout in the alt-screen TUI
-                                    (interactive — renders to your local terminal,
-                                    not capturable; agents should use terminal read)
-  ppz terminal read H [reread-flags] wrapper for 'ppz reread H.stdout' with --tty
-                                    as the default output mode (vt10x screen
-                                    render — rebuild cumulative screen state).
-                                    All reread flags work: --raw, --json, -l N,
-                                    --skip N, --since DUR.
+  ppz terminal share H [-- CMD ...] run CMD (or $SHELL) in a pty bound to H —
+                                    bidirectional: stdout published, stdin
+                                    subscribed
+  ppz terminal watch H              follow H.stdout in alt-screen TUI
+                                    (interactive — agents prefer terminal read)
+  ppz terminal read H [reread-flags] wrapper for 'ppz reread H.stdout' with
+                                    --tty as the default output mode (vt10x
+                                    screen render — rebuild cumulative state)
 
-Operations:
-  ppz status                       show daemon, token refresh, and current source
+Other:
   ppz version                      print the binary's version + build sha
   ppz upgrade                      install the latest ppz CLI release
-  ppz ls [--watch [PATTERN...]]    list sources × pipes (--watch blocks until
-                                   unread on a matching handle; patterns use
-                                   '*' quoted or % unquoted as the wildcard)
-  ppz broadcast [-m TEXT]          publish to <current_source>.broadcast
-  ppz read TGT [--tail --json --tty --raw]
-                                   read NEW messages from <handle>.<pipe>;
-                                   'ppz read inbox' reads <current>.inbox
-                                   since the session cursor; advances the
-                                   cursor as it goes (agent inbox poll).
-                                   --tail keeps streaming live until SIGINT.
-                                   --tty / --raw / --json: output modes
-                                   shared with reread.
-  ppz reread TGT [-l N --skip N --since DUR --json --tty --raw]
-                                   forensic / replay: every retained message,
-                                   ignoring the cursor. Carries the filter
-                                   flags. Never advances the cursor.
-  ppz send TGT PAYLOAD             publish PAYLOAD to <handle>.<pipe>
-  ppz send <handle> PAYLOAD        shorthand for <handle>.inbox
-  ppz command <handle> [INSTR]     send INSTR to <handle>.stdin (100 ms delay),
-                                   then send a trailing control sequence (default \n).
-                                   Flags: --claude (\\x1b[13u) --cr --crlf --newline
-
-Shell integration:
-  ppz completion bash              tab-completion script for bash
-  ppz completion zsh               tab-completion script for zsh
-                                   add 'eval "$(ppz completion bash)"' to your shell rc`)
+  ppz org {list|switch|create|invite}
+                                   multi-org operations
+  ppz completion {bash|zsh}        tab-completion script
+                                   add 'eval "$(ppz completion bash)"' to
+                                   your shell rc`)
 }
 
 // home + sock resolution. Order: PPZ_IPC_SOCKET env, then $PPZ_HOME/daemon.sock,
