@@ -1,2 +1,3 @@
 wrapped
+chat
 exit=0
