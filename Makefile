@@ -1,4 +1,4 @@
-.PHONY: help build install test compose-build compose-up compose-down e2e e2e-filter e2e-up e2e-run e2e-rebuild e2e-down dev dev-down clean tag patch minor major undo push
+.PHONY: help build install test compose-build compose-up compose-down e2e e2e-filter e2e-up e2e-run e2e-rebuild e2e-down e2e-wan e2e-wan-filter e2e-wan-up e2e-wan-run e2e-wan-rebuild e2e-wan-down dev dev-down clean tag patch minor major undo push
 
 # `make tag {patch|minor|major}`  — bump the latest semver tag and create
 #                                   an annotated git tag at HEAD (local
@@ -23,6 +23,12 @@ TAG_ACTION := $(filter patch minor major undo push,$(MAKECMDGOALS))
 INSTALL_BIN ?= $(HOME)/.local/bin
 
 COMPOSE := docker compose -f compose/docker-compose.yml
+
+# WAN suite layers a second compose file that injects `tc netem` on
+# daemon-a's egress. Used by `make e2e-wan*`. Same volumes / images
+# as the regular stack, so e2e and e2e-wan can't both run at once
+# (later one wins on daemon-a's overlay).
+COMPOSE_WAN := docker compose -f compose/docker-compose.yml -f compose/docker-compose.wan.yml
 
 # Version + SHA injected into binaries via -ldflags. `git describe` falls
 # back gracefully on shallow clones (just the SHA). `--dirty` flags when
@@ -155,6 +161,34 @@ e2e-run:
 e2e-rebuild:
 	$(COMPOSE) build
 	$(COMPOSE) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+
+# WAN suite — applies a netem qdisc to daemon-a so we can assert that
+# hot paths don't degenerate to one-round-trip-per-message under
+# realistic latency. tests/wan/* only runs through these targets;
+# the regular tests/run.sh skips that subdirectory.
+e2e-wan:
+	$(COMPOSE_WAN) build test-runner
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_WAN) run --rm test-runner timeout 15m bash /tests/wan/run.sh
+
+e2e-wan-filter:
+	$(COMPOSE_WAN) build test-runner
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_WAN) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/wan/run.sh
+
+e2e-wan-up:
+	$(COMPOSE_WAN) build test-runner
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+
+e2e-wan-run:
+	$(COMPOSE_WAN) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/wan/run.sh
+
+e2e-wan-rebuild:
+	$(COMPOSE_WAN) build
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+
+e2e-wan-down:
+	$(COMPOSE_WAN) down -v --remove-orphans
 
 e2e-down:
 	$(COMPOSE) down -v --remove-orphans
