@@ -437,7 +437,14 @@ func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer)
 func sendStreamLine(handle, channel, payload string) error {
 	var reply cliproto.BroadcastReply
 	return daemon.Call(ipcSocket(), cliproto.IPCBroadcast,
-		cliproto.BroadcastRequest{Handle: handle, Channel: channel, Payload: payload},
+		cliproto.BroadcastRequest{
+			Handle:  handle,
+			Channel: channel,
+			Payload: payload,
+			// Forward session id so daemon.envelope.sender resolves
+			// against this tty's current source — same fix as send.go.
+			Session: sessionID(),
+		},
 		&reply)
 }
 

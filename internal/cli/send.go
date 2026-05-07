@@ -34,7 +34,16 @@ func cmdSend(args []string) error {
 
 	var reply cliproto.BroadcastReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCBroadcast,
-		cliproto.BroadcastRequest{Handle: handle, Channel: channel, Payload: payload},
+		cliproto.BroadcastRequest{
+			Handle:  handle,
+			Channel: channel,
+			Payload: payload,
+			// Forward the calling shell's session id so the daemon's
+			// envelope.sender = d.State.Current(req.Session) resolves
+			// against the per-tty current source — not the "default"
+			// session, which is rarely what the user actually has set.
+			Session: sessionID(),
+		},
 		&reply); err != nil {
 		return err
 	}

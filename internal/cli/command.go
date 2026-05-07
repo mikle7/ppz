@@ -71,7 +71,14 @@ func cmdCommand(args []string) error {
 	send := func(payload string) error {
 		var reply cliproto.BroadcastReply
 		if err := daemon.Call(ipcSocket(), cliproto.IPCBroadcast,
-			cliproto.BroadcastRequest{Handle: handle, Channel: "stdin", Payload: payload},
+			cliproto.BroadcastRequest{
+				Handle:  handle,
+				Channel: "stdin",
+				Payload: payload,
+				// Forward session id so daemon.envelope.sender resolves
+				// against this tty's current source — same fix as send.go.
+				Session: sessionID(),
+			},
 			&reply); err != nil {
 			return err
 		}

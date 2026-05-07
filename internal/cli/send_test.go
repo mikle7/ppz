@@ -35,6 +35,41 @@ func TestCmdSend_BareHandleTargetsInbox(t *testing.T) {
 	}
 }
 
+// `ppz send` MUST forward the calling shell's session id so the daemon's
+// envelope.sender = d.State.Current(req.Session) resolves to the per-tty
+// current source. Pre-fix, send.go omitted Session entirely; the daemon
+// then read d.State.Current("") which normalises to the "default" session
+// — almost always empty when the user actually has a current set on their
+// real tty session — and stamped sender="" on every published envelope.
+//
+// Reproduction in the wild: `ppz source create zues; ppz send quux "hi"`
+// from one terminal arrived on the receiver with sender="" instead of
+// sender="zues".
+func TestCmdSend_ForwardsSessionID(t *testing.T) {
+	t.Setenv("PPZ_SESSION", "tty-send-session-test")
+	dir, err := os.MkdirTemp("/tmp", "ppz-send-session-")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "daemon.sock")
+	t.Setenv("PPZ_IPC_SOCKET", sock)
+
+	requests := serveSendAliasDaemon(t, sock)
+
+	if err := cmdSend([]string{"quux", "hi"}); err != nil {
+		t.Fatalf("cmdSend: %v", err)
+	}
+	if len(*requests) != 1 {
+		t.Fatalf("broadcast request count = %d, want 1", len(*requests))
+	}
+	got := (*requests)[0]
+	if got.Session != "tty-send-session-test" {
+		t.Fatalf("BroadcastRequest.Session = %q, want %q (without it the daemon stamps sender=\"\")",
+			got.Session, "tty-send-session-test")
+	}
+}
+
 func serveSendAliasDaemon(t *testing.T, sock string) *[]cliproto.BroadcastRequest {
 	t.Helper()
 	_ = os.Remove(sock)
