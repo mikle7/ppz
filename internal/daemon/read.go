@@ -226,10 +226,19 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		// regardless of whether ack publishing succeeds, so a NATS
 		// partition can't wedge reading.
 		//
+		// Detached on a goroutine so the read RPC returns to the CLI as
+		// soon as the cursor has been written. publishEnvelope's Flush
+		// is a NATS round-trip; under WAN that's tens or hundreds of ms
+		// per ack. With N ack-eligible messages drained, a synchronous
+		// loop would hold the read open for N×RTT. emitAcks itself is
+		// designed to be best-effort (failures are silently dropped),
+		// so detaching is safe — at most we lose acks that would have
+		// been lost anyway under the same failure conditions.
+		//
 		// Reread / NoAdvance reads do NOT emit acks — the cursor isn't
 		// moving from the recipient's perspective, so claiming "they
 		// read it" would be wrong.
-		emitAcks(orgID, d.State.Current(req.Session), retained, clock.Now(), d.publishEnvelope)
+		go emitAcks(orgID, d.State.Current(req.Session), retained, clock.Now(), d.publishEnvelope)
 	}
 
 	if !req.Follow {
@@ -274,7 +283,12 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 				_ = d.Cursors.Advance(req.Session, cursorKey, md.Sequence.Stream)
 			}
 			// Per-message ack auto-emit for live messages (v0.25.0 §4).
-			emitAcks(orgID, d.State.Current(req.Session), []cliproto.ReadMessage{rm}, clock.Now(), d.publishEnvelope)
+			// Detached: synchronous emission inside the Consume callback
+			// would apply NATS-level backpressure (the next message waits
+			// for the previous ack's Flush), chunking the live stream by
+			// per-ack RTT. Same fire-and-forget semantics as the
+			// historical-drain path above.
+			go emitAcks(orgID, d.State.Current(req.Session), []cliproto.ReadMessage{rm}, clock.Now(), d.publishEnvelope)
 		}
 		_ = msg.Ack()
 	})
