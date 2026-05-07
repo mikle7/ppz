@@ -19,7 +19,7 @@ ppz_a broadcast -m "msg-3" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-3" >/dev/null
 
 echo "--- first read: drains all 3 unread ---"
-ppz_a read chat.broadcast
+ppz_a read --bare chat.broadcast
 
 echo "--- ls after first read: unread=0 ---"
 ppz_a ls | ls_normalize
@@ -29,7 +29,7 @@ ppz_a broadcast -m "msg-4" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-4" >/dev/null
 
 echo "--- second read: only the new message ---"
-ppz_a read chat.broadcast
+ppz_a read --bare chat.broadcast
 
 echo "--- ls after second read: unread=0 again ---"
 ppz_a ls | ls_normalize

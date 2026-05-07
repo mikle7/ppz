@@ -82,12 +82,15 @@ type ReadMeta struct {
 // whether --json was passed.
 //
 // Sender mirrors the envelope's `sender` (publisher's current source at
-// publish time). Empty when the publisher had no current source set, or
-// for legacy retained messages published before v0.23.0 (those carried
-// `handle` instead, which is now silently dropped on parse).
+// publish time). Subject mirrors the envelope's `subject` (optional
+// header-line, free-form for users / `ack:*` for system messages).
+// Both are empty for legacy retained messages published before v0.23.0
+// (those carried `handle` instead, which is now silently dropped on
+// parse).
 type ReadMessage struct {
 	ID        string `json:"id"`
 	Sender    string `json:"sender"`
+	Subject   string `json:"subject"`
 	Payload   string `json:"payload"`
 	CreatedAt string `json:"created_at"`
 }
@@ -197,6 +200,11 @@ type BroadcastRequest struct {
 	Handle  string `json:"handle,omitempty"`
 	Channel string `json:"channel,omitempty"`
 	Payload string `json:"payload"`
+	// MsgSubject is an optional envelope-level subject (header-line). Not
+	// exposed via a CLI flag in v0.23.0 — the field exists so daemon-
+	// internal callers (e.g. ack emission) can stamp it without another
+	// wire-shape change.
+	MsgSubject string `json:"msg_subject,omitempty"`
 	// Session keys the per-session current-source fallback when neither
 	// Handle nor PPZ_CURRENT_HANDLE is set.
 	Session string `json:"session,omitempty"`

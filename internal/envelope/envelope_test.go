@@ -8,13 +8,17 @@ import (
 )
 
 // v0.23.0: envelope carries `sender` (the broadcasting source) instead
-// of `handle` (the destination). Sender is empty when the publisher
-// has no current source set.
-func TestNew_PopulatesSender(t *testing.T) {
+// of `handle` (the destination), plus an optional `subject` (header-line
+// metadata — user-set or system-set "ack:..."). Sender / subject are
+// empty when the publisher has none.
+func TestNew_PopulatesSenderAndSubject(t *testing.T) {
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	m := New("alpha", "hi", now)
+	m := New("alpha", "status update", "hi", now)
 	if m.Sender != "alpha" {
 		t.Fatalf("Sender = %q, want %q", m.Sender, "alpha")
+	}
+	if m.Subject != "status update" {
+		t.Fatalf("Subject = %q, want %q", m.Subject, "status update")
 	}
 	if m.Payload != "hi" {
 		t.Fatalf("Payload = %q", m.Payload)
@@ -27,15 +31,18 @@ func TestNew_PopulatesSender(t *testing.T) {
 	}
 }
 
-func TestNew_EmptySenderWhenNoCurrent(t *testing.T) {
-	m := New("", "p", time.Now())
+func TestNew_EmptySenderAndSubject(t *testing.T) {
+	m := New("", "", "p", time.Now())
 	if m.Sender != "" {
 		t.Fatalf("Sender = %q, want empty", m.Sender)
+	}
+	if m.Subject != "" {
+		t.Fatalf("Subject = %q, want empty", m.Subject)
 	}
 }
 
 func TestMarshal_OmitsHandleField(t *testing.T) {
-	m := New("alpha", "hi", time.Now())
+	m := New("alpha", "", "hi", time.Now())
 	b, err := m.Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -49,9 +56,25 @@ func TestMarshal_OmitsHandleField(t *testing.T) {
 	}
 }
 
-// Old retained messages (pre-v0.23) carry "handle" but not "sender".
-// They must parse cleanly: handle is silently dropped, sender stays
-// empty (zero value for the missing field).
+// Subject MUST always serialise — even when empty — so receivers see a
+// stable shape. Conversely, decoding must accept envelopes that omit
+// the field entirely (legacy + future older publishers).
+func TestMarshal_AlwaysIncludesSubject(t *testing.T) {
+	m := New("alpha", "", "hi", time.Now())
+	b, _ := m.Marshal()
+	if !strings.Contains(string(b), `"subject":""`) {
+		t.Fatalf("empty subject must still appear on the wire: %s", b)
+	}
+	m2 := New("alpha", "ack:read", "hi", time.Now())
+	b2, _ := m2.Marshal()
+	if !strings.Contains(string(b2), `"subject":"ack:read"`) {
+		t.Fatalf("non-empty subject missing: %s", b2)
+	}
+}
+
+// Old retained messages (pre-v0.23) carry "handle" but not "sender" /
+// "subject". They must parse cleanly: handle silently dropped, the new
+// fields zero-value to "".
 func TestUnmarshal_LegacyHandleParsesCleanly(t *testing.T) {
 	legacy := []byte(`{"id":"abc","handle":"chat","payload":"hi","created_at":"2026-05-07T12:00:00Z"}`)
 	m, err := Unmarshal(legacy)
@@ -67,10 +90,13 @@ func TestUnmarshal_LegacyHandleParsesCleanly(t *testing.T) {
 	if m.Sender != "" {
 		t.Fatalf("Sender from legacy envelope = %q, want empty", m.Sender)
 	}
+	if m.Subject != "" {
+		t.Fatalf("Subject from legacy envelope = %q, want empty", m.Subject)
+	}
 }
 
-func TestUnmarshal_NewSenderRoundtrip(t *testing.T) {
-	m := New("alpha", "hi", time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC))
+func TestUnmarshal_NewShapeRoundtrip(t *testing.T) {
+	m := New("alpha", "ack:read", "hi", time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC))
 	b, err := m.Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -82,6 +108,9 @@ func TestUnmarshal_NewSenderRoundtrip(t *testing.T) {
 	if got.Sender != "alpha" {
 		t.Fatalf("Sender = %q", got.Sender)
 	}
+	if got.Subject != "ack:read" {
+		t.Fatalf("Subject = %q", got.Subject)
+	}
 	// Cross-check that the wire shape is what we expect.
 	var raw map[string]any
 	if err := json.Unmarshal(b, &raw); err != nil {
@@ -92,5 +121,8 @@ func TestUnmarshal_NewSenderRoundtrip(t *testing.T) {
 	}
 	if raw["sender"] != "alpha" {
 		t.Fatalf("wire sender = %v, want alpha", raw["sender"])
+	}
+	if raw["subject"] != "ack:read" {
+		t.Fatalf("wire subject = %v, want ack:read", raw["subject"])
 	}
 }

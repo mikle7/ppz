@@ -7,4 +7,4 @@ ppz_a source create chat >/dev/null
 ppz_a send chat "hello inbox" >/dev/null
 
 wait_for 20 "ppz_a ls | grep -q 'hello inbox'" >/dev/null
-ppz_a read inbox
+ppz_a read --bare inbox

@@ -46,7 +46,7 @@ OUT=/tmp/wan-read-output.txt
 # Use bash's EPOCHREALTIME for sub-second precision — busybox `date`
 # doesn't expand %N. Truncate to integer seconds for the assertion.
 start_s="$EPOCHREALTIME"
-ppz_a reread wantest.broadcast >"$OUT" 2>/dev/null
+ppz_a reread --bare wantest.broadcast >"$OUT" 2>/dev/null
 end_s="$EPOCHREALTIME"
 elapsed_s=$(awk -v a="$end_s" -v b="$start_s" 'BEGIN{printf "%.0f", a-b}')
 

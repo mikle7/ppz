@@ -9,4 +9,4 @@ ppz_a source create chat >/dev/null
 ppz_a send chat.broadcast "explicit hello" >/dev/null
 
 wait_for 20 "ppz_a ls | grep -q 'explicit hello'" >/dev/null
-ppz_a read chat.broadcast
+ppz_a read --bare chat.broadcast

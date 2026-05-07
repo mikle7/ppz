@@ -35,9 +35,10 @@ func cmdReread(args []string) error {
 	asJSON := fs.Bool("json", false, "emit JSON envelopes instead of payload text")
 	tty := fs.Bool("tty", false, "render concatenated payloads through a virtual terminal (vt10x)")
 	raw := fs.Bool("raw", false, "write payload bytes verbatim with no message separator")
+	bare := fs.Bool("bare", false, "force legacy payload-only output (script-stable opt-out from the v0.23 tabular default on inbox-shaped pipes)")
 	target, flagArgs, err := splitReadArgs(args, true)
 	if err != nil || target == "" {
-		fmt.Fprintln(os.Stderr, "usage: ppz reread <handle>.<pipe> [-l N --skip N --since DUR --json --tty --raw]")
+		fmt.Fprintln(os.Stderr, "usage: ppz reread <handle>.<pipe> [-l N --skip N --since DUR --json --tty --raw --bare]")
 		os.Exit(2)
 	}
 	if err := fs.Parse(flagArgs); err != nil {
@@ -47,5 +48,5 @@ func cmdReread(args []string) error {
 	if *since > 0 {
 		sinceMS = int64(*since / time.Millisecond)
 	}
-	return runRead(target, *asJSON, false /* follow */, *tty, *raw, true /* all */, *limit, *skip, sinceMS)
+	return runRead(target, *asJSON, false /* follow */, *tty, *raw, *bare, true /* all */, *limit, *skip, sinceMS)
 }

@@ -15,4 +15,4 @@ echo "--- ls reports 1 buffered message (atomic) ---"
 ppz_a ls | ls_normalize | grep '^foo.broadcast'
 
 echo "--- reread emits a single multi-line payload, newlines preserved ---"
-ppz_a reread foo.broadcast
+ppz_a reread --bare foo.broadcast

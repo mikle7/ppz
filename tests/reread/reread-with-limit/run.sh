@@ -15,4 +15,4 @@ for i in 1 2 3 4 5; do
 done
 wait_for 20 "ppz_a ls | grep -q msg-5" >/dev/null
 
-ppz_a reread chat.broadcast -l 2
+ppz_a reread --bare chat.broadcast -l 2

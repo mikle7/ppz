@@ -55,6 +55,7 @@ Published payload on every `<org_id>.<handle>.<pipe>`:
 {
   "id": "<uuid v7>",
   "sender": "<source-handle-or-empty>",
+  "subject": "<header-line-or-empty>",
   "payload": "<utf-8 string>",
   "created_at": "<rfc3339>"
 }
@@ -70,11 +71,18 @@ Constraints:
   encoded only in the subject's `<handle>`). It is the empty string when
   the publishing session has no current source set (e.g. `ppz send <dest>`
   from a session that never ran `ppz connect`).
-- Pre-v0.23.0 envelopes carried a `handle` field equal to the destination.
-  Decoders MUST silently drop unknown fields (`encoding/json` does this by
-  default — do not opt into `DisallowUnknownFields` on envelope payloads),
-  so retained pre-v0.23 messages parse cleanly under the new shape with
-  `sender == ""`. They age out of JetStream within 24h (per §2 MaxAge).
+- `subject` is an optional header-line (separate from the NATS subject in §1).
+  Two roles: free-form text (rendered as `[subject] payload` in the read
+  default for inbox-shaped pipes) and reserved system prefixes — strings
+  starting with `ack:` are reserved for daemon-emitted protocol messages
+  (e.g. `ack:read`) that the read formatter renders as
+  `<subject> → <last-8-hex-of-id>`. The empty string means "no subject".
+- Pre-v0.23.0 envelopes carried a `handle` field equal to the destination
+  and no `sender` / `subject`. Decoders MUST silently drop unknown fields
+  (`encoding/json` does this by default — do not opt into
+  `DisallowUnknownFields` on envelope payloads), so retained pre-v0.23
+  messages parse cleanly under the new shape with `sender == ""` and
+  `subject == ""`. They age out of JetStream within 24h (per §2 MaxAge).
 
 ## 4. NATS auth
 
@@ -258,9 +266,27 @@ Default pipe is `broadcast`. Stdin form strips a single trailing newline.
 ### `ppz send HANDLE.PIPE "PAYLOAD"`
 Same line shape as broadcast, with the explicit pipe.
 
-### `ppz read HANDLE.PIPE [-l N --skip N --since DUR --json -f]`
-Default: prints `evt.Message.Payload` followed by `\n` per message.
-`--json`: prints the full envelope JSON, one per line.
+### `ppz read HANDLE.PIPE [--tail --json --tty --raw --bare]`
+Default depends on the pipe (since v0.23.0):
+- `<handle>.inbox` and `<handle>.broadcast` → tabular three-column rows:
+  ```
+    HH:MM:SS  <sender|->  <body>
+                          <continuation lines, indented under <body>>
+  ```
+  `<body>` is `[subject] payload` when subject is non-empty and not `ack:*`,
+  or `<subject> → <last-8-hex-of-id>` for `ack:*` system subjects, or
+  `payload` when no subject.
+- All other pipes (stdout / stdin / stdctrl / user-named custom) → bare
+  `evt.Message.Payload` followed by `\n` per message (byte-faithful).
+
+Flags:
+- `--bare` forces the legacy payload-only output for any pipe — script-stable
+  opt-out from the new tabular default. Mutually exclusive with `--json`,
+  `--tty`, `--raw`.
+- `--json` prints the full envelope JSON, one per line.
+- `--tty` / `--raw` unchanged — see cmdRead doc.
+
+(`reread` mirrors `read`'s output flags including `--bare`.)
 
 ### `ppz kill`
 `daemon stopped pid=PID` if running, `daemon not running` if not. Exit 0 either way.

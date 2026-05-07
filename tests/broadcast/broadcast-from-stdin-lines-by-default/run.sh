@@ -16,4 +16,4 @@ echo "--- ls reports 3 buffered messages on foo.broadcast ---"
 ppz_a ls | ls_normalize | grep '^foo.broadcast'
 
 echo "--- reread emits one payload per line, in order ---"
-ppz_a reread foo.broadcast
+ppz_a reread --bare foo.broadcast

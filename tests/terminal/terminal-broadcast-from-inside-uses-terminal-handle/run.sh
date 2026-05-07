@@ -10,6 +10,6 @@ ppz_a source create other >/dev/null            # daemon's current = "other"
 ppz_a terminal share term-pipe -- sh -c 'ppz broadcast -m "from-inside"' >/dev/null
 
 # Confirm the broadcast went to term-pipe.broadcast, not other.broadcast.
-ppz_a read term-pipe.broadcast
+ppz_a read --bare term-pipe.broadcast
 echo "---other---"
-ppz_a read other.broadcast
+ppz_a read --bare other.broadcast
