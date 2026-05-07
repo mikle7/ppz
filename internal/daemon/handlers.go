@@ -648,7 +648,14 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
 		return
 	}
-	env := envelope.New(current, req.Payload, clock.Now())
+	// Sender is the broadcaster's own current source — *not* the
+	// destination. Different from `current` above when the request
+	// pins an explicit destination (`ppz send foo`, or `ppz broadcast`
+	// inside `ppz terminal` where PPZ_CURRENT_HANDLE pins the wrap
+	// source). Empty string when this session has never connected to
+	// a source — sender is nullable per WIRE.md §3.
+	sender := d.State.Current(req.Session)
+	env := envelope.New(sender, req.Payload, clock.Now())
 	data, err := env.Marshal()
 	if err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})

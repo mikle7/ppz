@@ -75,7 +75,7 @@ func TestTerminalInboxAlertPumpWritesClaudeSubmittedInboxAlertToPTYStdinAfterIdl
 
 	pump.ObserveUserInput(now, []byte("half typed command"))
 	pump.ObserveInboxMessage(now.Add(time.Second), cliproto.ReadMessage{
-		Handle:  "foo",
+		Sender:  "foo",
 		Payload: "secret inbox payload",
 	})
 
@@ -115,9 +115,9 @@ func TestTerminalInboxAlertPumpCoalescesInboxMessagesIntoOnePTYAlert(t *testing.
 		Message:   terminalInboxAlertMessage,
 	}, &ptyStdin)
 
-	pump.ObserveInboxMessage(now, cliproto.ReadMessage{Handle: "foo", Payload: "one"})
-	pump.ObserveInboxMessage(now.Add(time.Second), cliproto.ReadMessage{Handle: "foo", Payload: "two"})
-	pump.ObserveInboxMessage(now.Add(2*time.Second), cliproto.ReadMessage{Handle: "foo", Payload: "three"})
+	pump.ObserveInboxMessage(now, cliproto.ReadMessage{Sender: "foo", Payload: "one"})
+	pump.ObserveInboxMessage(now.Add(time.Second), cliproto.ReadMessage{Sender: "foo", Payload: "two"})
+	pump.ObserveInboxMessage(now.Add(2*time.Second), cliproto.ReadMessage{Sender: "foo", Payload: "three"})
 
 	if wrote := pump.Flush(now.Add(16 * time.Second)); !wrote {
 		t.Fatal("Flush after idle did not write coalesced alert")
@@ -139,7 +139,7 @@ func TestTerminalInboxAlertPumpBuffersUserInputDuringAlertMode(t *testing.T) {
 		Message:   terminalInboxAlertMessage,
 	}, &ptyStdin)
 
-	pump.ObserveInboxMessage(now, cliproto.ReadMessage{Handle: "foo"})
+	pump.ObserveInboxMessage(now, cliproto.ReadMessage{Sender: "foo"})
 	pump.BeginAlertMode(now.Add(16 * time.Second))
 
 	if forwarded := pump.ForwardUserInput(now.Add(16*time.Second), []byte("typed during alert")); forwarded {
@@ -164,12 +164,12 @@ func TestTerminalInboxAlertPumpCooldownSuppressesImmediateRepeatedAlerts(t *test
 		Message:   terminalInboxAlertMessage,
 	}, &ptyStdin)
 
-	pump.ObserveInboxMessage(now, cliproto.ReadMessage{Handle: "foo"})
+	pump.ObserveInboxMessage(now, cliproto.ReadMessage{Sender: "foo"})
 	if wrote := pump.Flush(now.Add(16 * time.Second)); !wrote {
 		t.Fatal("first Flush did not write alert")
 	}
 
-	pump.ObserveInboxMessage(now.Add(17*time.Second), cliproto.ReadMessage{Handle: "foo"})
+	pump.ObserveInboxMessage(now.Add(17*time.Second), cliproto.ReadMessage{Sender: "foo"})
 	if wrote := pump.Flush(now.Add(20 * time.Second)); wrote {
 		t.Fatalf("Flush during cooldown wrote repeated alert: %q", ptyStdin.String())
 	}
