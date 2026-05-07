@@ -36,6 +36,13 @@ fi
 # UUID pattern (any version, lowercase hex).
 sed_args+=(-e 's/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/UUID/g')
 
+# Short-form id (last-8-hex of UUID) used by `ppz send` success output and
+# the tabular read formatter for ack rows. Apply AFTER full-UUID
+# substitution so a UUID can't be partially matched here. \b is GNU-only;
+# bound on a non-hex follow-char or end-of-line for portability.
+sed_args+=(-e 's/(id=)[0-9a-f]{8}([^0-9a-f]|$)/\1ID8\2/g')
+sed_args+=(-e 's/(ack:[a-z]+ → )[0-9a-f]{8}([^0-9a-f]|$)/\1ID8\2/g')
+
 # RFC3339 timestamp (Z or +HH:MM offset, optional fractional seconds).
 sed_args+=(-e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})/TIMESTAMP/g')
 

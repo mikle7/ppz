@@ -89,11 +89,13 @@ type ReadMeta struct {
 // (those carried `handle` instead, which is now silently dropped on
 // parse).
 type ReadMessage struct {
-	ID        string `json:"id"`
-	Sender    string `json:"sender"`
-	Subject   string `json:"subject"`
-	Payload   string `json:"payload"`
-	CreatedAt string `json:"created_at"`
+	ID           string `json:"id"`
+	Sender       string `json:"sender"`
+	Subject      string `json:"subject"`
+	Payload      string `json:"payload"`
+	CreatedAt    string `json:"created_at"`
+	InReplyTo    string `json:"in_reply_to"`
+	AckRequested bool   `json:"ack_requested"`
 }
 
 // StatusRequest carries the caller's session id so the daemon can return
@@ -201,11 +203,17 @@ type BroadcastRequest struct {
 	Handle  string `json:"handle,omitempty"`
 	Channel string `json:"channel,omitempty"`
 	Payload string `json:"payload"`
-	// MsgSubject is an optional envelope-level subject (header-line). Not
-	// exposed via a CLI flag in v0.23.0 — the field exists so daemon-
-	// internal callers (e.g. ack emission) can stamp it without another
-	// wire-shape change.
+	// MsgSubject is an optional envelope-level subject (header-line). Free-
+	// form for users (set via `ppz send --subject`); subjects starting with
+	// `ack:` are reserved for daemon-internal protocol messages (ack
+	// emission) and rejected at the IPC trust boundary in handleBroadcast.
 	MsgSubject string `json:"msg_subject,omitempty"`
+	// InReplyTo / AckRequested mirror the new envelope fields (v0.25.0).
+	// JSON tags align with the envelope (`in_reply_to`, `ack_requested`)
+	// rather than the older `msg_subject` precedent — these are 1:1 with
+	// envelope fields.
+	InReplyTo    string `json:"in_reply_to,omitempty"`
+	AckRequested bool   `json:"ack_requested,omitempty"`
 	// Session keys the per-session current-source fallback when neither
 	// Handle nor PPZ_CURRENT_HANDLE is set.
 	Session string `json:"session,omitempty"`

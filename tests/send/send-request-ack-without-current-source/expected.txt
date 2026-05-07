@@ -1,0 +1,2 @@
+error: E_NO_CURRENT_SOURCE
+exit=0

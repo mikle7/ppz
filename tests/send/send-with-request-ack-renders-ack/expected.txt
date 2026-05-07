@@ -1,0 +1,2 @@
+HH:MM:SS  beta-side     ack:read → ID8
+exit=0

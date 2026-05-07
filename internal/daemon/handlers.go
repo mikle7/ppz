@@ -578,12 +578,22 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
 	}
+	// Trust-boundary check (v0.25.0, spec §3): the `ack:` subject prefix is
+	// reserved for daemon-emitted protocol messages. CLI argument
+	// validation is belt; this is suspenders — any IPC client (custom
+	// scripts, third-party tools, harness adapters) hits this same path.
+	// Daemon-internal ack auto-emission (§4) bypasses handleBroadcast and
+	// publishes envelopes directly, so this rule has no exception.
+	if strings.HasPrefix(req.MsgSubject, "ack:") {
+		writeIPCErr(conn, cliproto.New(cliproto.EInvalidSubject))
+		return
+	}
 	target, e := d.resolveBroadcastTarget(ctx, req.Handle, req.Channel, req.Session)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
 	}
-	env := envelope.New(target.sender, req.MsgSubject, req.Payload, clock.Now())
+	env := buildBroadcastEnvelope(req, target.sender, clock.Now())
 	data, err := env.Marshal()
 	if err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})

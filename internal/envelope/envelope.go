@@ -26,12 +26,24 @@ const MaxBytes = 65536 // 64 KiB cap on the encoded envelope.
 //     emitted protocol messages (e.g. `ack:read`) that the read
 //     formatter renders specially. Always serialised, even when empty,
 //     so receivers see a stable wire shape.
+// InReplyTo carries the UUID of the message this one is replying to (e.g.
+// the original message's id when the daemon auto-emits an `ack:read`).
+// Empty string when this isn't a reply. Always serialised — receivers see
+// every field, every time.
+//
+// AckRequested is the sender's opt-in to a daemon-emitted read receipt:
+// when the recipient's `ppz read` advances the cursor past a message
+// with this bit set, the recipient's daemon publishes an `ack:read`
+// envelope back to the sender's `<sender>.inbox`. Best-effort, non-
+// blocking: a failed ack publish does not block cursor advancement.
 type Message struct {
-	ID        string    `json:"id"`
-	Sender    string    `json:"sender"`
-	Subject   string    `json:"subject"`
-	Payload   string    `json:"payload"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Sender       string    `json:"sender"`
+	Subject      string    `json:"subject"`
+	Payload      string    `json:"payload"`
+	CreatedAt    time.Time `json:"created_at"`
+	InReplyTo    string    `json:"in_reply_to"`
+	AckRequested bool      `json:"ack_requested"`
 }
 
 func New(sender, subject, payload string, now time.Time) Message {

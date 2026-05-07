@@ -24,6 +24,11 @@ const (
 	EInvalidPipe       Code = "E_INVALID_PIPE"
 	EPipeTaken         Code = "E_PIPE_TAKEN"
 	EPipeNotFound      Code = "E_PIPE_NOT_FOUND"
+	// EInvalidSubject is returned when a caller (CLI flag parser or IPC
+	// client) tries to set a Subject value that violates the reserved-
+	// prefix invariant. Daemon-emitted protocol messages own the `ack:`
+	// prefix; users cannot stamp it themselves.
+	EInvalidSubject Code = "E_INVALID_SUBJECT"
 )
 
 // ExitCode returns the integer the CLI exits with for a given Code. Unknown
@@ -56,6 +61,8 @@ func ExitCode(c Code) int {
 		return 21
 	case EPipeNotFound:
 		return 22
+	case EInvalidSubject:
+		return 23
 	}
 	return 1
 }
@@ -89,6 +96,8 @@ func Message(c Code) string {
 		return "pipe with this name already exists on this source"
 	case EPipeNotFound:
 		return "pipe not found on this source"
+	case EInvalidSubject:
+		return "invalid subject; the 'ack:' prefix is reserved for system-emitted protocol messages"
 	}
 	return "unknown error"
 }
@@ -168,6 +177,8 @@ func HTTPStatus(c Code) int {
 		return 409
 	case EPipeNotFound:
 		return 404
+	case EInvalidSubject:
+		return 400
 	}
 	return 500
 }

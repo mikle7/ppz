@@ -1,0 +1,5 @@
+stdout-empty=yes
+sent id=ID8 to=chat.inbox bytes=N
+stdout-empty-ack=yes
+sent id=ID8 to=chat.inbox bytes=N ack=requested
+exit=0

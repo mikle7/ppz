@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
+	"github.com/pipescloud/ppz/internal/clock"
 	"github.com/pipescloud/ppz/internal/envelope"
 	"github.com/pipescloud/ppz/internal/natsubj"
 )
@@ -175,11 +176,13 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 				env, eerr := envelope.Unmarshal(msg.Data())
 				if eerr == nil && (sinceCutoff.IsZero() || !env.CreatedAt.Before(sinceCutoff)) {
 					retained = append(retained, cliproto.ReadMessage{
-						ID:        env.ID,
-						Sender:    env.Sender,
-						Subject:   env.Subject,
-						Payload:   env.Payload,
-						CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+						ID:           env.ID,
+						Sender:       env.Sender,
+						Subject:      env.Subject,
+						Payload:      env.Payload,
+						CreatedAt:    env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+						InReplyTo:    env.InReplyTo,
+						AckRequested: env.AckRequested,
 					})
 					lastSeqSeen = md.Sequence.Stream
 				}
@@ -216,6 +219,17 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// `reread` forensic verb leaves cursor state untouched by design).
 	if !req.NoAdvance && !req.All && lastSeqSeen > 0 {
 		_ = d.Cursors.Advance(req.Session, cursorKey, lastSeqSeen)
+
+		// Auto-emit `ack:read` back to each original sender whose
+		// message had AckRequested set (v0.25.0 §4). Advance-then-emit
+		// is intentional and load-bearing: the cursor must move
+		// regardless of whether ack publishing succeeds, so a NATS
+		// partition can't wedge reading.
+		//
+		// Reread / NoAdvance reads do NOT emit acks — the cursor isn't
+		// moving from the recipient's perspective, so claiming "they
+		// read it" would be wrong.
+		emitAcks(orgID, d.State.Current(req.Session), retained, clock.Now(), d.publishEnvelope)
 	}
 
 	if !req.Follow {
@@ -240,14 +254,16 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 			_ = msg.Ack()
 			return
 		}
-		evt := cliproto.ReadEvent{Message: &cliproto.ReadMessage{
-			ID:        env.ID,
-			Sender:    env.Sender,
-			Subject:   env.Subject,
-			Payload:   env.Payload,
-			CreatedAt: env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		}}
-		if err := enc.Encode(evt); err != nil {
+		rm := cliproto.ReadMessage{
+			ID:           env.ID,
+			Sender:       env.Sender,
+			Subject:      env.Subject,
+			Payload:      env.Payload,
+			CreatedAt:    env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			InReplyTo:    env.InReplyTo,
+			AckRequested: env.AckRequested,
+		}
+		if err := enc.Encode(cliproto.ReadEvent{Message: &rm}); err != nil {
 			// CLI has closed the connection — tear down.
 			return
 		}
@@ -257,6 +273,8 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 			if md, mderr := msg.Metadata(); mderr == nil {
 				_ = d.Cursors.Advance(req.Session, cursorKey, md.Sequence.Stream)
 			}
+			// Per-message ack auto-emit for live messages (v0.25.0 §4).
+			emitAcks(orgID, d.State.Current(req.Session), []cliproto.ReadMessage{rm}, clock.Now(), d.publishEnvelope)
 		}
 		_ = msg.Ack()
 	})
