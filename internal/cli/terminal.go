@@ -483,7 +483,19 @@ func sendStreamBatch(handle, channel string, payloads []string) error {
 	}
 	var reply cliproto.BroadcastBatchReply
 	return daemon.Call(ipcSocket(), cliproto.IPCBroadcastBatch,
-		cliproto.BroadcastBatchRequest{Handle: handle, Channel: channel, Payloads: payloads},
+		cliproto.BroadcastBatchRequest{
+			Handle:   handle,
+			Channel:  channel,
+			Payloads: payloads,
+			// Forward session id so the daemon resolves
+			// envelope.sender = d.State.Current(req.Session) against
+			// this tty's current source — same contract as the single-
+			// IPCBroadcast path. Without this, a wrapped pty's stdout
+			// stream lands sender="" and the receiver can't tell who
+			// spoke. Pinned by tests/terminal/terminal-share-uses-
+			// current-source.
+			Session: sessionID(),
+		},
 		&reply)
 }
 
