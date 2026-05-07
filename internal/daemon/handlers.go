@@ -578,84 +578,12 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
 	}
-	if _, ok := d.State.Credentials(); !ok {
-		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
+	target, e := d.resolveBroadcastTarget(ctx, req.Handle, req.Channel, req.Session)
+	if e != nil {
+		writeIPCErr(conn, e)
 		return
 	}
-
-	// Resolve target. Explicit handle/channel from the request wins (used
-	// by `ppz send` and by `ppz broadcast` when PPZ_CURRENT_HANDLE is set);
-	// otherwise fall back to the calling session's current handle on
-	// .broadcast — different terminal windows have different "current"s.
-	fromCurrent := req.Handle == "" && os.Getenv("PPZ_CURRENT_HANDLE") == ""
-	current := req.Handle
-	if current == "" {
-		current = d.State.Current(req.Session)
-	}
-	if current == "" {
-		writeIPCErr(conn, cliproto.New(cliproto.ENoCurrentSource))
-		return
-	}
-	pipe := req.Channel
-	if pipe == "" {
-		pipe = "broadcast"
-	}
-	if err := natsubj.ValidatePipe(pipe); err != nil {
-		writeIPCErr(conn, cliproto.New(cliproto.EInvalidPipe))
-		return
-	}
-	// Verify the resolved handle is a real source in this org. NATS
-	// publish silently succeeds against any subject, so without this
-	// check a stale handle (wrapped terminal whose source was deleted,
-	// or a session-current pointing at a server-side-deleted source)
-	// would return `sent id=...` while the message vanishes.
-	//
-	// For implicit (session-current) targets, ALWAYS refresh from the
-	// server. The daemon's KnowsPipe cache is durable across daemon
-	// lifetimes; without a refresh, a stale per-session current set in
-	// a previous shell can produce a confusing "source not found" error
-	// pointing at a handle the user doesn't remember setting. Detecting
-	// the staleness here lets us clear it transparently and surface the
-	// actionable error instead.
-	needRefresh := !d.State.KnowsPipe(current) || fromCurrent
-	if needRefresh {
-		var lr cliproto.ListSourcesReply
-		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
-			writeIPCErr(conn, e)
-			return
-		}
-		handles := make([]string, 0, len(lr.Sources))
-		for _, s := range lr.Sources {
-			handles = append(handles, s.Handle)
-		}
-		d.State.ResetPipes(handles)
-		if !d.State.KnowsPipe(current) {
-			if fromCurrent {
-				// Stale per-session current — clear it so the next call
-				// starts clean, and tell the user there's no current
-				// (the actionable error: "run `ppz source create HANDLE`").
-				_ = d.State.ClearCurrent(req.Session)
-				writeIPCErr(conn, cliproto.New(cliproto.ENoCurrentSource))
-				return
-			}
-			writeIPCErr(conn, cliproto.NewSourceNotFound(current))
-			return
-		}
-	}
-	orgIDStr := d.State.OrgID()
-	orgID, err := uuid.Parse(orgIDStr)
-	if err != nil {
-		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
-		return
-	}
-	// Sender is the broadcaster's own current source — *not* the
-	// destination. Different from `current` above when the request
-	// pins an explicit destination (`ppz send foo`, or `ppz broadcast`
-	// inside `ppz terminal` where PPZ_CURRENT_HANDLE pins the wrap
-	// source). Empty string when this session has never connected to
-	// a source — sender is nullable per WIRE.md §3.
-	sender := d.State.Current(req.Session)
-	env := envelope.New(sender, req.MsgSubject, req.Payload, clock.Now())
+	env := envelope.New(target.sender, req.MsgSubject, req.Payload, clock.Now())
 	data, err := env.Marshal()
 	if err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
@@ -665,25 +593,7 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, cliproto.New(cliproto.EPayloadTooLarge))
 		return
 	}
-	subject := natsubj.Subject(orgID, current, pipe)
-
-	if d.NC == nil || !d.NC.IsConnected() {
-		if err := d.ensureNATS(ctx); err != nil {
-			writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
-			return
-		}
-	}
-	// Verify the JetStream stream exists before publishing. NATS-core publish
-	// to a subject with no consumer silently succeeds; without this guard a
-	// `send foo.typo` would return `sent id=...` and the message would
-	// vanish. Stream lookup is a single round-trip — cheap.
-	if js, err := jetstream.New(d.NC); err == nil {
-		if _, err := js.Stream(ctx, natsubj.StreamName(orgID, current, pipe)); err != nil {
-			writeIPCErr(conn, cliproto.New(cliproto.EInvalidPipe))
-			return
-		}
-	}
-	if err := d.NC.Publish(subject, data); err != nil {
+	if err := d.NC.Publish(target.subject, data); err != nil {
 		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
 	}
@@ -693,7 +603,150 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 	}
 	// Bytes counts the user-visible payload, not the encoded envelope —
 	// matches WIRE.md §8 ppz broadcast and the broadcast-from-* fixtures.
-	writeIPC(conn, cliproto.BroadcastReply{ID: env.ID, Subject: subject, Bytes: len(req.Payload)})
+	writeIPC(conn, cliproto.BroadcastReply{ID: env.ID, Subject: target.subject, Bytes: len(req.Payload)})
+}
+
+// handleBroadcastBatch publishes N payloads in one IPC round-trip.
+// Validation runs once for the whole batch; the daemon then issues N
+// async nc.Publish calls followed by a SINGLE nc.Flush. Same "bytes
+// confirmed at server" contract as handleBroadcast — just amortised
+// across the batch. Used by streaming producers (terminal share's
+// stdout drain, `ppz broadcast` line-streaming) where the per-call
+// flush cost dominates throughput under WAN latency.
+func (d *Daemon) handleBroadcastBatch(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.BroadcastBatchRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+	if len(req.Payloads) == 0 {
+		writeIPC(conn, cliproto.BroadcastBatchReply{})
+		return
+	}
+	target, e := d.resolveBroadcastTarget(ctx, req.Handle, req.Channel, req.Session)
+	if e != nil {
+		writeIPCErr(conn, e)
+		return
+	}
+	ids := make([]string, 0, len(req.Payloads))
+	bytes := make([]int, 0, len(req.Payloads))
+	now := clock.Now()
+	for _, payload := range req.Payloads {
+		env := envelope.New(target.sender, "", payload, now)
+		data, err := env.Marshal()
+		if err != nil {
+			writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+			return
+		}
+		if len(data) > envelope.MaxBytes {
+			writeIPCErr(conn, cliproto.New(cliproto.EPayloadTooLarge))
+			return
+		}
+		if err := d.NC.Publish(target.subject, data); err != nil {
+			writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+			return
+		}
+		ids = append(ids, env.ID)
+		bytes = append(bytes, len(payload))
+	}
+	if err := d.NC.Flush(); err != nil {
+		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+		return
+	}
+	writeIPC(conn, cliproto.BroadcastBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
+}
+
+// broadcastTarget bundles the resolved facts a publish needs: the
+// destination subject + the sender id we stamp into the envelope.
+type broadcastTarget struct {
+	subject string
+	sender  string
+}
+
+// resolveBroadcastTarget runs the shared pre-flight for a broadcast:
+// login check, target resolution (request handle, env, session
+// current), pipe-name validation, server-side source existence (with
+// stale-current cleanup), JetStream stream existence, and ensureNATS.
+// Returns the destination subject + sender id on success. Used by
+// both handleBroadcast (single) and handleBroadcastBatch (N).
+func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChannel, session string) (broadcastTarget, *cliproto.Error) {
+	if _, ok := d.State.Credentials(); !ok {
+		return broadcastTarget{}, cliproto.New(cliproto.ENotLoggedIn)
+	}
+	// Resolve target. Explicit handle from the request wins (used by
+	// `ppz send` and by `ppz broadcast` when PPZ_CURRENT_HANDLE is
+	// set); otherwise fall back to the calling session's current
+	// handle on .broadcast — different terminal windows have
+	// different "current"s.
+	fromCurrent := reqHandle == "" && os.Getenv("PPZ_CURRENT_HANDLE") == ""
+	current := reqHandle
+	if current == "" {
+		current = d.State.Current(session)
+	}
+	if current == "" {
+		return broadcastTarget{}, cliproto.New(cliproto.ENoCurrentSource)
+	}
+	pipe := reqChannel
+	if pipe == "" {
+		pipe = "broadcast"
+	}
+	if err := natsubj.ValidatePipe(pipe); err != nil {
+		return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+	}
+	// Verify the handle is a real source in this org. NATS publish
+	// silently succeeds against any subject, so without this check a
+	// stale handle (wrapped terminal whose source was deleted, or a
+	// session-current pointing at a server-side-deleted source) would
+	// return `sent id=...` while the message vanishes.
+	//
+	// For implicit (session-current) targets, ALWAYS refresh from the
+	// server: the daemon's KnowsPipe cache is durable across daemon
+	// lifetimes; without a refresh, a stale per-session current set in
+	// a previous shell can produce a confusing "source not found"
+	// error pointing at a handle the user doesn't remember setting.
+	needRefresh := !d.State.KnowsPipe(current) || fromCurrent
+	if needRefresh {
+		var lr cliproto.ListSourcesReply
+		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
+			return broadcastTarget{}, e
+		}
+		handles := make([]string, 0, len(lr.Sources))
+		for _, s := range lr.Sources {
+			handles = append(handles, s.Handle)
+		}
+		d.State.ResetPipes(handles)
+		if !d.State.KnowsPipe(current) {
+			if fromCurrent {
+				_ = d.State.ClearCurrent(session)
+				return broadcastTarget{}, cliproto.New(cliproto.ENoCurrentSource)
+			}
+			return broadcastTarget{}, cliproto.NewSourceNotFound(current)
+		}
+	}
+	orgID, err := uuid.Parse(d.State.OrgID())
+	if err != nil {
+		return broadcastTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"}
+	}
+	if d.NC == nil || !d.NC.IsConnected() {
+		if err := d.ensureNATS(ctx); err != nil {
+			return broadcastTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+		}
+	}
+	// Verify the JetStream stream exists before publishing. NATS-core
+	// publish to a subject with no consumer silently succeeds.
+	if js, err := jetstream.New(d.NC); err == nil {
+		if _, err := js.Stream(ctx, natsubj.StreamName(orgID, current, pipe)); err != nil {
+			return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+		}
+	}
+	// Sender is the broadcaster's own current source — *not* the
+	// destination. Different when the request pins an explicit dest
+	// (`ppz send foo`, or PPZ_CURRENT_HANDLE inside `ppz terminal`).
+	// Empty when this session has never connected.
+	return broadcastTarget{
+		subject: natsubj.Subject(orgID, current, pipe),
+		sender:  d.State.Current(session),
+	}, nil
 }
 
 func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawMessage) {

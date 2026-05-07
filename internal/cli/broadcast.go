@@ -92,16 +92,57 @@ func cmdBroadcast(args []string) error {
 	// reject any single line larger than the 64 KiB envelope cap with
 	// E_PAYLOAD_TOO_LARGE. Each line publishes a "sent id=…" line —
 	// quiet mode is a `>/dev/null` away.
+	//
+	// Lines are coalesced into one IPCBroadcastBatch per "drain pass":
+	// we read whatever's available without blocking, ship the batch,
+	// then go back for more. Under WAN the per-call NATS Flush would
+	// otherwise dominate (~200 ms × N). At batch boundaries we still
+	// confirm "bytes received at server" for every queued message.
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	const maxBatch = 128
+	flushBatch := func(batch []string) error {
+		if len(batch) == 0 {
+			return nil
+		}
+		req := base
+		var reply cliproto.BroadcastBatchReply
+		batchReq := cliproto.BroadcastBatchRequest{
+			Handle:   req.Handle,
+			Channel:  req.Channel,
+			Payloads: batch,
+			Session:  req.Session,
+		}
+		if err := daemon.Call(ipcSocket(), cliproto.IPCBroadcastBatch, batchReq, &reply); err != nil {
+			return err
+		}
+		for i := range reply.IDs {
+			b := 0
+			if i < len(reply.Bytes) {
+				b = reply.Bytes[i]
+			}
+			cliproto.PrintBroadcast(os.Stdout, cliproto.BroadcastReply{
+				ID: reply.IDs[i], Subject: reply.Subject, Bytes: b,
+			})
+		}
+		return nil
+	}
+	batch := make([]string, 0, maxBatch)
 	for sc.Scan() {
 		line := sc.Text()
 		if line == "" {
 			continue
 		}
-		if err := publish(line); err != nil {
-			return err
+		batch = append(batch, line)
+		if len(batch) >= maxBatch {
+			if err := flushBatch(batch); err != nil {
+				return err
+			}
+			batch = batch[:0]
 		}
+	}
+	if err := flushBatch(batch); err != nil {
+		return err
 	}
 	return sc.Err()
 }

@@ -71,6 +71,8 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.ipcSwitch(ctx, conn, req.Params)
 	case cliproto.IPCBroadcast:
 		d.ipcBroadcast(ctx, conn, req.Params)
+	case cliproto.IPCBroadcastBatch:
+		d.handleBroadcastBatch(ctx, conn, req.Params)
 	case cliproto.IPCList:
 		d.ipcList(ctx, conn, req.Params)
 	case cliproto.IPCListWatch:

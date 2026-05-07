@@ -8,7 +8,8 @@ const (
 	IPCLogin       = "Login"
 	IPCCreate      = "Create"
 	IPCSwitch      = "Switch"
-	IPCBroadcast   = "Broadcast"
+	IPCBroadcast      = "Broadcast"
+	IPCBroadcastBatch = "BroadcastBatch"
 	IPCList        = "List"
 	IPCListWatch   = "ListWatch"
 	IPCSubscribe   = "Subscribe"
@@ -214,6 +215,31 @@ type BroadcastReply struct {
 	ID      string `json:"id"`
 	Subject string `json:"subject"`
 	Bytes   int    `json:"bytes"`
+}
+
+// BroadcastBatchRequest publishes N payloads in one IPC round-trip.
+// Used by streaming producers (terminal share's stdout drain,
+// `ppz broadcast` line-streaming) where the per-call NATS round-
+// trip cost dominates throughput under WAN. Validation runs once
+// for the whole batch; the daemon issues N async nc.Publish calls
+// followed by ONE nc.Flush, then replies with N ids — preserving
+// the same "bytes confirmed at server" contract as the single
+// IPCBroadcast call, just amortised across the batch.
+type BroadcastBatchRequest struct {
+	Handle   string   `json:"handle,omitempty"`
+	Channel  string   `json:"channel,omitempty"`
+	Payloads []string `json:"payloads"`
+	Session  string   `json:"session,omitempty"`
+}
+
+// BroadcastBatchReply mirrors BroadcastReply but as parallel arrays,
+// one entry per published payload. IDs[i] / Bytes[i] correspond to
+// Payloads[i] in the request. Subject is shared across the batch
+// (all messages land on the same handle.pipe).
+type BroadcastBatchReply struct {
+	IDs     []string `json:"ids"`
+	Subject string   `json:"subject"`
+	Bytes   []int    `json:"bytes"`
 }
 
 // PipeInfo is per-pipe state surfaced by ppz ls. Total + LastSeq come from
