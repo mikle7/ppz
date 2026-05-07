@@ -384,8 +384,35 @@ func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for payload := range publishCh {
-			_ = sendStreamLine(handle, "stdout", payload)
+		// Drain into batches: block for the first message, then sweep
+		// up everything else that's already buffered before going back
+		// to the daemon. Each batch is one IPCBroadcastBatch — the
+		// daemon issues N async publishes plus a single Flush, so a
+		// burst of PTY output collapses to ~1 round-trip total instead
+		// of N. Without this, under WAN latency the per-call Flush
+		// throttles drain to ~5 msg/sec and PTY backpressures the
+		// wrapped child.
+		const maxBatch = 128
+		for {
+			first, ok := <-publishCh
+			if !ok {
+				return
+			}
+			batch := []string{first}
+		drain:
+			for len(batch) < maxBatch {
+				select {
+				case p, ok := <-publishCh:
+					if !ok {
+						_ = sendStreamBatch(handle, "stdout", batch)
+						return
+					}
+					batch = append(batch, p)
+				default:
+					break drain
+				}
+			}
+			_ = sendStreamBatch(handle, "stdout", batch)
 		}
 	}()
 	defer func() {
@@ -445,6 +472,18 @@ func sendStreamLine(handle, channel, payload string) error {
 			// against this tty's current source — same fix as send.go.
 			Session: sessionID(),
 		},
+		&reply)
+}
+
+// sendStreamBatch publishes N messages in one daemon IPC round-trip,
+// amortising the per-message NATS Flush across the batch.
+func sendStreamBatch(handle, channel string, payloads []string) error {
+	if len(payloads) == 0 {
+		return nil
+	}
+	var reply cliproto.BroadcastBatchReply
+	return daemon.Call(ipcSocket(), cliproto.IPCBroadcastBatch,
+		cliproto.BroadcastBatchRequest{Handle: handle, Channel: channel, Payloads: payloads},
 		&reply)
 }
 

@@ -61,14 +61,16 @@ for dir in "${scenarios[@]}"; do
   rc=0
   start_ts=$(date -u +%s.%N 2>/dev/null || date -u +%s)
   # WAN scenarios are expected to take longer (latency * many calls).
-  # 60s ceiling, vs 30s for the standard suite.
-  timeout 60s bash "$dir/run.sh" >"$actual" 2>/dev/null || rc=$?
+  # 120s ceiling, vs 30s for the standard suite — gives broken
+  # baselines room to finish so we can observe the real wall-time
+  # and diff a clean assertion miss instead of a timeout.
+  timeout 120s bash "$dir/run.sh" >"$actual" 2>/dev/null || rc=$?
   end_ts=$(date -u +%s.%N 2>/dev/null || date -u +%s)
   elapsed=$(awk -v a="$end_ts" -v b="$start_ts" 'BEGIN{printf "%.1f", a-b}' 2>/dev/null || echo "?")
   echo "exit=$rc" >>"$actual"
 
   if [[ $rc -eq 124 || $rc -eq 143 ]]; then
-    echo "FAIL $rel (timeout: exceeded 60s)"
+    echo "FAIL $rel (timeout: exceeded 120s)"
     FAIL=$((FAIL + 1))
     FAILED_SCENARIOS+=("$rel (timeout)")
     rm -f "$actual" "$normalized"

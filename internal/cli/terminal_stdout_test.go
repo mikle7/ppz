@@ -203,20 +203,44 @@ func serveBlockingStdoutPublishDaemon(t *testing.T, sock string) (chan struct{},
 				if err := json.NewDecoder(conn).Decode(&req); err != nil {
 					return
 				}
-				if req.Method != cliproto.IPCBroadcast {
+				switch req.Method {
+				case cliproto.IPCBroadcast:
+					var br cliproto.BroadcastRequest
+					if err := json.Unmarshal(req.Params, &br); err != nil {
+						return
+					}
+					published.append(br.Payload)
+					if br.Payload == "first" {
+						<-release
+					}
+					_ = json.NewEncoder(conn).Encode(map[string]any{
+						"result": cliproto.BroadcastReply{ID: "id", Subject: "org.term.stdout", Bytes: len(br.Payload)},
+					})
+				case cliproto.IPCBroadcastBatch:
+					var br cliproto.BroadcastBatchRequest
+					if err := json.Unmarshal(req.Params, &br); err != nil {
+						return
+					}
+					ids := make([]string, len(br.Payloads))
+					bytes := make([]int, len(br.Payloads))
+					blockOnFirst := false
+					for i, p := range br.Payloads {
+						published.append(p)
+						ids[i] = "id"
+						bytes[i] = len(p)
+						if p == "first" {
+							blockOnFirst = true
+						}
+					}
+					if blockOnFirst {
+						<-release
+					}
+					_ = json.NewEncoder(conn).Encode(map[string]any{
+						"result": cliproto.BroadcastBatchReply{IDs: ids, Subject: "org.term.stdout", Bytes: bytes},
+					})
+				default:
 					return
 				}
-				var br cliproto.BroadcastRequest
-				if err := json.Unmarshal(req.Params, &br); err != nil {
-					return
-				}
-				published.append(br.Payload)
-				if br.Payload == "first" {
-					<-release
-				}
-				_ = json.NewEncoder(conn).Encode(map[string]any{
-					"result": cliproto.BroadcastReply{ID: "id", Subject: "org.term.stdout", Bytes: len(br.Payload)},
-				})
 			}()
 		}
 	}()
