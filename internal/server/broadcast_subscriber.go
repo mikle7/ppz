@@ -65,7 +65,13 @@ func (s *Server) handleBroadcastMsg(ctx context.Context, m *nats.Msg) {
 	if err != nil {
 		return
 	}
-	if err := db.UpdateLastBroadcast(ctx, s.Pool, orgID, env.Handle, env.CreatedAt, env.Payload); err != nil {
-		log.Printf("ppz-server: update last_broadcast for %s/%s: %v", orgID, env.Handle, err)
+	// The destination handle (which row to update) lives in the subject,
+	// not the envelope. Pre-v0.23 the envelope carried a redundant
+	// `handle` field equal to the subject's handle; v0.23 dropped it
+	// (the envelope's own `sender` is publisher-side context, distinct
+	// from destination). Always source destination from the subject.
+	destHandle := parts[1]
+	if err := db.UpdateLastBroadcast(ctx, s.Pool, orgID, destHandle, env.CreatedAt, env.Payload); err != nil {
+		log.Printf("ppz-server: update last_broadcast for %s/%s: %v", orgID, destHandle, err)
 	}
 }

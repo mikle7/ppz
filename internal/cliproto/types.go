@@ -80,9 +80,14 @@ type ReadMeta struct {
 // ReadMessage is the daemon's serialized form of one envelope. The CLI
 // formats this as either bare payload text or a JSON object depending on
 // whether --json was passed.
+//
+// Sender mirrors the envelope's `sender` (publisher's current source at
+// publish time). Empty when the publisher had no current source set, or
+// for legacy retained messages published before v0.23.0 (those carried
+// `handle` instead, which is now silently dropped on parse).
 type ReadMessage struct {
 	ID        string `json:"id"`
-	Handle    string `json:"handle"`
+	Sender    string `json:"sender"`
 	Payload   string `json:"payload"`
 	CreatedAt string `json:"created_at"`
 }

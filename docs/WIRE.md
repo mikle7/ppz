@@ -54,7 +54,7 @@ Published payload on every `<org_id>.<handle>.<pipe>`:
 ```json
 {
   "id": "<uuid v7>",
-  "handle": "<source-handle>",
+  "sender": "<source-handle-or-empty>",
   "payload": "<utf-8 string>",
   "created_at": "<rfc3339>"
 }
@@ -65,8 +65,16 @@ Constraints:
   caller.
 - Encoded envelope must not exceed 65 536 bytes after JSON marshalling. The
   daemon enforces this *before* publishing and returns `E_PAYLOAD_TOO_LARGE`.
-- The `handle` field carries the **source** handle, not the pipe name. The
-  pipe name is only encoded in the subject.
+- `sender` is the publisher's own current source at publish time — *who is
+  speaking*, distinct from where the message is going (the destination is
+  encoded only in the subject's `<handle>`). It is the empty string when
+  the publishing session has no current source set (e.g. `ppz send <dest>`
+  from a session that never ran `ppz connect`).
+- Pre-v0.23.0 envelopes carried a `handle` field equal to the destination.
+  Decoders MUST silently drop unknown fields (`encoding/json` does this by
+  default — do not opt into `DisallowUnknownFields` on envelope payloads),
+  so retained pre-v0.23 messages parse cleanly under the new shape with
+  `sender == ""`. They age out of JetStream within 24h (per §2 MaxAge).
 
 ## 4. NATS auth
 
