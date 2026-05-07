@@ -1,0 +1,2 @@
+{"sender":"operator","payload":"ls -la"}
+exit=0
