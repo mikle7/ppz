@@ -1,0 +1,3 @@
+current source: caller
+{"sender":"caller","payload":"hello from caller"}
+exit=0
