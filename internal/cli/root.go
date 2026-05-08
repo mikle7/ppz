@@ -135,6 +135,14 @@ Setup (once per workstation):
   ppz daemon login URL -apikey K   log the daemon into a server with an api key
   ppz daemon logout                clear the stored credential
 
+  Agents / subprocess-per-call: each shell session has its own current
+  source (keyed off the calling tty). Subprocesses with no shared tty
+  get a fresh session id per invocation, so 'ppz source create' in one
+  call won't be visible to the next — and 'ppz send --request-ack' will
+  reject with E_NO_CURRENT_SOURCE. Pin a stable id by exporting
+  PPZ_SESSION=<id> at the agent's lifecycle level so all subsequent
+  ppz calls share session state.
+
 Sources (your addressable identities):
   ppz source create HANDLE         create + set as current
                                    (errors if HANDLE already exists)
