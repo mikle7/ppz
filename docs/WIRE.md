@@ -57,7 +57,9 @@ Published payload on every `<org_id>.<handle>.<pipe>`:
   "sender": "<source-handle-or-empty>",
   "subject": "<header-line-or-empty>",
   "payload": "<utf-8 string>",
-  "created_at": "<rfc3339>"
+  "created_at": "<rfc3339>",
+  "in_reply_to": "<uuid-or-empty>",
+  "ack_requested": false
 }
 ```
 
@@ -70,19 +72,38 @@ Constraints:
   speaking*, distinct from where the message is going (the destination is
   encoded only in the subject's `<handle>`). It is the empty string when
   the publishing session has no current source set (e.g. `ppz send <dest>`
-  from a session that never ran `ppz connect`).
+  from a session whose current is unset).
 - `subject` is an optional header-line (separate from the NATS subject in §1).
   Two roles: free-form text (rendered as `[subject] payload` in the read
   default for inbox-shaped pipes) and reserved system prefixes — strings
   starting with `ack:` are reserved for daemon-emitted protocol messages
   (e.g. `ack:read`) that the read formatter renders as
   `<subject> → <last-8-hex-of-id>`. The empty string means "no subject".
+- `in_reply_to` (v0.25.0) is the UUID of the message this one replies to —
+  set on `ack:read` envelopes by the daemon's auto-emit hook so the
+  original sender can correlate the ack to a specific message. Empty
+  string when the envelope isn't a reply.
+- `ack_requested` (v0.25.0) is the sender's opt-in to a daemon-emitted
+  read receipt: when the recipient's `ppz read` cursor advances past a
+  message with `ack_requested: true`, the recipient's daemon publishes
+  an `ack:read` envelope back to `<original_sender>.inbox`. The flag
+  is **best-effort and non-blocking** — a failed ack publish does not
+  block cursor advancement, so a sender sees no ack if either the
+  recipient hasn't read yet OR the ack publish itself failed (the two
+  are indistinguishable). Senders requiring strict guarantees should
+  layer their own re-send-on-timeout pattern. The auto-emitted
+  `ack:read` envelope carries `ack_requested: false` (loop guard).
+- All envelope fields are **always serialised**, even when empty / false,
+  so receivers see a stable wire shape per release. Marshalling does
+  NOT use `omitempty` for any of `sender` / `subject` / `in_reply_to` /
+  `ack_requested`.
 - Pre-v0.23.0 envelopes carried a `handle` field equal to the destination
-  and no `sender` / `subject`. Decoders MUST silently drop unknown fields
-  (`encoding/json` does this by default — do not opt into
-  `DisallowUnknownFields` on envelope payloads), so retained pre-v0.23
-  messages parse cleanly under the new shape with `sender == ""` and
-  `subject == ""`. They age out of JetStream within 24h (per §2 MaxAge).
+  and no `sender` / `subject`. Pre-v0.25.0 envelopes additionally lack
+  `in_reply_to` / `ack_requested`. Decoders MUST silently drop unknown
+  fields (`encoding/json` does this by default — do not opt into
+  `DisallowUnknownFields` on envelope payloads), so retained legacy
+  messages parse cleanly under the new shape with the missing fields
+  zero-valued. They age out of JetStream within 24h (per §2 MaxAge).
 
 ## 4. NATS auth
 
@@ -263,8 +284,40 @@ sent id=UUID subject=<org_id>.<handle>.<pipe> bytes=<n>
 ```
 Default pipe is `broadcast`. Stdin form strips a single trailing newline.
 
-### `ppz send HANDLE.PIPE "PAYLOAD"`
-Same line shape as broadcast, with the explicit pipe.
+### `ppz send HANDLE[.PIPE] "PAYLOAD" [--subject S] [--in-reply-to ID] [--request-ack]`
+
+Bare handle defaults to `<handle>.inbox`. Success line goes to **stderr**
+(not stdout) since v0.25.0 — scripts redirecting stdout previously
+swallowed it. The `id` shown is the last 8 hex characters of the UUID
+(visual brevity); the full UUID stays in the message envelope:
+
+```
+sent id=<id8> to=<handle>.<pipe> bytes=<n>
+sent id=<id8> to=<handle>.<pipe> bytes=<n> ack=requested    # with --request-ack
+```
+
+Stderr only survives stdout-only redirects (`>file`, `>/dev/null`). It
+does NOT survive combined-stream redirects (`&>file`, `2>&1 >file`) —
+which is the explicit semantics of "redirect everything".
+
+Flags (v0.25.0):
+- `--subject S` — sets the envelope-level subject (header-line). The
+  `ack:` prefix is reserved for daemon-emitted protocol messages and
+  rejected by the CLI argument parser AND by the daemon's IPC trust
+  boundary (`E_INVALID_SUBJECT`).
+- `--in-reply-to ID` — sets the envelope's `in_reply_to` to a previous
+  message's UUID; renders as a thread linkage in the tabular read
+  default.
+- `--request-ack` — requests a daemon-emitted `ack:read` back to the
+  sender's inbox when the recipient's `ppz read` advances past this
+  message. **Best-effort, non-blocking.** Requires a non-empty current
+  source (preflighted at the CLI; emits `E_NO_CURRENT_SOURCE` if absent).
+
+The `--request-ack` flag triggers a read receipt — distinct from the
+delivery acknowledgment the success line itself already provides. The
+success line is written *after* the daemon's NATS PubAck confirms the
+broker durably stored the message; `--request-ack` is asking
+specifically for read confirmation.
 
 ### `ppz read HANDLE.PIPE [--tail --json --tty --raw --bare]`
 Default depends on the pipe (since v0.23.0):

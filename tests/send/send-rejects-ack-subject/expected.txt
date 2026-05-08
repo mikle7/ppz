@@ -1,0 +1,2 @@
+error: E_INVALID_SUBJECT
+exit=0

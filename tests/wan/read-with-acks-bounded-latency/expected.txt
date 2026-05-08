@@ -1,0 +1,4 @@
+read_msg_count: 50
+read_under_5s: yes
+ack_count: 50
+exit=0

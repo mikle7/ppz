@@ -95,6 +95,98 @@ func TestUnmarshal_LegacyHandleParsesCleanly(t *testing.T) {
 	}
 }
 
+// v0.25.0: envelope grows two more always-serialised fields:
+//   - in_reply_to: uuid of the message this one replies to ("" when none).
+//   - ack_requested: bool, sender wants an `ack:read` auto-emitted by the
+//     receiver's daemon when its cursor advances past this message.
+//
+// Wire-shape rule (§1 of the spec): same as sender/subject — always
+// serialised, even when empty/false, so receivers see a stable shape.
+func TestNew_DefaultsInReplyToAndAckRequested(t *testing.T) {
+	m := New("alpha", "", "hi", time.Now())
+	if m.InReplyTo != "" {
+		t.Fatalf("InReplyTo default = %q, want empty", m.InReplyTo)
+	}
+	if m.AckRequested {
+		t.Fatalf("AckRequested default = true, want false")
+	}
+}
+
+func TestMarshal_AlwaysIncludesInReplyToAndAckRequested(t *testing.T) {
+	m := New("alpha", "", "hi", time.Now())
+	b, _ := m.Marshal()
+	s := string(b)
+	if !strings.Contains(s, `"in_reply_to":""`) {
+		t.Fatalf("empty in_reply_to must appear on the wire: %s", s)
+	}
+	if !strings.Contains(s, `"ack_requested":false`) {
+		t.Fatalf("false ack_requested must appear on the wire: %s", s)
+	}
+
+	m2 := New("alpha", "", "hi", time.Now())
+	m2.InReplyTo = "abc-123"
+	m2.AckRequested = true
+	b2, _ := m2.Marshal()
+	s2 := string(b2)
+	if !strings.Contains(s2, `"in_reply_to":"abc-123"`) {
+		t.Fatalf("populated in_reply_to missing from wire: %s", s2)
+	}
+	if !strings.Contains(s2, `"ack_requested":true`) {
+		t.Fatalf("true ack_requested missing from wire: %s", s2)
+	}
+}
+
+// Old retained messages (pre-v0.25) lack in_reply_to / ack_requested.
+// They must parse cleanly with both fields zero-valued.
+func TestUnmarshal_LegacyV24EnvelopeParsesCleanly(t *testing.T) {
+	legacy := []byte(`{"id":"abc","sender":"alpha","subject":"","payload":"hi","created_at":"2026-05-07T12:00:00Z"}`)
+	m, err := Unmarshal(legacy)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m.Sender != "alpha" || m.Payload != "hi" {
+		t.Fatalf("legacy envelope decoded wrong: %+v", m)
+	}
+	if m.InReplyTo != "" {
+		t.Fatalf("InReplyTo from legacy envelope = %q, want empty", m.InReplyTo)
+	}
+	if m.AckRequested {
+		t.Fatalf("AckRequested from legacy envelope = true, want false")
+	}
+}
+
+// Round-trip preserves both fields when populated.
+func TestUnmarshal_V25RoundtripWithReplyAndAck(t *testing.T) {
+	m := New("alpha", "", "reply payload", time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC))
+	m.InReplyTo = "11111111-2222-3333-4444-555566667777"
+	m.AckRequested = true
+	b, err := m.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Unmarshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.InReplyTo != m.InReplyTo {
+		t.Fatalf("InReplyTo roundtrip = %q, want %q", got.InReplyTo, m.InReplyTo)
+	}
+	if got.AckRequested != true {
+		t.Fatalf("AckRequested roundtrip = %v, want true", got.AckRequested)
+	}
+	// Cross-check raw wire keys.
+	var raw map[string]any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw["in_reply_to"] != m.InReplyTo {
+		t.Fatalf("wire in_reply_to = %v, want %s", raw["in_reply_to"], m.InReplyTo)
+	}
+	if raw["ack_requested"] != true {
+		t.Fatalf("wire ack_requested = %v, want true", raw["ack_requested"])
+	}
+}
+
 func TestUnmarshal_NewShapeRoundtrip(t *testing.T) {
 	m := New("alpha", "ack:read", "hi", time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC))
 	b, err := m.Marshal()
