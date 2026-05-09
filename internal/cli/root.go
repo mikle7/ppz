@@ -35,6 +35,8 @@ func Run(args []string) error {
 		return cmdPipeGroup(rest)
 	case "terminal":
 		return cmdTerminal(rest)
+	case "agent":
+		return cmdAgentGroup(rest)
 	case "login":
 		// Top-level shortcut for `ppz daemon login` — matches the
 		// `gh login` / `kubectl login` / `az login` muscle memory.
@@ -170,6 +172,20 @@ Terminal:
   ppz terminal read H [reread-flags] wrapper for 'ppz reread H.stdout' with
                                     --tty as the default output mode (vt10x
                                     screen render — rebuild cumulative state)
+
+Agents:
+  ppz agent create NAME [PROMPT]    create pty source NAME and run an AI
+                                    harness in it. Default: --claude --opus.
+                                    Switches:
+                                      --claude | --copilot | --codex
+                                              | --gemini | --pi
+                                      --opus | --sonnet | --haiku  (claude)
+                                      --model X                    (any harness)
+                                      --prompt-file PATH           (instead of
+                                                                    positional)
+                                      --new-window                 (open a fresh
+                                                                    Terminal.app /
+                                                                    iTerm2 window)
 
 Other:
   ppz version                      print the binary's version + build sha
