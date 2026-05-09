@@ -139,6 +139,31 @@ func Run(ctx context.Context, cfg Config) error {
 	// provisions each account (see subscribeBroadcasts in
 	// broadcast_subscriber.go). No global subscriber is needed.
 
+	// Pre-warm the embedded NATS account resolver from the postgres
+	// `organisations` table. The resolver lives in-memory on the
+	// embedded NATS server, so a server restart drops every previously-
+	// registered account. Without prewarm, NATS clients holding
+	// already-issued user JWTs (e.g. ppz daemons that connected before
+	// the restart) would fail their first reconnect with "Authorization
+	// Violation" — and recovery would only happen lazily, when the
+	// client's next HTTP /auth/exchange call hits AccountPool.Get and
+	// triggers Store again.
+	//
+	// Best-effort: a partial failure (e.g. one malformed JWT in the
+	// table) shouldn't block server boot. Per-org failures log + skip.
+	if orgs, err := db.ListOrganisations(ctx, pool); err == nil {
+		for _, o := range orgs {
+			if o.NATSAccountPub == "" || o.NATSAccountJWT == "" {
+				continue
+			}
+			if err := srv.NATSResolver.Store(o.NATSAccountPub, o.NATSAccountJWT); err != nil {
+				log.Printf("server: prewarm resolver for %s: %v", o.Name, err)
+			}
+		}
+	} else {
+		log.Printf("server: prewarm list orgs: %v", err)
+	}
+
 	mux := srv.Routes()
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

@@ -24,10 +24,60 @@ import (
 	"github.com/pipescloud/ppz/internal/natsubj"
 )
 
+// natsObserveOptions returns the connection-state observation handlers
+// (Phase 0 of agent hardening). Both connect helpers below splat these
+// onto every nats.Connect so disconnect / reconnect / closed transitions
+// land in the daemon's NATSEventRing — surfaced by `ppz status` and
+// `ppz diag`.
+//
+// Phase 0 is observe-only — no behaviour change. We do NOT pass
+// nats.MaxReconnects(-1) or jitter options here; those are Phase 1
+// fixes scoped against the data this instrumentation produces.
+//
+// Caller passes the ring rather than the daemon to keep the helpers
+// importable from anywhere they're needed without a circular reference
+// back to the daemon struct. ring may be nil (tests / paths without
+// observability), in which case the handlers no-op.
+func natsObserveOptions(ring *NATSEventRing) []nats.Option {
+	record := func(typ, reason string) {
+		if ring == nil {
+			return
+		}
+		ring.Append(typ, reason, time.Now())
+	}
+	return []nats.Option{
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			reason := ""
+			if err != nil {
+				reason = err.Error()
+			}
+			record("disconnect", reason)
+		}),
+		nats.ReconnectHandler(func(nc *nats.Conn) {
+			reason := ""
+			if nc != nil {
+				if u := nc.ConnectedUrl(); u != "" {
+					reason = u
+				}
+			}
+			record("reconnect", reason)
+		}),
+		nats.ClosedHandler(func(nc *nats.Conn) {
+			reason := ""
+			if nc != nil {
+				if e := nc.LastError(); e != nil {
+					reason = e.Error()
+				}
+			}
+			record("closed", reason)
+		}),
+	}
+}
+
 // connectNATSWithJWT connects to NATS at url, authenticating with the
 // supplied User JWT + seed (Phase 3). Static — kept for legacy code
 // paths that don't yet flow through the refresh loop.
-func connectNATSWithJWT(url, userJWT, userSeed string) (*nats.Conn, error) {
+func connectNATSWithJWT(url, userJWT, userSeed string, ring *NATSEventRing) (*nats.Conn, error) {
 	if userJWT == "" || userSeed == "" {
 		return nil, errors.New("connectNATSWithJWT: missing nats user jwt/seed in credentials")
 	}
@@ -35,12 +85,13 @@ func connectNATSWithJWT(url, userJWT, userSeed string) (*nats.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse user seed: %w", err)
 	}
-	return nats.Connect(url,
+	opts := append([]nats.Option{
 		nats.UserJWT(
 			func() (string, error) { return userJWT, nil },
 			func(nonce []byte) ([]byte, error) { return kp.Sign(nonce) },
 		),
-	)
+	}, natsObserveOptions(ring)...)
+	return nats.Connect(url, opts...)
 }
 
 // connectNATSWithRefresh connects to NATS at url, reading the live
@@ -48,12 +99,12 @@ func connectNATSWithJWT(url, userJWT, userSeed string) (*nats.Conn, error) {
 // nats.go calls the callbacks once per connection establishment; if
 // the refresh loop has rotated credentials in the meantime, the next
 // reconnect picks up the fresh values.
-func connectNATSWithRefresh(url string, r *RefreshLoop) (*nats.Conn, error) {
+func connectNATSWithRefresh(url string, r *RefreshLoop, ring *NATSEventRing) (*nats.Conn, error) {
 	jwt, seed := r.Current()
 	if jwt == "" || seed == "" {
 		return nil, errors.New("connectNATSWithRefresh: refresh loop has no credentials yet")
 	}
-	return nats.Connect(url,
+	opts := append([]nats.Option{
 		nats.UserJWT(
 			func() (string, error) {
 				j, _ := r.Current()
@@ -74,7 +125,8 @@ func connectNATSWithRefresh(url string, r *RefreshLoop) (*nats.Conn, error) {
 				return kp.Sign(nonce)
 			},
 		),
-	)
+	}, natsObserveOptions(ring)...)
+	return nats.Connect(url, opts...)
 }
 
 // authExchangeRefresh is the RefreshFn we register with RefreshLoop.
@@ -202,7 +254,7 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 		d.NC = nil
 	}
 	d.startRefreshLoop(ex.OrgID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
-	if nc, err := connectNATSWithRefresh(natsURL, d.Refresh); err == nil {
+	if nc, err := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents); err == nil {
 		d.NC = nc
 	}
 
@@ -273,7 +325,13 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	// is unknown — set to a near-past value so the loop fires
 	// immediately and refreshes from the bearer.
 	d.ensureRefreshLoopFromCreds(creds)
-	nc, err := connectNATSWithRefresh(d.NATSURL, d.Refresh)
+	// Did the daemon previously have a connection that was non-functional?
+	// If so, the fresh NC we're about to build represents a recovery —
+	// from the operator's perspective, the daemon "reconnected" to NATS.
+	// Record that signal alongside the nats.go-provided ReconnectHandler
+	// events so `ppz diag` surfaces both reconnect mechanisms.
+	wasDisconnected := d.NC != nil && !d.NC.IsConnected()
+	nc, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.NATSEvents)
 	if err != nil {
 		return cliproto.New(cliproto.ENATSUnreachable)
 	}
@@ -281,6 +339,9 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 		d.NC.Close()
 	}
 	d.NC = nc
+	if wasDisconnected && d.NATSEvents != nil {
+		d.NATSEvents.Append("reconnect", "ensureNATS rebuilt connection", time.Now())
+	}
 	return nil
 }
 

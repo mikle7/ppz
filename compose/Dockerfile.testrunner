@@ -11,7 +11,13 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/ppz ./cmd/ppz
 RUN CGO_ENABLED=0 go build -trimpath -tags headless -o /out/ppz-desktop ./cmd/ppz-desktop
 
 FROM alpine:3.20
-RUN apk add --no-cache bash curl jq postgresql16-client diffutils
+# docker-cli is included unconditionally (~30 MB) because the
+# reliability suite (tests/reliability/*) needs to dynamically stop /
+# start sibling containers via the host Docker daemon. Reliability
+# tests are gated by `make e2e-reliability` and the docker-compose
+# overlay that mounts /var/run/docker.sock; the binary is harmless
+# when the socket isn't mounted.
+RUN apk add --no-cache bash curl jq postgresql16-client diffutils docker-cli
 # nats CLI (single static binary).
 ARG NATS_VERSION=0.1.5
 RUN wget -qO /tmp/nats.zip "https://github.com/nats-io/natscli/releases/download/v${NATS_VERSION}/nats-${NATS_VERSION}-linux-amd64.zip" \

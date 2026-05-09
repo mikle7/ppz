@@ -224,13 +224,14 @@ Methods (Phase 1.5 reality — verbs unchanged in this phase):
 
 | Method | Params | Result |
 |---|---|---|
-| `Status` | `{}` | `{"daemon_pid":int,"daemon_version":str?,"logged_in":bool,"url":str?,"key_prefix":str?,"org_id":str?,"current":str?}` |
+| `Status` | `{}` | `{"daemon_pid":int,"daemon_version":str?,"logged_in":bool,"url":str?,"key_prefix":str?,"org_id":str?,"current":str?,"nats_state":str?}` |
 | `Login` | `{"url":str,"api_key":str}` | `{"url":str,"key_prefix":str,"org_id":str}` |
 | `Create` | `{"handle":str,"kind":str}` | `{"handle":str,"subject":str,"kind":str}` |
 | `Switch` | `{"handle":str}` | `{"handle":str}` |
 | `Broadcast` | `{"handle":str?,"channel":str?,"payload":str}` | `{"id":str,"subject":str,"bytes":int}` |
 | `List` | `{"session":str?}` | `{"sources":[{"handle":str,"kind":str,"pipe_infos":[{"pipe":str,"total":int,"unread":int,"last_at":str?,"preview":str},…],"last_broadcast_at":str?,"last_broadcast_payload":str?},…]}` |
 | `Read` | `{"handle":str,"channel":str,"limit":int?,"skip":int?,"since_ms":int?,"json":bool?,"follow":bool?,"session":str?,"no_advance":bool?}` | streaming `ReadEvent` JSON lines |
+| `Diag` | `{}` | `{"nats_state":str?,"nats_drops_last_hour":int?,"nats_events":[{"type":str,"at":str,"reason":str?},…]}` |
 
 Errors are returned as JSON-RPC errors with `code` = the integer exit code from
 ERRORS.md and `message` = `"E_FOO: human readable"`.
@@ -256,11 +257,19 @@ daemon: logged in (pid=PID), <daemon_version> (<latest|not latest>)
 last token refresh: <relative time|->
 server: <URL>
 org: <org_name_or_id>
+nats: <connected|disconnected|connecting|unknown>
 current source: <handle>
 ```
 Logged in, no current source: same with `current source: -`.
 Logged in, no auth: `daemon: not logged in (pid=PID), <daemon_version> (<latest|not latest>)` plus a login hint.
 Daemon not running (exit 11): `daemon: not running`.
+
+The `nats:` line surfaces the daemon's current connection state to the
+NATS server. The state vocabulary is fixed (`connected` /
+`disconnected` / `connecting` / `unknown`). The line is deliberately
+terse — per-event detail (drop counts, timestamps, error reasons)
+lives in `ppz diag` instead, so a noisy connection history doesn't
+churn `ppz status` output.
 
 ### `ppz login URL -apikey K`
 ```
@@ -340,6 +349,40 @@ Flags:
 - `--tty` / `--raw` unchanged — see cmdRead doc.
 
 (`reread` mirrors `read`'s output flags including `--bare`.)
+
+### `ppz diag [--json]`
+
+Daemon introspection (Phase 0 of agent hardening). Prints the current
+NATS connection state plus the most recent connection-state events the
+daemon has observed (capped at 32 entries, drop-oldest). Useful for
+catching transient outages "a few minutes ago" that have already
+recovered by the time `ppz status` runs.
+
+The verb deliberately does NOT require login. An operator hitting a
+sick daemon (login fails, NATS unreachable) needs `ppz diag` to work —
+that's the whole point. Only `ppz status` reporting "daemon: not
+running" prevents `ppz diag` from succeeding (no socket to talk to).
+
+Default output:
+```
+nats: <connected|disconnected|connecting|unknown> drops_last_hour=N events=N
+<type> <RFC3339-timestamp> reason="<text>"
+…
+```
+
+Where `<type>` is one of `disconnect` / `reconnect` / `closed`. The
+`reason` field captures the underlying error string for disconnect /
+closed events (e.g. `"connection closed"`); for reconnect it captures
+the URL the client reconnected to. Empty when nats.go provided none.
+
+Test contract: each event line begins with the type token (anchored
+to start-of-line). Detail tokens after the timestamp are free-form —
+add fields as Phase 1+ work surfaces them, but don't change the type
+prefix.
+
+`--json` emits a single JSON object matching the IPC `DiagReply`
+shape: `{"nats_state":str, "nats_drops_last_hour":int,
+"nats_events":[{"type":str, "at":str, "reason":str}, …]}`.
 
 ### `ppz kill`
 `daemon stopped pid=PID` if running, `daemon not running` if not. Exit 0 either way.

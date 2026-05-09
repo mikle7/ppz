@@ -32,15 +32,23 @@ type Daemon struct {
 	// Refresh.Current() so reconnects pick up fresh credentials.
 	// Stopped on Logout / replaced on Login.
 	Refresh *RefreshLoop
+
+	// Phase 0 (agent hardening) — short tail of NATS connection-state
+	// transitions. Surfaced by `ppz status` (latest state) and
+	// `ppz diag` (full ring). Initialised in New() so the handlers
+	// registered on the very first nats.Connect have a non-nil ring
+	// to append to.
+	NATSEvents *NATSEventRing
 }
 
 func New(home, sock string) *Daemon {
 	return &Daemon{
-		Home:    home,
-		Sock:    sock,
-		State:   NewState(home),
-		HTTP:    &http.Client{Timeout: 5 * time.Second},
-		Cursors: newCursors(home),
+		Home:       home,
+		Sock:       sock,
+		State:      NewState(home),
+		HTTP:       &http.Client{Timeout: 5 * time.Second},
+		Cursors:    newCursors(home),
+		NATSEvents: newNATSEventRing(natsEventRingCap),
 	}
 }
 

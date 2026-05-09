@@ -1,0 +1,17 @@
+# Reliability suite overlay. Layers on top of compose/docker-compose.yml;
+# adds Docker-socket access to the test-runner so reliability scenarios
+# can dynamically stop / start the `ppz-server` container (simulating
+# NATS outages, daemon-side connection drops, etc.).
+#
+# Used by `make e2e-reliability{,-up,-run,-rebuild}`. Tests live under
+# tests/reliability/* — the standard tests/run.sh skips this directory
+# so reliability scenarios only run under this overlay (where the
+# socket is mounted).
+#
+# The Docker socket grants effective root on the host, so this overlay
+# is OFF by default — only `make e2e-reliability` uses it.
+
+services:
+  test-runner:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

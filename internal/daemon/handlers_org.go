@@ -152,7 +152,7 @@ func (d *Daemon) handleOrgSwitch(ctx context.Context, conn net.Conn, params json
 		d.NC = nil
 	}
 	d.startRefreshLoop(ex.OrgID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
-	if nc, err := connectNATSWithRefresh(natsURL, d.Refresh); err == nil {
+	if nc, err := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents); err == nil {
 		d.NC = nc
 	}
 

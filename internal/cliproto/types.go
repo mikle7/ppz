@@ -25,6 +25,12 @@ const (
 	IPCOrgSwitch = "OrgSwitch"
 	IPCOrgCreate = "OrgCreate"
 	IPCOrgInvite = "OrgInvite"
+
+	// Diag verb (Phase 0 — agent hardening). Returns the daemon's
+	// recent NATS connection-state events for `ppz diag`. Works
+	// without credentials and without a live NATS connection — the
+	// whole point is being able to introspect a sick daemon.
+	IPCDiag = "Diag"
 )
 
 // Source kinds, mirrored from internal/db so non-db callers can use them.
@@ -126,6 +132,13 @@ type StatusReply struct {
 	// actual file (which lives in the daemon's home, not the CLI's, when
 	// they're separate processes).
 	CurrentPath string `json:"current_path,omitempty"`
+	// NATSState is one of "connected", "disconnected", "connecting" —
+	// the daemon's current NATS connection state. Empty means
+	// unobserved (no connection ever attempted, e.g. fresh daemon
+	// pre-login). Drives the `nats:` line in `ppz status` output;
+	// underlying event log is available via `ppz diag`. (Phase 0 of
+	// agent hardening, docs/WIRE.md §8.)
+	NATSState string `json:"nats_state,omitempty"`
 }
 
 // LoginCheck values reported by StatusReply. Constants live in cliproto
@@ -474,4 +487,27 @@ type SourceDestroyReply struct {
 // HTTPError is the body shape of a non-2xx HTTP response.
 type HTTPError struct {
 	Error Error `json:"error"`
+}
+
+// DiagRequest is the input to `ppz diag` — currently empty. Reserved
+// for future scoping flags (per-subsystem filters, since-when, etc.).
+type DiagRequest struct{}
+
+// DiagEvent is one connection-state transition in DiagReply. Fields
+// mirror the daemon's NATSEvent struct (kept as a separate type so
+// the IPC contract is independent of internal storage).
+type DiagEvent struct {
+	Type   string    `json:"type"`
+	At     time.Time `json:"at"`
+	Reason string    `json:"reason,omitempty"`
+}
+
+// DiagReply carries the daemon's introspection snapshot. Phase 0:
+// just the NATS connection state + recent connection-state events.
+// Future phases will extend with refresh-loop state, JetStream
+// consumer lag, etc.
+type DiagReply struct {
+	NATSState         string      `json:"nats_state,omitempty"`
+	NATSDropsLastHour int         `json:"nats_drops_last_hour,omitempty"`
+	NATSEvents        []DiagEvent `json:"nats_events"`
 }

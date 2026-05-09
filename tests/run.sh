@@ -39,11 +39,14 @@ mapfile -t scenarios < <(find "$TESTS_DIR" -mindepth 2 -maxdepth 3 -name run.sh 
 
 for dir in "${scenarios[@]}"; do
   rel="${dir#$TESTS_DIR/}"
-  # WAN scenarios run only under the e2e-wan harness (tests/wan/run.sh),
-  # which boots compose with the latency overlay. They'd false-pass
-  # here (no latency injected) — skip outright.
+  # WAN and reliability scenarios run only under their dedicated
+  # harnesses (tests/wan/run.sh, tests/reliability/run.sh), each with
+  # its own compose overlay. They'd false-pass here (no latency
+  # injected for WAN; no Docker socket mounted for reliability) — skip
+  # outright.
   case "$rel" in
     wan|wan/*) continue ;;
+    reliability|reliability/*) continue ;;
   esac
   # shellcheck disable=SC2053
   if [[ "$rel" != $filter && "$rel" != $filter/* ]]; then

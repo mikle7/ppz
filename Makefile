@@ -1,4 +1,4 @@
-.PHONY: help build install test compose-build compose-up compose-down e2e e2e-filter e2e-up e2e-run e2e-rebuild e2e-down e2e-wan e2e-wan-filter e2e-wan-up e2e-wan-run e2e-wan-rebuild e2e-wan-down dev dev-down clean tag patch minor major undo push
+.PHONY: help build install test compose-build compose-up compose-down e2e e2e-filter e2e-up e2e-run e2e-rebuild e2e-down e2e-wan e2e-wan-filter e2e-wan-up e2e-wan-run e2e-wan-rebuild e2e-wan-down e2e-reliability e2e-reliability-filter e2e-reliability-up e2e-reliability-run e2e-reliability-rebuild e2e-reliability-down dev dev-down clean tag patch minor major undo push
 
 # `make tag {patch|minor|major}`  — bump the latest semver tag and create
 #                                   an annotated git tag at HEAD (local
@@ -189,6 +189,37 @@ e2e-wan-rebuild:
 
 e2e-wan-down:
 	$(COMPOSE_WAN) down -v --remove-orphans
+
+# Reliability suite — boots the standard stack with the reliability
+# overlay (Docker socket mount on test-runner) so scenarios can stop /
+# start sibling containers to simulate NATS outages and reconnect
+# behaviour. Tests live under tests/reliability/* and are skipped by
+# the standard tests/run.sh.
+COMPOSE_RELIABILITY := docker compose -f compose/docker-compose.yml -f compose/docker-compose.reliability.yml
+
+e2e-reliability:
+	$(COMPOSE_RELIABILITY) build test-runner
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_RELIABILITY) run --rm test-runner timeout 15m bash /tests/reliability/run.sh
+
+e2e-reliability-filter:
+	$(COMPOSE_RELIABILITY) build test-runner
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_RELIABILITY) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/reliability/run.sh
+
+e2e-reliability-up:
+	$(COMPOSE_RELIABILITY) build test-runner
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+
+e2e-reliability-run:
+	$(COMPOSE_RELIABILITY) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/reliability/run.sh
+
+e2e-reliability-rebuild:
+	$(COMPOSE_RELIABILITY) build
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+
+e2e-reliability-down:
+	$(COMPOSE_RELIABILITY) down -v --remove-orphans
 
 e2e-down:
 	$(COMPOSE) down -v --remove-orphans
