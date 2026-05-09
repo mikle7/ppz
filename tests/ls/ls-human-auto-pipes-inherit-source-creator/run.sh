@@ -12,9 +12,10 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)"  >/dev/null  # foo
 ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha2)" >/dev/null  # bar
 
-ppz_a source create chat >/dev/null
-ppz_b connect chat       >/dev/null
-ppz_b pipe create notes  >/dev/null
+ppz_a source create chat     >/dev/null
+ppz_b pipe create chat.notes >/dev/null
+
+wait_for 20 "ppz_a ls --json | grep -q '\"notes\"'" >/dev/null
 
 # Project just (pipe, human) so the diff is tight.
 ppz_a ls --json | jq -c '{pipe, human}'

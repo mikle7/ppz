@@ -9,8 +9,12 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)"  >/dev/null  # foo
 ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha2)" >/dev/null  # bar
 
-ppz_a source create chat >/dev/null   # source created by foo
-ppz_b connect chat       >/dev/null   # bar's session sets `current=chat`
-ppz_b pipe create notes  >/dev/null   # pipe created by bar on foo's source
+ppz_a source create chat       >/dev/null   # source created by foo
+ppz_b pipe create chat.notes   >/dev/null   # pipe created by bar on foo's source
+
+# Daemon A's view is built from the server's GET /api/v1/sources +
+# JetStream enrichment; allow up to a beat for JetStream stream
+# provisioning to complete on the new pipe.
+wait_for 20 "ppz_a ls --json | grep -q '\"notes\"'" >/dev/null
 
 ppz_a ls --json | jq -c '{handle, pipe, human}'
