@@ -83,7 +83,7 @@ func Message(c Code) string {
 	case EInvalidHandle:
 		return "invalid handle: must match [a-z0-9-] (max 32, no leading/trailing -, not reserved)"
 	case ENoCurrentSource:
-		return "no current source; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one)"
+		return "no current source for this shell session; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state"
 	case EPayloadTooLarge:
 		return "payload too large; max 64KiB encoded"
 	case EServerUnreachable:

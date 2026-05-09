@@ -1,5 +1,5 @@
 --- broadcast with stale current — should be E_NO_CURRENT_SOURCE, not E_SOURCE_NOT_FOUND ---
-error: E_NO_CURRENT_SOURCE: no current source; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one)
+error: E_NO_CURRENT_SOURCE: no current source for this shell session; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state
 broadcast_exit=16
 --- status after broadcast — current should be cleared ---
 current source: -

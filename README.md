@@ -73,6 +73,32 @@ there's no shadowing risk if you mix them. Override with
 | `ppz-natsbootstrap` | Self-hosters (`PPZ_INCLUDE_SERVER=1`) | One-shot helper that mints an ephemeral NATS NSC chain (operator + account JWTs) for a fresh server. Production usually pulls these from a secret manager instead. |
 | `ppz-seed`          | Source / e2e only | Populates the OSS test fixtures (`foo`/`bar` users, `alpha`/`beta` orgs). Built from source by the compose harness — not published in release tarballs. |
 
+## Using ppz from agents
+
+ppz keeps **current-source** state per shell session, keyed off the calling
+tty. For interactive use that's transparent — open a terminal, run
+`ppz source create alpha`, every subsequent `ppz` call in the same window
+sees `alpha` as current.
+
+For agents that run each command as a fresh subprocess (most agent harnesses
+do — Claude Code's Bash tool, OpenAI's code interpreter, container `exec`
+flows), there's no shared tty across calls, so each invocation gets its own
+session id. `ppz source create alpha` in one subprocess won't be visible to
+the next, and `ppz send … --request-ack` will trip `E_NO_CURRENT_SOURCE`.
+
+The fix is one line at the agent's lifecycle level — pin a stable session id
+once and every call inherits it:
+
+```bash
+export PPZ_SESSION="agent-${AGENT_NAME}"
+ppz source create alpha
+ppz send beta "ping" --request-ack    # sees alpha as current; ack routes back
+```
+
+Without `PPZ_SESSION`, plain `ppz send <handle> <payload>` still works for
+delivery but lands with empty `sender` attribution; `--request-ack` and
+`broadcast` (which require a current source on the publish side) will reject.
+
 ## Docs
 
 - [`docs/AUTH-V2.md`](docs/AUTH-V2.md) — auth design (GitHub OAuth + per-org NATS account JWTs)
