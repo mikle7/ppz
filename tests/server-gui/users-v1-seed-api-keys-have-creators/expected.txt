@@ -1,0 +1,4 @@
+alpha-primary→foo
+alpha-secondary→bar
+beta-primary→bar
+exit=0

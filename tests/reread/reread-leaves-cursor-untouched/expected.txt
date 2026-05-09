@@ -3,13 +3,13 @@ msg-1
 msg-2
 msg-3
 --- ls after reread: unread still 3 (cursor not advanced) ---
-chat.broadcast 3 3 RELATIVE msg-3
-chat.inbox 0 0 - -
+chat.broadcast 3 3 RELATIVE msg-3 foo
+chat.inbox 0 0 - - foo
 --- subsequent default read: still drains all 3 ---
 msg-1
 msg-2
 msg-3
 --- ls after default read: unread=0 ---
-chat.broadcast 0 3 RELATIVE msg-3
-chat.inbox 0 0 - -
+chat.broadcast 0 3 RELATIVE msg-3 foo
+chat.inbox 0 0 - - foo
 exit=0

@@ -13,4 +13,4 @@ ppz_a terminal share pty-pipe -- true >/dev/null
 # dependent on the default cols/rows that no-tty wraps fall back to.
 ppz_a ls \
   | ls_normalize \
-  | sed -E 's| \{.*"type":"resize".*\}$| STDCTRL_JSON|'
+  | sed -E 's| \{[^}]*"type":"resize"[^}]*\}| STDCTRL_JSON|'

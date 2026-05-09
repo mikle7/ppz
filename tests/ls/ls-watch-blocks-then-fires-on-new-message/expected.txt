@@ -1,4 +1,4 @@
 --- watch fired with new message visible ---
-chat.broadcast 1 2 RELATIVE new
-chat.inbox 0 0 - -
+chat.broadcast 1 2 RELATIVE new foo
+chat.inbox 0 0 - - foo
 exit=0

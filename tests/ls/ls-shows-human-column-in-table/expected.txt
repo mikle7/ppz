@@ -1,0 +1,4 @@
+PIPE UNREAD BUFFERED LAST PAYLOAD HUMAN
+chat.broadcast 1 1 RELATIVE hello world foo
+chat.inbox 0 0 - - foo
+exit=0

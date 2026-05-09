@@ -1,0 +1,5 @@
+{"handle":"chat-bar","pipe":"broadcast","human":"bar"}
+{"handle":"chat-bar","pipe":"inbox","human":"bar"}
+{"handle":"chat-foo","pipe":"broadcast","human":"foo"}
+{"handle":"chat-foo","pipe":"inbox","human":"foo"}
+exit=0

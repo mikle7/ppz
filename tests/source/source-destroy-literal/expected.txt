@@ -1,6 +1,6 @@
 --- before destroy ---
-apple.broadcast 0 0 - -
-apple.inbox 0 0 - -
+apple.broadcast 0 0 - - foo
+apple.inbox 0 0 - - foo
 destroyed source=apple
 --- after destroy ---
 no apple rows

@@ -1,8 +1,8 @@
 --- before destroy ---
-alpha.broadcast 0 0 - -
-alpha.inbox 0 0 - -
-beta.broadcast 0 0 - -
-beta.inbox 0 0 - -
+alpha.broadcast 0 0 - - foo
+alpha.inbox 0 0 - - foo
+beta.broadcast 0 0 - - foo
+beta.inbox 0 0 - - foo
 destroyed source=alpha
 destroyed source=beta
 --- after destroy ---

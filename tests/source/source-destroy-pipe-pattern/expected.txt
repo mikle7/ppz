@@ -1,15 +1,15 @@
 --- before destroy ---
-apple.broadcast 0 0 - -
-apple.custom 0 0 - -
-apple.inbox 0 0 - -
-banana.broadcast 0 0 - -
-banana.custom 0 0 - -
-banana.inbox 0 0 - -
+apple.broadcast 0 0 - - foo
+apple.custom 0 0 - - foo
+apple.inbox 0 0 - - foo
+banana.broadcast 0 0 - - foo
+banana.custom 0 0 - - foo
+banana.inbox 0 0 - - foo
 destroyed pipe=apple.custom
 destroyed pipe=banana.custom
 --- after destroy ---
-apple.broadcast 0 0 - -
-apple.inbox 0 0 - -
-banana.broadcast 0 0 - -
-banana.inbox 0 0 - -
+apple.broadcast 0 0 - - foo
+apple.inbox 0 0 - - foo
+banana.broadcast 0 0 - - foo
+banana.inbox 0 0 - - foo
 exit=0
