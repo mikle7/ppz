@@ -1,0 +1,3 @@
+disconnect
+reconnect
+exit=0
