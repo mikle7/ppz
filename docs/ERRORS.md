@@ -53,10 +53,10 @@ entity name available) keep the static message.
 | `E_NO_CURRENT_SOURCE` | `no current source for this shell session; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state` |
 | `E_PAYLOAD_TOO_LARGE` | `payload too large; max 64KiB encoded` |
 | `E_SERVER_UNREACHABLE` | `server unreachable` |
-| `E_NATS_UNREACHABLE` | `nats unreachable; if running ppz daemon outside docker, set PPZ_NATS_URL=nats://localhost:4222 before 'ppz daemon start'` |
+| `E_NATS_UNREACHABLE` | `nats unreachable; common causes: expired credentials (try 'ppz daemon logout' then re-login), or on non-docker setups missing PPZ_NATS_URL=nats://localhost:4222` |
 | `E_INVALID_PIPE` (reserved) | `pipe name '<name>' is reserved` |
 | `E_INVALID_PIPE` (regex) | `pipe name '<name>' is invalid: must match [a-z0-9-] (max 32, no leading/trailing -)` |
-| `E_INVALID_PIPE` (other) | `invalid pipe; target must be <handle>.<pipe> with pipe ∈ {broadcast, stdin, stdout}` |
+| `E_INVALID_PIPE` (other) | `invalid pipe; check for typos, or for custom pipes run 'ppz pipe create <handle>.<name>' first` |
 | `E_PIPE_TAKEN` | `pipe '<name>' already exists on source '<handle>'` |
 | `E_PIPE_NOT_FOUND` | `pipe '<name>' not found on source '<handle>'` |
 | `E_INVALID_SUBJECT` | `invalid subject; the 'ack:' prefix is reserved for system-emitted protocol messages` |

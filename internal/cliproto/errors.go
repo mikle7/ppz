@@ -89,9 +89,16 @@ func Message(c Code) string {
 	case EServerUnreachable:
 		return "server unreachable"
 	case ENATSUnreachable:
-		return "nats unreachable; if running ppz daemon outside docker, set PPZ_NATS_URL=nats://localhost:4222 before 'ppz daemon start'"
+		// MoltHub 2026-05-08: most-common cause was expired credentials,
+		// not URL misconfig. Lead with that; keep PPZ_NATS_URL guidance
+		// for non-docker setups.
+		return "nats unreachable; common causes: expired credentials (try 'ppz daemon logout' then re-login), or on non-docker setups missing PPZ_NATS_URL=nats://localhost:4222"
 	case EInvalidPipe:
-		return "invalid pipe; target must be <handle>.<pipe> with pipe ∈ {broadcast, inbox, stdin, stdout}"
+		// MoltHub 2026-05-08: enumerating only the four built-in pipes
+		// misled agents into thinking custom pipes were unsupported.
+		// Cover both common causes (typo / missing custom pipe) and
+		// point at the actionable command.
+		return "invalid pipe; check for typos, or for custom pipes run 'ppz pipe create <handle>.<name>' first"
 	case EPipeTaken:
 		return "pipe with this name already exists on this source"
 	case EPipeNotFound:
