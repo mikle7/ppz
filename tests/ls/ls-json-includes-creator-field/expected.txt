@@ -1,0 +1,3 @@
+{"handle":"chat","pipe":"broadcast","creator":"foo","has_payload_key":true}
+{"handle":"chat","pipe":"inbox","creator":"foo","has_payload_key":true}
+exit=0

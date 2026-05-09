@@ -1,4 +1,4 @@
-{"handle":"chat","pipe":"broadcast","human":"foo"}
-{"handle":"chat","pipe":"inbox","human":"foo"}
-{"handle":"chat","pipe":"notes","human":"bar"}
+{"handle":"chat","pipe":"broadcast","creator":"foo"}
+{"handle":"chat","pipe":"inbox","creator":"foo"}
+{"handle":"chat","pipe":"notes","creator":"bar"}
 exit=0

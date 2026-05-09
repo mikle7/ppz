@@ -77,14 +77,14 @@ func TestBroadcastRequest_HasReplyAndAckFields(t *testing.T) {
 	}
 }
 
-// HUMAN column: the daemon attaches the source's creator username on
+// CREATOR column: the daemon attaches the source's creator username on
 // every Source row (CreatedBy) and — for user-created pipes — the
-// pipe's own creator on PipeInfo.CreatedBy. The CLI renders HUMAN as
-// the rightmost column on `ppz ls` and as `human` in `ppz ls --json`.
+// pipe's own creator on PipeInfo.CreatedBy. The CLI renders CREATOR as
+// the rightmost column on `ppz ls` and as `creator` in `ppz ls --json`.
 //
 // JSON tag is "created_by" (canonical, matches the column on the
 // underlying tables) — the formatter maps that to the user-facing
-// "human" key when emitting `ppz ls --json`. This test pins the wire
+// "creator" key when emitting `ppz ls --json`. This test pins the wire
 // shape, not the rendered shape.
 func TestSource_HasCreatedByField(t *testing.T) {
 	s := Source{Handle: "chat", CreatedBy: "foo"}

@@ -8,13 +8,13 @@ import (
 	"time"
 )
 
-// `ppz ls` gains a HUMAN column — the username that created the
+// `ppz ls` gains a CREATOR column — the username that created the
 // (source, pipe). Layout:
 //
-//	PIPE  UNREAD  BUFFERED  LAST  PAYLOAD  HUMAN
+//	PIPE  UNREAD  BUFFERED  LAST  PAYLOAD  CREATOR
 //
-// HUMAN is the rightmost column. That demotes PAYLOAD from "trailing
-// un-padded" to a regular padded column so HUMAN aligns across rows
+// CREATOR is the rightmost column. That demotes PAYLOAD from "trailing
+// un-padded" to a regular padded column so CREATOR aligns across rows
 // (the previous "preview at most 60 chars" cap means the column is
 // bounded — worst case ~60 chars of padding for short-payload rows).
 //
@@ -62,7 +62,7 @@ func TestPrintList_HumanColumnHeaderIsRightmost(t *testing.T) {
 
 	header := strings.SplitN(buf.String(), "\n", 2)[0]
 	fields := strings.Fields(header)
-	wantOrder := []string{"PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "HUMAN"}
+	wantOrder := []string{"PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "CREATOR"}
 	if len(fields) != len(wantOrder) {
 		t.Fatalf("header field count = %d (%v), want %d (%v)", len(fields), fields, len(wantOrder), wantOrder)
 	}
@@ -87,14 +87,14 @@ func TestPrintList_AutoPipesInheritSourceCreator(t *testing.T) {
 		fields := strings.Fields(line)
 		human := fields[len(fields)-1]
 		if human != "foo" {
-			t.Errorf("auto-pipe row %q must carry source creator 'foo' as HUMAN; got %q", line, human)
+			t.Errorf("auto-pipe row %q must carry source creator 'foo' as CREATOR; got %q", line, human)
 		}
 	}
 }
 
 func TestPrintList_PipeLevelCreatorOverridesSource(t *testing.T) {
 	// Source created by foo; user-created pipe `archive` created by bar.
-	// HUMAN on the auto-pipes is foo; HUMAN on chat.archive is bar.
+	// CREATOR on the auto-pipes is foo; CREATOR on chat.archive is bar.
 	withFrozenNow(t, fixedNow())
 	at := fixedNow().Add(-5 * time.Minute)
 	src := Source{
@@ -126,16 +126,16 @@ func TestPrintList_PipeLevelCreatorOverridesSource(t *testing.T) {
 		}
 		got := fields[len(fields)-1]
 		if got != want {
-			t.Errorf("row %q: HUMAN = %q, want %q", line, got, want)
+			t.Errorf("row %q: CREATOR = %q, want %q", line, got, want)
 		}
 	}
 }
 
 func TestPrintList_ColumnAlignmentWithVaryingUsernames(t *testing.T) {
-	// HUMAN width must adapt to the widest username in the rendered
-	// rows. The header HUMAN must align with every data row's HUMAN
+	// CREATOR width must adapt to the widest username in the rendered
+	// rows. The header CREATOR must align with every data row's CREATOR
 	// cell (or be the last token on each row, which is also fine
-	// since HUMAN is rightmost).
+	// since CREATOR is rightmost).
 	withFrozenNow(t, fixedNow())
 	at := fixedNow().Add(-5 * time.Minute)
 	sources := []Source{
@@ -164,8 +164,8 @@ func TestPrintList_ColumnAlignmentWithVaryingUsernames(t *testing.T) {
 }
 
 func TestPrintList_PayloadColumnNoLongerSwallowsHuman(t *testing.T) {
-	// Regression guard for the "PAYLOAD un-padded, HUMAN last" layout:
-	// even when the preview contains internal spaces, HUMAN must remain
+	// Regression guard for the "PAYLOAD un-padded, CREATOR last" layout:
+	// even when the preview contains internal spaces, CREATOR must remain
 	// a separable trailing token.
 	withFrozenNow(t, fixedNow())
 	at := fixedNow().Add(-5 * time.Minute)
@@ -184,7 +184,7 @@ func TestPrintList_PayloadColumnNoLongerSwallowsHuman(t *testing.T) {
 		}
 		fields := strings.Fields(line)
 		if got := fields[len(fields)-1]; got != "foo" {
-			t.Errorf("HUMAN must be the last token on the row; got %q (line=%q)", got, line)
+			t.Errorf("CREATOR must be the last token on the row; got %q (line=%q)", got, line)
 		}
 	}
 }
@@ -219,7 +219,7 @@ func TestPrintListJSON_IncludesHumanField(t *testing.T) {
 			t.Errorf("unexpected pipe %q in output", pipe)
 			continue
 		}
-		got, _ := obj["human"].(string)
+		got, _ := obj["creator"].(string)
 		if got != want {
 			t.Errorf("pipe %q: human=%q want %q (line=%q)", pipe, got, want, line)
 		}

@@ -1,5 +1,5 @@
-{"handle":"chat-bar","pipe":"broadcast","human":"bar"}
-{"handle":"chat-bar","pipe":"inbox","human":"bar"}
-{"handle":"chat-foo","pipe":"broadcast","human":"foo"}
-{"handle":"chat-foo","pipe":"inbox","human":"foo"}
+{"handle":"chat-bar","pipe":"broadcast","creator":"bar"}
+{"handle":"chat-bar","pipe":"inbox","creator":"bar"}
+{"handle":"chat-foo","pipe":"broadcast","creator":"foo"}
+{"handle":"chat-foo","pipe":"inbox","creator":"foo"}
 exit=0

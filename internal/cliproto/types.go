@@ -271,7 +271,7 @@ type BroadcastBatchReply struct {
 // CreatedBy is the username of the user who created this pipe. Empty for
 // auto-provisioned pipes (broadcast / inbox / stdin / stdout / stdctrl) —
 // the renderer falls back to the source's CreatedBy when this field is
-// empty so HUMAN is never blank in the output. omitempty keeps the wire
+// empty so CREATOR is never blank in the output. omitempty keeps the wire
 // shape clean when a daemon-side intermediate doesn't carry the join.
 type PipeInfo struct {
 	Pipe      string     `json:"pipe"`

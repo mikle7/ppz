@@ -1,3 +1,0 @@
-{"handle":"chat","pipe":"broadcast","human":"foo","has_payload_key":true}
-{"handle":"chat","pipe":"inbox","human":"foo","has_payload_key":true}
-exit=0

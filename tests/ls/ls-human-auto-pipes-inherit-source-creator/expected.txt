@@ -1,4 +1,0 @@
-{"pipe":"broadcast","human":"foo"}
-{"pipe":"inbox","human":"foo"}
-{"pipe":"notes","human":"bar"}
-exit=0

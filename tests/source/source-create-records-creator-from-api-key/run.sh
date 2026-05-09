@@ -14,4 +14,4 @@ ppz_b source create chat-bar >/dev/null
 # `--json` carries the per-row username on every (source, pipe) row.
 # Both daemons should see both sources (same org, alpha) — assert from
 # A so we also confirm cross-daemon visibility.
-ppz_a ls --json | jq -c '{handle, pipe, human}'
+ppz_a ls --json | jq -c '{handle, pipe, creator}'

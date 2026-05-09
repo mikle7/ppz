@@ -17,5 +17,5 @@ ppz_b pipe create chat.notes >/dev/null
 
 wait_for 20 "ppz_a ls --json | grep -q '\"notes\"'" >/dev/null
 
-# Project just (pipe, human) so the diff is tight.
-ppz_a ls --json | jq -c '{pipe, human}'
+# Project just (pipe, creator) so the diff is tight.
+ppz_a ls --json | jq -c '{pipe, creator}'

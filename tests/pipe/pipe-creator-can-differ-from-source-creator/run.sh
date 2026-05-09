@@ -17,4 +17,4 @@ ppz_b pipe create chat.notes   >/dev/null   # pipe created by bar on foo's sourc
 # provisioning to complete on the new pipe.
 wait_for 20 "ppz_a ls --json | grep -q '\"notes\"'" >/dev/null
 
-ppz_a ls --json | jq -c '{handle, pipe, human}'
+ppz_a ls --json | jq -c '{handle, pipe, creator}'
