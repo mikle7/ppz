@@ -99,6 +99,8 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handleOrgCreate(ctx, conn, req.Params)
 	case cliproto.IPCOrgInvite:
 		d.handleOrgInvite(ctx, conn, req.Params)
+	case cliproto.IPCDiag:
+		d.handleDiag(ctx, conn, req.Params)
 	default:
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: "unknown method " + req.Method})
 	}
@@ -119,6 +121,7 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		DaemonPID:     os.Getpid(),
 		DaemonVersion: version.Version,
 	}
+	reply.NATSState = natsStateString(d.NC)
 	if creds, ok := d.State.Credentials(); ok {
 		reply.LoggedIn = true
 		reply.URL = creds.URL

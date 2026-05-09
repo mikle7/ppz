@@ -28,6 +28,7 @@ func TestPrintStatus_IncludesLastTokenRefreshRelativeTime(t *testing.T) {
 		"last token refresh: 5 minutes ago\n" +
 		"server: https://pipescloud.io\n" +
 		"org: jamesmiles\n" +
+		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
 		t.Fatalf("status output mismatch\nwant:\n%q\ngot:\n%q", want, got)
@@ -49,6 +50,7 @@ func TestPrintStatus_IncludesMissingLastTokenRefreshPlaceholder(t *testing.T) {
 		"last token refresh: -\n" +
 		"server: https://pipescloud.io\n" +
 		"org: jamesmiles\n" +
+		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
 		t.Fatalf("status output mismatch\nwant:\n%q\ngot:\n%q", want, got)
@@ -134,6 +136,7 @@ func TestPrintStatus_IncludesDaemonVersionMatch(t *testing.T) {
 		"last token refresh: -\n" +
 		"server: https://pipescloud.io\n" +
 		"org: jamesmiles\n" +
+		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
 		t.Fatalf("status output mismatch\nwant:\n%q\ngot:\n%q", want, got)

@@ -30,8 +30,11 @@ docker start compose-ppz-server-1 >/dev/null
 
 # Wait for the daemon to be reachable to NATS again. `ppz ls` round-
 # trips through NATS on every call, so its success is the canonical
-# user-visible signal that recovery completed.
-wait_for 600 'ppz_a ls 2>/dev/null'
+# user-visible signal that recovery completed. Both stdout (the table
+# itself, which prints once `ls` succeeds) and stderr (errors during
+# the polling loop) need silencing — we're using `ls` purely as a
+# health probe; only the diag output below matters for the assertion.
+wait_for 600 'ppz_a ls >/dev/null 2>&1'
 
 # `ppz diag` must list both events. Print just the event-type tokens
 # (sorted, deduped) so the assertion stays insensitive to ordering

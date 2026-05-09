@@ -12,8 +12,23 @@ if [ "${PPZ_SEED:-false}" = "true" ]; then
 fi
 
 if [ -z "${PPZ_NATS_OPERATOR_JWT:-}" ]; then
-  echo "[entrypoint] bootstrapping ephemeral NATS NSC/JWT credentials..."
-  eval "$(/usr/local/bin/ppz-natsbootstrap | sed 's/^/export /')"
+  # Cache the bootstrap output to a file on the (persistent) seed
+  # volume. Without this, a container restart (`docker stop` + `docker
+  # start`) regenerates the NATS Operator key — invalidating every
+  # already-issued account / user JWT. The reliability suite stops +
+  # starts ppz-server to exercise NATS outage recovery; clients with
+  # pre-issued JWTs would then hit "Authorization Violation" on
+  # reconnect, masking real reconnect-handler signal under what's
+  # actually a key-rotation problem. The seed volume is recreated by
+  # `make e2e-up` so each fresh test run still gets fresh keys.
+  cache="${PPZ_SEED_DIR:-/seed}/nats-bootstrap.env"
+  if [ ! -s "$cache" ]; then
+    echo "[entrypoint] bootstrapping ephemeral NATS NSC/JWT credentials..."
+    /usr/local/bin/ppz-natsbootstrap > "$cache"
+  else
+    echo "[entrypoint] reusing cached NATS NSC/JWT credentials from $cache"
+  fi
+  eval "$(sed 's/^/export /' "$cache")"
 fi
 
 exec /usr/local/bin/ppz-server

@@ -132,6 +132,7 @@ func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, cur
 	} else {
 		fmt.Fprintf(w, "org: %s\n", c.green(s.OrgID))
 	}
+	fmt.Fprintln(w, formatNATSLine(c, s))
 
 	daemonCurrent := s.Current
 	switch {
@@ -170,6 +171,38 @@ func normaliseVersionForCompare(v string) string {
 	v = strings.TrimSpace(v)
 	v = strings.TrimPrefix(v, "v")
 	return v
+}
+
+// formatNATSLine renders the `nats:` line for `ppz status` (Phase 0
+// of agent hardening). Format pinned by tests/reliability/
+// nats-status-line — the prefix `nats: (connected|disconnected|
+// connecting)` is the contract.
+//
+// We deliberately keep the status line TERSE — just the current state
+// token. Per-event detail (timestamps, drop counters, error reasons)
+// lives in `ppz diag` instead. Surfacing drop counts here would have
+// made `ppz status` fixtures flap whenever the daemon's lifetime
+// crossed an unrelated reconnect (test isolation issue: the ring
+// accumulates events across scenarios that share a daemon process).
+// `ppz diag` is the right place to look when you want detail.
+//
+// State "" (daemon hasn't observed a NATS connection yet — fresh
+// process pre-login) renders as "unknown" so we don't lie.
+func formatNATSLine(c statusColors, s StatusReply) string {
+	state := s.NATSState
+	if state == "" {
+		state = "unknown"
+	}
+	colored := state
+	switch state {
+	case "connected":
+		colored = c.green(state)
+	case "disconnected", "unknown":
+		colored = c.red(state)
+	case "connecting":
+		colored = c.dim(state)
+	}
+	return fmt.Sprintf("nats: %s", colored)
 }
 
 func coloredTokenRefreshAge(c statusColors, t, now time.Time) string {
