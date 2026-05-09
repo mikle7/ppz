@@ -16,12 +16,13 @@ import (
 )
 
 type APIKey struct {
-	ID             uuid.UUID
-	OrganisationID uuid.UUID
-	KeyHash        string
-	KeyPrefix      string
-	Label          string
-	CreatedAt      time.Time
+	ID              uuid.UUID
+	OrganisationID  uuid.UUID
+	CreatedByUserID uuid.UUID // user that minted the key (NOT NULL)
+	KeyHash         string
+	KeyPrefix       string
+	Label           string
+	CreatedAt       time.Time
 	// RevokedAt is nil for active keys, set to the revoke time once
 	// `POST /api/v1/keys/<id>/revoke` flips it. LookupAPIKey filters
 	// out revoked rows; the GUI shows them with strikethrough so the
@@ -101,7 +102,10 @@ func VerifyAPIKey(plaintext, stored string) bool {
 	return subtle.ConstantTimeCompare(want, got) == 1
 }
 
-func InsertAPIKey(ctx context.Context, p *Pool, orgID uuid.UUID, label string) (key APIKey, plaintext string, err error) {
+// InsertAPIKey mints a fresh plaintext key, hashes it, and writes the row.
+// `createdBy` is the user who minted the key — required (NOT NULL on the
+// table) so every key is attributable for `ppz ls` HUMAN.
+func InsertAPIKey(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, label string) (key APIKey, plaintext string, err error) {
 	plaintext, err = GeneratePlaintextKey()
 	if err != nil {
 		return APIKey{}, "", err
@@ -111,17 +115,18 @@ func InsertAPIKey(ctx context.Context, p *Pool, orgID uuid.UUID, label string) (
 		return APIKey{}, "", err
 	}
 	key = APIKey{
-		ID:             uuid.New(),
-		OrganisationID: orgID,
-		KeyHash:        hash,
-		KeyPrefix:      KeyPrefix(plaintext),
-		Label:          label,
-		CreatedAt:      time.Now().UTC(),
+		ID:              uuid.New(),
+		OrganisationID:  orgID,
+		CreatedByUserID: createdBy,
+		KeyHash:         hash,
+		KeyPrefix:       KeyPrefix(plaintext),
+		Label:           label,
+		CreatedAt:       time.Now().UTC(),
 	}
 	_, err = p.Exec(ctx,
-		`INSERT INTO api_keys (id, organisation_id, key_hash, key_prefix, label, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		key.ID, key.OrganisationID, key.KeyHash, key.KeyPrefix, key.Label, key.CreatedAt)
+		`INSERT INTO api_keys (id, organisation_id, created_by_user_id, key_hash, key_prefix, label, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		key.ID, key.OrganisationID, key.CreatedByUserID, key.KeyHash, key.KeyPrefix, key.Label, key.CreatedAt)
 	return key, plaintext, err
 }
 
@@ -131,7 +136,7 @@ func InsertAPIKey(ctx context.Context, p *Pool, orgID uuid.UUID, label string) (
 func LookupAPIKey(ctx context.Context, p *Pool, plaintext string) (APIKey, error) {
 	prefix := KeyPrefix(plaintext)
 	rows, err := p.Query(ctx,
-		`SELECT id, organisation_id, key_hash, key_prefix, label, created_at, revoked_at
+		`SELECT id, organisation_id, created_by_user_id, key_hash, key_prefix, label, created_at, revoked_at
 		   FROM api_keys WHERE key_prefix = $1 AND revoked_at IS NULL`, prefix)
 	if err != nil {
 		return APIKey{}, err
@@ -139,7 +144,7 @@ func LookupAPIKey(ctx context.Context, p *Pool, plaintext string) (APIKey, error
 	defer rows.Close()
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.ID, &k.OrganisationID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.OrganisationID, &k.CreatedByUserID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
 			return APIKey{}, err
 		}
 		if VerifyAPIKey(plaintext, k.KeyHash) {
@@ -158,7 +163,7 @@ func LookupAPIKey(ctx context.Context, p *Pool, plaintext string) (APIKey, error
 // revoked rows.
 func ListAPIKeysForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]APIKey, error) {
 	rows, err := p.Query(ctx,
-		`SELECT id, organisation_id, key_hash, key_prefix, label, created_at, revoked_at
+		`SELECT id, organisation_id, created_by_user_id, key_hash, key_prefix, label, created_at, revoked_at
 		   FROM api_keys
 		  WHERE organisation_id = $1
 		  ORDER BY (revoked_at IS NULL) DESC, created_at ASC`, orgID)
@@ -169,7 +174,7 @@ func ListAPIKeysForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]APIKey,
 	var out []APIKey
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.ID, &k.OrganisationID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.OrganisationID, &k.CreatedByUserID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, k)

@@ -267,16 +267,26 @@ type BroadcastBatchReply struct {
 // the JetStream stream's Info; Unread is computed daemon-side from the
 // session's cursor file. Preview is the most recent payload truncated to
 // 60 chars (UTF-8 safe; ANSI CSI sequences and C0 controls stripped).
+//
+// CreatedBy is the username of the user who created this pipe. Empty for
+// auto-provisioned pipes (broadcast / inbox / stdin / stdout / stdctrl) —
+// the renderer falls back to the source's CreatedBy when this field is
+// empty so HUMAN is never blank in the output. omitempty keeps the wire
+// shape clean when a daemon-side intermediate doesn't carry the join.
 type PipeInfo struct {
-	Pipe    string     `json:"pipe"`
-	Total   uint64     `json:"total"`
-	Unread  uint64     `json:"unread"`
-	LastSeq uint64     `json:"last_seq,omitempty"`
-	LastAt  *time.Time `json:"last_at,omitempty"`
-	Preview string     `json:"preview,omitempty"` // truncated to 60 bytes for table view
-	Payload string     `json:"payload,omitempty"` // full untruncated payload for `ls --json`
+	Pipe      string     `json:"pipe"`
+	Total     uint64     `json:"total"`
+	Unread    uint64     `json:"unread"`
+	LastSeq   uint64     `json:"last_seq,omitempty"`
+	LastAt    *time.Time `json:"last_at,omitempty"`
+	Preview   string     `json:"preview,omitempty"`    // truncated to 60 bytes for table view
+	Payload   string     `json:"payload,omitempty"`    // full untruncated payload for `ls --json`
+	CreatedBy string     `json:"created_by,omitempty"` // username; empty → inherit Source.CreatedBy
 }
 
+// Source carries the source-level fields ppz ls renders. CreatedBy is the
+// username of the user who created the source; populated server-side by
+// joining sources.created_by_user_id to users.username.
 type Source struct {
 	Handle string `json:"handle"`
 	Kind   string `json:"kind,omitempty"`
@@ -285,6 +295,7 @@ type Source struct {
 	// /api/v1/sources response.
 	Pipes     []string   `json:"pipes,omitempty"`
 	PipeInfos []PipeInfo `json:"pipe_infos,omitempty"`
+	CreatedBy string     `json:"created_by,omitempty"`
 	// Legacy broadcast-only summary; kept for the GUI handlers that still
 	// read these directly from the postgres-backed sources table.
 	LastBroadcastAt      *time.Time `json:"last_broadcast_at,omitempty"`

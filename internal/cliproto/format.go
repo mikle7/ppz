@@ -262,30 +262,36 @@ func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {
 // PrintList prints `ppz ls` output: one line per (source, pipe), sorted
 // by handle then pipe name. Format:
 //
-//	<handle>.<pipe>  <unread>  <buffered>  <last_at|->  <preview60|->
+//	<handle>.<pipe>  <unread>  <buffered>  <last_at|->  <preview60|->  <human>
 //
 // UNREAD comes before BUFFERED — agents typically only need the unread
 // count to decide whether to call `ppz read`; BUFFERED (the total
-// retained in the pipe) is secondary and useful for forensics.
+// retained in the pipe) is secondary and useful for forensics. HUMAN is
+// the rightmost column — the username that owns the (source, pipe).
+// Auto-pipes (broadcast / inbox / stdin / stdout / stdctrl) inherit the
+// source's CreatedBy; user-created pipes carry their own.
 //
 // Empty list (no sources) produces no output.
 // listRow flattens one (source, pipe) pair into the columns the printers
 // align on. iso=true switches the LAST column from relative time to
-// RFC3339; the last column otherwise displays "just now" / "5 minutes ago".
+// RFC3339; the last column otherwise displays "just now" / "5 minutes
+// ago". HUMAN is the rightmost column — see PrintList docstring.
 type listRow struct {
 	pipeColumn string // "<handle>.<pipe>"
 	unread     uint64
 	buffered   uint64 // total retained messages currently in the stream
 	last       string // either RFC3339, relative duration, or "-"
 	payload    string // truncated preview (already includes "…" if cut)
+	human      string // username; PipeInfo.CreatedBy ?? Source.CreatedBy
 }
 
 // PrintList renders sources as an aligned table with a header row. Default
 // time format is relative duration ("5 minutes ago" / "just now"); pass
 // iso=true for RFC3339 timestamps in the LAST column instead.
 //
-// The PAYLOAD column is the last — it isn't padded, so a long preview
-// extending past the alignment grid doesn't break the row count.
+// HUMAN is rightmost. PAYLOAD becomes a padded column (it used to be
+// trailing un-padded, but HUMAN now needs vertical alignment so PAYLOAD
+// pads to its widest preview — bounded at 60 chars by TruncatePayload).
 func PrintList(w io.Writer, sources []Source, iso bool) {
 	now := timeNow()
 	rows := make([]listRow, 0)
@@ -297,6 +303,7 @@ func PrintList(w io.Writer, sources []Source, iso bool) {
 				buffered:   p.Total,
 				last:       lastColumn(p.LastAt, now, iso),
 				payload:    payloadColumn(p.Preview),
+				human:      humanColumn(p.CreatedBy, s.CreatedBy),
 			})
 		}
 	}
@@ -307,6 +314,9 @@ func PrintList(w io.Writer, sources []Source, iso bool) {
 // shape as the API + a `last_at` ISO string. Full untruncated payload —
 // `ppz ls` is the only path that surfaces the latest payload without
 // going through `ppz read`, so agents reading --json get the real bytes.
+//
+// `human` carries the same username the table shows: pipe-level if set,
+// otherwise the source's creator (auto-pipe inheritance).
 func PrintListJSON(w io.Writer, sources []Source) {
 	for _, s := range sources {
 		for _, p := range s.PipeInfos {
@@ -316,6 +326,7 @@ func PrintListJSON(w io.Writer, sources []Source) {
 				"total":   p.Total,
 				"unread":  p.Unread,
 				"payload": p.Payload,
+				"human":   humanColumn(p.CreatedBy, s.CreatedBy),
 			}
 			if p.LastAt != nil {
 				obj["last_at"] = p.LastAt.UTC().Format(time.RFC3339)
@@ -326,6 +337,17 @@ func PrintListJSON(w io.Writer, sources []Source) {
 			fmt.Fprintln(w, string(line))
 		}
 	}
+}
+
+// humanColumn implements the auto-pipe inheritance rule: a pipe carries
+// its own creator when one is set (user-created `pipes` row), otherwise
+// it inherits the source's creator (auto-provisioned pipes have no row
+// in the `pipes` table, so PipeInfo.CreatedBy is empty).
+func humanColumn(pipeCreatedBy, sourceCreatedBy string) string {
+	if pipeCreatedBy != "" {
+		return pipeCreatedBy
+	}
+	return sourceCreatedBy
 }
 
 func lastColumn(t *time.Time, now time.Time, iso bool) string {
@@ -345,9 +367,10 @@ func payloadColumn(preview string) string {
 	return preview
 }
 
-// writeListTable computes max widths for the left columns and prints
-// header + rows aligned. The PAYLOAD column (last) is left un-padded so
-// long previews don't force every other row to gain trailing whitespace.
+// writeListTable computes max widths for every column (including PAYLOAD,
+// which used to be the trailing un-padded column) and prints header +
+// rows aligned. HUMAN is the rightmost column — it goes un-padded since
+// nothing follows it.
 //
 // Empty input → empty output (no orphan header). Matches the convention
 // where `ls` for an empty namespace just prints nothing.
@@ -355,8 +378,8 @@ func writeListTable(w io.Writer, rows []listRow) {
 	if len(rows) == 0 {
 		return
 	}
-	headers := []string{"PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD"}
-	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3])}
+	headers := []string{"PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "HUMAN"}
+	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3]), len(headers[4])}
 	unreads := make([]string, len(rows))
 	buffereds := make([]string, len(rows))
 	for i, r := range rows {
@@ -374,21 +397,26 @@ func writeListTable(w io.Writer, rows []listRow) {
 		if w := len(r.last); w > widths[3] {
 			widths[3] = w
 		}
+		if w := len(r.payload); w > widths[4] {
+			widths[4] = w
+		}
 	}
-	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %s\n",
+	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
 		widths[0], headers[0],
 		widths[1], headers[1],
 		widths[2], headers[2],
 		widths[3], headers[3],
-		headers[4],
+		widths[4], headers[4],
+		headers[5],
 	)
 	for i, r := range rows {
-		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %s\n",
+		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
 			widths[0], r.pipeColumn,
 			widths[1], unreads[i],
 			widths[2], buffereds[i],
 			widths[3], r.last,
-			r.payload,
+			widths[4], r.payload,
+			r.human,
 		)
 	}
 }

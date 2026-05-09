@@ -92,11 +92,14 @@ func Run(ctx context.Context, pool *db.Pool, dir string) error {
 	}
 
 	// alpha gets two keys (alpha + alpha2), beta gets one (beta).
-	type want struct{ org, file, label string }
+	// Each seed key is attributed to a real seeded user so `ppz ls`
+	// HUMAN renders deterministic names in the e2e suite. foo owns
+	// alpha; bar is a member of both alpha and beta.
+	type want struct{ org, file, label, creator string }
 	wants := []want{
-		{"alpha", "key-alpha.txt", "alpha-primary"},
-		{"alpha", "key-alpha2.txt", "alpha-secondary"},
-		{"beta", "key-beta.txt", "beta-primary"},
+		{"alpha", "key-alpha.txt", "alpha-primary", "foo"},
+		{"alpha", "key-alpha2.txt", "alpha-secondary", "bar"},
+		{"beta", "key-beta.txt", "beta-primary", "bar"},
 	}
 	for _, w := range wants {
 		org, err := getOrCreateOrg(ctx, pool, w.org)
@@ -109,7 +112,11 @@ func Run(ctx context.Context, pool *db.Pool, dir string) error {
 			// has the matching hash from a previous run).
 			continue
 		}
-		_, plaintext, err := db.InsertAPIKey(ctx, pool, org.ID, w.label)
+		creator, err := getOrCreateUser(ctx, pool, w.creator)
+		if err != nil {
+			return fmt.Errorf("seed-key creator %s: %w", w.creator, err)
+		}
+		_, plaintext, err := db.InsertAPIKey(ctx, pool, org.ID, creator.ID, w.label)
 		if err != nil {
 			return fmt.Errorf("insert key %s: %w", w.label, err)
 		}

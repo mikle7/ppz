@@ -14,13 +14,14 @@ import (
 // (broadcast, stdin, stdout) are NOT stored here — they're derived from the
 // source's kind and joined in at API response time.
 type Pipe struct {
-	ID         uuid.UUID
-	SourceID   uuid.UUID
-	Name       string
-	TTLSeconds *int   // nil = use server default (86400 s)
-	MaxMsgs    *int   // nil = use server default (1000)
-	MaxBytes   *int64 // nil = use server default (64 MiB)
-	CreatedAt  time.Time
+	ID              uuid.UUID
+	SourceID        uuid.UUID
+	CreatedByUserID uuid.UUID // user that created the pipe (NOT NULL)
+	Name            string
+	TTLSeconds      *int   // nil = use server default (86400 s)
+	MaxMsgs         *int   // nil = use server default (1000)
+	MaxBytes        *int64 // nil = use server default (64 MiB)
+	CreatedAt       time.Time
 }
 
 // ErrPipeNameTaken — (source_id, name) collision on insert.
@@ -28,21 +29,23 @@ var ErrPipeNameTaken = errors.New("pipe name taken")
 
 // InsertPipe inserts a row. Retention overrides are NULL when the pointer
 // arg is nil — the server provisions the JetStream stream with default
-// values for any nil fields.
-func InsertPipe(ctx context.Context, p *Pool, sourceID uuid.UUID, name string, ttl *int, maxMsgs *int, maxBytes *int64) (Pipe, error) {
+// values for any nil fields. `createdBy` is the user that created the
+// pipe (NOT NULL on the table); rendered as HUMAN by `ppz ls`.
+func InsertPipe(ctx context.Context, p *Pool, sourceID, createdBy uuid.UUID, name string, ttl *int, maxMsgs *int, maxBytes *int64) (Pipe, error) {
 	pipe := Pipe{
-		ID:         uuid.New(),
-		SourceID:   sourceID,
-		Name:       name,
-		TTLSeconds: ttl,
-		MaxMsgs:    maxMsgs,
-		MaxBytes:   maxBytes,
-		CreatedAt:  time.Now().UTC(),
+		ID:              uuid.New(),
+		SourceID:        sourceID,
+		CreatedByUserID: createdBy,
+		Name:            name,
+		TTLSeconds:      ttl,
+		MaxMsgs:         maxMsgs,
+		MaxBytes:        maxBytes,
+		CreatedAt:       time.Now().UTC(),
 	}
 	_, err := p.Exec(ctx,
-		`INSERT INTO pipes (id, source_id, name, ttl_seconds, max_msgs, max_bytes, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		pipe.ID, pipe.SourceID, pipe.Name, pipe.TTLSeconds, pipe.MaxMsgs, pipe.MaxBytes, pipe.CreatedAt)
+		`INSERT INTO pipes (id, source_id, created_by_user_id, name, ttl_seconds, max_msgs, max_bytes, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		pipe.ID, pipe.SourceID, pipe.CreatedByUserID, pipe.Name, pipe.TTLSeconds, pipe.MaxMsgs, pipe.MaxBytes, pipe.CreatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -57,7 +60,7 @@ func InsertPipe(ctx context.Context, p *Pool, sourceID uuid.UUID, name string, t
 // sorted by name. Excludes auto-provisioned pipes (those aren't stored).
 func ListPipesForSource(ctx context.Context, p *Pool, sourceID uuid.UUID) ([]Pipe, error) {
 	rows, err := p.Query(ctx,
-		`SELECT id, source_id, name, ttl_seconds, max_msgs, max_bytes, created_at
+		`SELECT id, source_id, created_by_user_id, name, ttl_seconds, max_msgs, max_bytes, created_at
 		   FROM pipes WHERE source_id = $1 ORDER BY name ASC`, sourceID)
 	if err != nil {
 		return nil, err
@@ -66,7 +69,7 @@ func ListPipesForSource(ctx context.Context, p *Pool, sourceID uuid.UUID) ([]Pip
 	var out []Pipe
 	for rows.Next() {
 		var pipe Pipe
-		if err := rows.Scan(&pipe.ID, &pipe.SourceID, &pipe.Name,
+		if err := rows.Scan(&pipe.ID, &pipe.SourceID, &pipe.CreatedByUserID, &pipe.Name,
 			&pipe.TTLSeconds, &pipe.MaxMsgs, &pipe.MaxBytes, &pipe.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -79,9 +82,9 @@ func ListPipesForSource(ctx context.Context, p *Pool, sourceID uuid.UUID) ([]Pip
 func GetPipeByName(ctx context.Context, p *Pool, sourceID uuid.UUID, name string) (Pipe, error) {
 	var pipe Pipe
 	err := p.QueryRow(ctx,
-		`SELECT id, source_id, name, ttl_seconds, max_msgs, max_bytes, created_at
+		`SELECT id, source_id, created_by_user_id, name, ttl_seconds, max_msgs, max_bytes, created_at
 		   FROM pipes WHERE source_id = $1 AND name = $2`, sourceID, name).
-		Scan(&pipe.ID, &pipe.SourceID, &pipe.Name,
+		Scan(&pipe.ID, &pipe.SourceID, &pipe.CreatedByUserID, &pipe.Name,
 			&pipe.TTLSeconds, &pipe.MaxMsgs, &pipe.MaxBytes, &pipe.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Pipe{}, ErrNotFound

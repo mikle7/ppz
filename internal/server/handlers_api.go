@@ -190,7 +190,7 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 		return
 	}
 
-	src, err := db.InsertSource(ctx, s.Pool, key.OrganisationID, req.Handle, kind)
+	src, err := db.InsertSource(ctx, s.Pool, key.OrganisationID, key.CreatedByUserID, req.Handle, kind)
 	if err != nil {
 		if errors.Is(err, db.ErrHandleTaken) {
 			writeErr(w, cliproto.NewSourceTaken(req.Handle))
@@ -230,21 +230,52 @@ func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request, key d
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
-	out := make([]cliproto.Source, 0, len(sources))
+
+	// Walk all sources + their user-pipes once to collect every creator
+	// id that needs a username for the response, then resolve in one
+	// shot. Avoids N+1 user lookups on org pages with many sources.
+	pipesBySource := make(map[uuid.UUID][]db.Pipe, len(sources))
+	idSet := make(map[uuid.UUID]struct{})
 	for _, src := range sources {
+		idSet[src.CreatedByUserID] = struct{}{}
 		userPipes, err := db.ListPipesForSource(ctx, s.Pool, src.ID)
 		if err != nil {
 			writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 			return
 		}
+		pipesBySource[src.ID] = userPipes
+		for _, p := range userPipes {
+			idSet[p.CreatedByUserID] = struct{}{}
+		}
+	}
+	ids := make([]uuid.UUID, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	usernames, err := db.UsernamesByIDs(ctx, s.Pool, ids)
+	if err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+
+	out := make([]cliproto.Source, 0, len(sources))
+	for _, src := range sources {
+		userPipes := pipesBySource[src.ID]
 		names := make([]string, 0, len(userPipes))
+		pipeInfos := make([]cliproto.PipeInfo, 0, len(userPipes))
 		for _, p := range userPipes {
 			names = append(names, p.Name)
+			pipeInfos = append(pipeInfos, cliproto.PipeInfo{
+				Pipe:      p.Name,
+				CreatedBy: usernames[p.CreatedByUserID],
+			})
 		}
 		out = append(out, cliproto.Source{
 			Handle:               src.Handle,
 			Kind:                 string(src.Kind),
 			Pipes:                names,
+			PipeInfos:            pipeInfos,
+			CreatedBy:            usernames[src.CreatedByUserID],
 			LastBroadcastAt:      src.LastBroadcastAt,
 			LastBroadcastPayload: src.LastBroadcastPayload,
 		})
@@ -294,7 +325,7 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 		return
 	}
 
-	pipe, err := db.InsertPipe(ctx, s.Pool, src.ID, req.Name,
+	pipe, err := db.InsertPipe(ctx, s.Pool, src.ID, key.CreatedByUserID, req.Name,
 		req.TTLSeconds, req.MaxMsgs, req.MaxBytes)
 	if err != nil {
 		if errors.Is(err, db.ErrPipeNameTaken) {

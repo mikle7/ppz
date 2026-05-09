@@ -131,10 +131,12 @@
         {{range .Keys}}
         <li data-key-prefix="{{.KeyPrefix}}"
             data-key-id="{{.ID}}"
-            data-key-state="{{if .Revoked}}revoked{{else}}active{{end}}">
+            data-key-state="{{if .Revoked}}revoked{{else}}active{{end}}"
+            data-key-creator="{{.Creator}}">
           {{.Label}}
           <code>{{.KeyPrefix}}…</code>
           <small>· {{.CreatedAt.Format "2006-01-02T15:04:05Z"}}</small>
+          <small>· created by {{.Creator}}</small>
           {{if .Revoked}}
           <small class="revoked">· revoked {{.RevokedAt.Format "2006-01-02T15:04:05Z"}}</small>
           {{else}}

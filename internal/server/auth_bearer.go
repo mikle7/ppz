@@ -132,7 +132,10 @@ func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 			h(w, r, *caller.APIKey)
 			return
 		}
-		// OAuth path.
+		// OAuth path. Stamp the caller's UserID on the synthetic APIKey
+		// so downstream handlers (InsertSource, InsertPipe) attribute
+		// the new row to the OAuth bearer's user — same field
+		// downstream code reads on the API-key path.
 		if raw := r.URL.Query().Get("org"); raw != "" {
 			orgID, err := uuid.Parse(raw)
 			if err != nil {
@@ -143,7 +146,7 @@ func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a member of org"})
 				return
 			}
-			h(w, r, db.APIKey{OrganisationID: orgID})
+			h(w, r, db.APIKey{OrganisationID: orgID, CreatedByUserID: caller.UserID})
 			return
 		}
 		// Fallback: caller's first owned org. Used by daemons that
@@ -155,6 +158,6 @@ func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 			})
 			return
 		}
-		h(w, r, db.APIKey{OrganisationID: org.ID})
+		h(w, r, db.APIKey{OrganisationID: org.ID, CreatedByUserID: caller.UserID})
 	})
 }

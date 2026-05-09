@@ -70,6 +70,33 @@ func GetUserByUsername(ctx context.Context, p *Pool, username string) (User, err
 	return u, err
 }
 
+// UsernamesByIDs resolves a set of user IDs to {id → username}. Used by
+// the server's list endpoints that need to attribute every source/pipe
+// row to a user (HUMAN column). Single round-trip via ANY($1::uuid[]).
+// Missing IDs are simply absent from the returned map — callers should
+// treat that as "" so a stale ID can't break rendering.
+func UsernamesByIDs(ctx context.Context, p *Pool, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	out := make(map[uuid.UUID]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := p.Query(ctx,
+		`SELECT id, username FROM users WHERE id = ANY($1::uuid[])`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}
+
 // UpsertUserByGitHubID inserts a brand new mode=github user, or
 // updates the existing row matching the GitHub numeric id. Returns
 // the resolved User row plus a bool indicating whether the row was
