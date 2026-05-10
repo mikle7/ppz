@@ -224,6 +224,26 @@ func TestResolveAgentSpec_PromptArgAndFileConflict(t *testing.T) {
 	}
 }
 
+// --new-window must be accepted by the flag parser. Original
+// implementation registered every flag *except* --new-window on the
+// FlagSet and tried to detect it via a separate args scan in
+// cmdAgentCreate; flag.Parse rejected the unknown flag before the scan
+// ever ran. This pins the fix.
+func TestResolveAgentSpec_NewWindowFlagAccepted(t *testing.T) {
+	_, _, err := resolveAgentSpec([]string{"alice", "--new-window"})
+	if err != nil {
+		t.Fatalf("--new-window must be accepted by the flag parser, got: %v", err)
+	}
+}
+
+// Same with the single-dash form Go's flag package allows.
+func TestResolveAgentSpec_NewWindowFlagAcceptedSingleDash(t *testing.T) {
+	_, _, err := resolveAgentSpec([]string{"alice", "-new-window"})
+	if err != nil {
+		t.Fatalf("-new-window must be accepted by the flag parser, got: %v", err)
+	}
+}
+
 func TestResolveAgentSpec_HandleParsed(t *testing.T) {
 	_, handle, err := resolveAgentSpec([]string{"alice", "hi"})
 	if err != nil {
