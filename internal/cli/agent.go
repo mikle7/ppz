@@ -45,18 +45,7 @@ func cmdAgentCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "ppz agent create:", err)
 		os.Exit(2)
 	}
-
-	// --new-window is parsed separately because it doesn't belong on the
-	// agentSpec (no effect on the harness argv) and because we want
-	// resolveAgentSpec to stay pure & testable.
-	newWindow := false
-	for _, a := range args {
-		if a == "--new-window" || a == "-new-window" {
-			newWindow = true
-		}
-	}
-
-	if newWindow {
+	if spec.newWindow {
 		return runAgentInNewWindow(handle, spec)
 	}
 	return runAgentInForeground(handle, spec)
@@ -110,9 +99,10 @@ func runAgentInNewWindow(handle string, spec agentSpec) error {
 // --model into a single model string, and the positional prompt or
 // --prompt-file into prompt.
 type agentSpec struct {
-	harness string
-	model   string
-	prompt  string
+	harness   string
+	model     string
+	prompt    string
+	newWindow bool
 }
 
 // defaultAgentPrompt is sent when the user supplies no positional prompt
@@ -179,6 +169,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 	var (
 		fClaude, fCopilot, fCodex, fGemini, fPi bool
 		fOpus, fSonnet, fHaiku                  bool
+		fNewWindow                              bool
 		fModel, fPromptFile                     string
 	)
 	fs.BoolVar(&fClaude, "claude", false, "use the claude harness (default)")
@@ -189,6 +180,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 	fs.BoolVar(&fOpus, "opus", false, "claude shortcut: --model opus")
 	fs.BoolVar(&fSonnet, "sonnet", false, "claude shortcut: --model sonnet")
 	fs.BoolVar(&fHaiku, "haiku", false, "claude shortcut: --model haiku")
+	fs.BoolVar(&fNewWindow, "new-window", false, "open a new Terminal.app/iTerm2 window via osascript")
 	fs.StringVar(&fModel, "model", "", "model passed to the harness")
 	fs.StringVar(&fPromptFile, "prompt-file", "", "read the prompt from a file")
 
@@ -294,7 +286,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 		prompt = defaultAgentPrompt
 	}
 
-	return agentSpec{harness: harness, model: model, prompt: prompt}, handle, nil
+	return agentSpec{harness: harness, model: model, prompt: prompt, newWindow: fNewWindow}, handle, nil
 }
 
 // buildNewWindowScript returns the osascript fragment that opens a new
