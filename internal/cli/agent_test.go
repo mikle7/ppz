@@ -259,7 +259,7 @@ func TestResolveAgentSpec_HandleParsed(t *testing.T) {
 // followed by the harness argv, with shell quoting that survives multi-
 // line prompts.
 func TestBuildNewWindowScript_TerminalAppContainsShareInvocation(t *testing.T) {
-	cmd := buildNewWindowScript("Apple_Terminal", "alice", []string{"claude", "-p", "hello"})
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "", []string{"claude", "-p", "hello"})
 	if !strings.Contains(cmd, "ppz terminal share alice --") {
 		t.Errorf("expected ppz share prefix, got:\n%s", cmd)
 	}
@@ -269,7 +269,7 @@ func TestBuildNewWindowScript_TerminalAppContainsShareInvocation(t *testing.T) {
 }
 
 func TestBuildNewWindowScript_ITerm2Detected(t *testing.T) {
-	cmd := buildNewWindowScript("iTerm.app", "alice", []string{"claude"})
+	cmd := buildNewWindowScript("iTerm.app", "alice", "", []string{"claude"})
 	if !strings.Contains(cmd, "tell application \"iTerm\"") {
 		t.Errorf("expected iTerm osascript, got:\n%s", cmd)
 	}
@@ -279,9 +279,56 @@ func TestBuildNewWindowScript_ITerm2Detected(t *testing.T) {
 // builder writes the prompt to a temp file and dereferences it with
 // $(cat …) so we never have to shell-quote the content.
 func TestBuildNewWindowScript_PromptFileDereferenced(t *testing.T) {
-	cmd := buildNewWindowScript("Apple_Terminal", "alice",
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "",
 		[]string{"claude", "$(cat /tmp/ppz-agent-alice.prompt)"})
 	if !strings.Contains(cmd, "$(cat /tmp/ppz-agent-alice.prompt)") {
 		t.Errorf("expected prompt-file dereference, got:\n%s", cmd)
+	}
+}
+
+// macOS `do script` opens the new Terminal window in $HOME — which often
+// isn't a folder claude has trusted, so claude shows a "trust this
+// folder?" dialog the first time it boots. Inheriting the parent
+// shell's cwd avoids that: the spawned shell runs `cd '<cwd>' &&` first,
+// so claude boots in the folder the user invoked `ppz agent create`
+// from (presumably already trusted).
+func TestBuildNewWindowScript_PrependsCdToCallersCwd(t *testing.T) {
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "/Users/jimmy/work", []string{"claude"})
+	if !strings.Contains(cmd, `cd '/Users/jimmy/work'`) {
+		t.Errorf("expected single-quoted cd to caller's cwd, got:\n%s", cmd)
+	}
+	cdIdx := strings.Index(cmd, "cd '/Users/jimmy/work'")
+	shareIdx := strings.Index(cmd, "ppz terminal share")
+	if cdIdx < 0 || shareIdx < 0 || cdIdx > shareIdx {
+		t.Errorf("cd must appear before ppz terminal share, got:\n%s", cmd)
+	}
+}
+
+// iTerm2 path inherits the same cwd-preservation semantics as
+// Terminal.app — the bug is dialect-agnostic.
+func TestBuildNewWindowScript_ITerm2AlsoPrependsCd(t *testing.T) {
+	cmd := buildNewWindowScript("iTerm.app", "alice", "/Users/jimmy/work", []string{"claude"})
+	if !strings.Contains(cmd, `cd '/Users/jimmy/work'`) {
+		t.Errorf("iTerm path must include cd, got:\n%s", cmd)
+	}
+}
+
+// Empty cwd → no cd prefix. Lets tests + callers that genuinely don't
+// care about cwd opt out (and gives `os.Getwd` a graceful fallback if
+// it fails).
+func TestBuildNewWindowScript_EmptyCwdSkipsCd(t *testing.T) {
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "", []string{"claude"})
+	if strings.Contains(cmd, "cd ") {
+		t.Errorf("empty cwd must not produce cd, got:\n%s", cmd)
+	}
+}
+
+// Bash-safe single-quote handling: paths containing a single quote
+// must escape it as `'\''` (close-quote, escaped quote, reopen) so the
+// shell doesn't break out of the cd argument mid-path.
+func TestBuildNewWindowScript_CdEscapesSingleQuote(t *testing.T) {
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", `/path/with'quote`, []string{"claude"})
+	if !strings.Contains(cmd, `'/path/with'\''quote'`) {
+		t.Errorf("expected bash-safe single-quote escape, got:\n%s", cmd)
 	}
 }
