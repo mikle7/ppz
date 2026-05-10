@@ -325,10 +325,14 @@ func TestBuildNewWindowScript_EmptyCwdSkipsCd(t *testing.T) {
 
 // Bash-safe single-quote handling: paths containing a single quote
 // must escape it as `'\''` (close-quote, escaped quote, reopen) so the
-// shell doesn't break out of the cd argument mid-path.
+// shell doesn't break out of the cd argument mid-path. We assert on
+// the post-AppleScript-escape form (`\` doubled to `\\` in the string
+// literal) — that's the literal AppleScript source the script becomes.
+// AppleScript unescapes back to `'\''` at runtime, which the shell
+// then interprets as the close-escape-reopen pattern.
 func TestBuildNewWindowScript_CdEscapesSingleQuote(t *testing.T) {
 	cmd := buildNewWindowScript("Apple_Terminal", "alice", `/path/with'quote`, []string{"claude"})
-	if !strings.Contains(cmd, `'/path/with'\''quote'`) {
-		t.Errorf("expected bash-safe single-quote escape, got:\n%s", cmd)
+	if !strings.Contains(cmd, `'/path/with'\\''quote'`) {
+		t.Errorf("expected bash-safe single-quote escape (in AppleScript form), got:\n%s", cmd)
 	}
 }

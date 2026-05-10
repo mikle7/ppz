@@ -87,7 +87,13 @@ func runAgentInNewWindow(handle string, spec agentSpec) error {
 		return err
 	}
 
-	script := buildNewWindowScript(os.Getenv("TERM_PROGRAM"), handle, argv)
+	// Inherit the parent shell's cwd so the spawned harness boots in
+	// the folder the user already trusts. Without this, macOS's
+	// `do script` opens the new Terminal window in $HOME and claude
+	// shows a "trust this folder?" dialog on every run.
+	cwd, _ := os.Getwd()
+
+	script := buildNewWindowScript(os.Getenv("TERM_PROGRAM"), handle, cwd, argv)
 	cmd := exec.Command("osascript", "-e", script)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -295,8 +301,17 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 // with spaces; multi-line/special-char prompts must be referenced via
 // `$(cat /tmp/...)` to avoid shell-quoting nightmares — see
 // cmdAgentCreate's --new-window path which writes a temp file.
-func buildNewWindowScript(termProgram, handle string, argv []string) string {
+//
+// When cwd is non-empty the shell command is prefixed with
+// `cd '<bash-quoted-cwd>' && ` so the spawned harness boots in the
+// folder the parent shell was running in. macOS otherwise opens the new
+// Terminal window in $HOME, and claude treats trust per-folder, so every
+// run pops a "trust this folder?" dialog. Empty cwd is a graceful no-op.
+func buildNewWindowScript(termProgram, handle, cwd string, argv []string) string {
 	cmd := "ppz terminal share " + handle + " -- " + strings.Join(argv, " ")
+	if cwd != "" {
+		cmd = "cd " + bashSingleQuote(cwd) + " && " + cmd
+	}
 	switch termProgram {
 	case "iTerm.app":
 		// iTerm2's "current session of current window" creates a new
@@ -316,6 +331,14 @@ end tell`
     activate
 end tell`
 	}
+}
+
+// bashSingleQuote wraps s in bash-safe single quotes. Embedded single
+// quotes are emitted as `'\''` (close-quote, escaped quote, reopen) —
+// the standard pattern for shell-injecting an arbitrary string into a
+// command line.
+func bashSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // escapeAppleScript quotes a string for embedding inside an AppleScript
