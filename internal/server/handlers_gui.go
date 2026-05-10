@@ -153,6 +153,26 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	// Decorate keys with their creators' usernames so the template can
+	// render `data-key-creator="<username>"` per row. One DB round-trip
+	// for the whole list.
+	type keyView struct {
+		db.APIKey
+		Creator string
+	}
+	creatorIDs := make([]uuid.UUID, 0, len(keys))
+	for _, k := range keys {
+		creatorIDs = append(creatorIDs, k.CreatedByUserID)
+	}
+	creators, err := db.UsernamesByIDs(ctx, s.Pool, creatorIDs)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	keyViews := make([]keyView, len(keys))
+	for i, k := range keys {
+		keyViews[i] = keyView{APIKey: k, Creator: creators[k.CreatedByUserID]}
+	}
 	sources, err := db.ListSourcesForOrg(ctx, s.Pool, org.ID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -258,7 +278,7 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := s.base()
 	data["Org"] = org
-	data["Keys"] = keys
+	data["Keys"] = keyViews
 	data["Sources"] = rows
 	data["Owner"] = owner
 	data["Members"] = members
@@ -287,7 +307,9 @@ func (s *Server) handleGUICreateKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "org not found", 404)
 		return
 	}
-	key, plaintext, err := db.InsertAPIKey(ctx, s.Pool, org.ID, label)
+	// requireSession populated user_id on the request context.
+	creator := UserIDFromCtx(r.Context())
+	key, plaintext, err := db.InsertAPIKey(ctx, s.Pool, org.ID, creator, label)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("create key: %v", err), 500)
 		return

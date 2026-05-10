@@ -1,5 +1,5 @@
 --- before read ---
-chat.broadcast 3 3 RELATIVE msg-3
+chat.broadcast 3 3 RELATIVE msg-3 foo
 --- after read ---
-chat.broadcast 0 3 RELATIVE msg-3
+chat.broadcast 0 3 RELATIVE msg-3 foo
 exit=0

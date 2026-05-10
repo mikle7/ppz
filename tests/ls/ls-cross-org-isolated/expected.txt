@@ -1,7 +1,7 @@
 --- a ---
-alpha-only.broadcast 0 0 - -
-alpha-only.inbox 0 0 - -
+alpha-only.broadcast 0 0 - - foo
+alpha-only.inbox 0 0 - - foo
 --- b ---
-beta-only.broadcast 0 0 - -
-beta-only.inbox 0 0 - -
+beta-only.broadcast 0 0 - - bar
+beta-only.inbox 0 0 - - bar
 exit=0

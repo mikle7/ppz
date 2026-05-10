@@ -1,5 +1,5 @@
 --- before destroy ---
-chat.archive 0 0 - -
+chat.archive 0 0 - - foo
 destroyed pipe=chat.archive
 --- after destroy ---
 no archive row

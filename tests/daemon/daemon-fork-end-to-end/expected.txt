@@ -1,5 +1,5 @@
 daemon started pid=PID
 sent id=UUID subject=ORG_ALPHA.fresh-flow.broadcast bytes=13
-fresh-flow.broadcast 1 1 RELATIVE it just works
-fresh-flow.inbox 0 0 - -
+fresh-flow.broadcast 1 1 RELATIVE it just works foo
+fresh-flow.inbox 0 0 - - foo
 exit=0

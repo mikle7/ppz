@@ -3,12 +3,12 @@ msg-1
 msg-2
 msg-3
 --- ls after first read: unread=0 ---
-chat.broadcast 0 3 RELATIVE msg-3
-chat.inbox 0 0 - -
+chat.broadcast 0 3 RELATIVE msg-3 foo
+chat.inbox 0 0 - - foo
 --- broadcast one more ---
 --- second read: only the new message ---
 msg-4
 --- ls after second read: unread=0 again ---
-chat.broadcast 0 4 RELATIVE msg-4
-chat.inbox 0 0 - -
+chat.broadcast 0 4 RELATIVE msg-4 foo
+chat.inbox 0 0 - - foo
 exit=0

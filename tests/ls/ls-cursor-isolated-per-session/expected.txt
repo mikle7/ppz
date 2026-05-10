@@ -1,5 +1,5 @@
 --- agent-a ls ---
-chat.broadcast 0 1 RELATIVE only-msg
+chat.broadcast 0 1 RELATIVE only-msg foo
 --- agent-b ls ---
-chat.broadcast 1 1 RELATIVE only-msg
+chat.broadcast 1 1 RELATIVE only-msg foo
 exit=0

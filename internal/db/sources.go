@@ -24,6 +24,7 @@ const (
 type Source struct {
 	ID                   uuid.UUID
 	OrganisationID       uuid.UUID
+	CreatedByUserID      uuid.UUID // user that created the source (NOT NULL)
 	Handle               string
 	Kind                 SourceKind
 	CreatedAt            time.Time
@@ -64,21 +65,25 @@ func (s Source) IsAutoPipe(name string) bool {
 // ErrHandleTaken is returned when a (org, handle) row already exists.
 var ErrHandleTaken = errors.New("handle taken")
 
-func InsertSource(ctx context.Context, p *Pool, orgID uuid.UUID, handle string, kind SourceKind) (Source, error) {
+// InsertSource creates a row attributed to `createdBy` (NOT NULL on the
+// table). Server callers stamp this from the API-key's CreatedByUserID
+// (API path) or caller.UserID (OAuth path).
+func InsertSource(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, handle string, kind SourceKind) (Source, error) {
 	if kind == "" {
 		kind = SourceKindMessage
 	}
 	src := Source{
-		ID:             uuid.New(),
-		OrganisationID: orgID,
-		Handle:         handle,
-		Kind:           kind,
-		CreatedAt:      time.Now().UTC(),
+		ID:              uuid.New(),
+		OrganisationID:  orgID,
+		CreatedByUserID: createdBy,
+		Handle:          handle,
+		Kind:            kind,
+		CreatedAt:       time.Now().UTC(),
 	}
 	_, err := p.Exec(ctx,
-		`INSERT INTO sources (id, organisation_id, handle, kind, created_at)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		src.ID, src.OrganisationID, src.Handle, string(src.Kind), src.CreatedAt)
+		`INSERT INTO sources (id, organisation_id, created_by_user_id, handle, kind, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		src.ID, src.OrganisationID, src.CreatedByUserID, src.Handle, string(src.Kind), src.CreatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -93,9 +98,9 @@ func GetSourceByHandle(ctx context.Context, p *Pool, orgID uuid.UUID, handle str
 	var src Source
 	var kind string
 	err := p.QueryRow(ctx,
-		`SELECT id, organisation_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
+		`SELECT id, organisation_id, created_by_user_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
 		   FROM sources WHERE organisation_id = $1 AND handle = $2`, orgID, handle).
-		Scan(&src.ID, &src.OrganisationID, &src.Handle, &kind, &src.CreatedAt,
+		Scan(&src.ID, &src.OrganisationID, &src.CreatedByUserID, &src.Handle, &kind, &src.CreatedAt,
 			&src.LastBroadcastAt, &src.LastBroadcastPayload)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Source{}, ErrNotFound
@@ -106,7 +111,7 @@ func GetSourceByHandle(ctx context.Context, p *Pool, orgID uuid.UUID, handle str
 
 func ListSourcesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Source, error) {
 	rows, err := p.Query(ctx,
-		`SELECT id, organisation_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
+		`SELECT id, organisation_id, created_by_user_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
 		   FROM sources WHERE organisation_id = $1 ORDER BY handle ASC`, orgID)
 	if err != nil {
 		return nil, err
@@ -116,7 +121,7 @@ func ListSourcesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Source,
 	for rows.Next() {
 		var src Source
 		var kind string
-		if err := rows.Scan(&src.ID, &src.OrganisationID, &src.Handle, &kind, &src.CreatedAt,
+		if err := rows.Scan(&src.ID, &src.OrganisationID, &src.CreatedByUserID, &src.Handle, &kind, &src.CreatedAt,
 			&src.LastBroadcastAt, &src.LastBroadcastPayload); err != nil {
 			return nil, err
 		}

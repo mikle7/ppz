@@ -1,4 +1,4 @@
 sent id=UUID subject=ORG_ALPHA.foo.broadcast bytes=16
-foo.broadcast 1 1 RELATIVE hello from stdin
-foo.inbox 0 0 - -
+foo.broadcast 1 1 RELATIVE hello from stdin foo
+foo.inbox 0 0 - - foo
 exit=0

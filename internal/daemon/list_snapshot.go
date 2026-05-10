@@ -55,13 +55,26 @@ func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sour
 	previewTargets := make([]listPreviewTarget, 0)
 	for _, s := range sources {
 		pipes := pipesForSource(s)
+		// The server populates PipeInfos for user-created pipes with
+		// their CreatedBy username. Auto-pipes (broadcast / inbox /
+		// stdin / stdout / stdctrl) aren't in the `pipes` table so
+		// they have no row here — the formatter inherits Source.CreatedBy
+		// at render time. Capture the map so we can carry the
+		// per-pipe creator through the JetStream enrichment that
+		// otherwise rebuilds PipeInfo from scratch.
+		pipeCreator := make(map[string]string, len(s.PipeInfos))
+		for _, pi := range s.PipeInfos {
+			if pi.CreatedBy != "" {
+				pipeCreator[pi.Pipe] = pi.CreatedBy
+			}
+		}
 		infos := make([]cliproto.PipeInfo, 0, len(pipes))
 		for _, p := range pipes {
 			if !matchAnyTarget(s.Handle, p, patterns) {
 				continue
 			}
 
-			info := cliproto.PipeInfo{Pipe: p}
+			info := cliproto.PipeInfo{Pipe: p, CreatedBy: pipeCreator[p]}
 			streamName := natsubj.StreamName(orgID, s.Handle, p)
 			if si := streamInfos[streamName]; si != nil {
 				info.Total = si.State.Msgs

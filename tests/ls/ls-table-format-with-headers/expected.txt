@@ -1,6 +1,6 @@
-PIPE UNREAD BUFFERED LAST PAYLOAD
-chat.broadcast 1 1 RELATIVE hello world
-chat.inbox 0 0 - -
-verbose.broadcast 1 1 RELATIVE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…
-verbose.inbox 0 0 - -
+PIPE UNREAD BUFFERED LAST PAYLOAD CREATOR
+chat.broadcast 1 1 RELATIVE hello world foo
+chat.inbox 0 0 - - foo
+verbose.broadcast 1 1 RELATIVE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… foo
+verbose.inbox 0 0 - - foo
 exit=0

@@ -1,4 +1,4 @@
 --- watch agent-* — only matching rows ---
-agent-one.broadcast 1 1 RELATIVE agent message
-agent-one.inbox 0 0 - -
+agent-one.broadcast 1 1 RELATIVE agent message foo
+agent-one.inbox 0 0 - - foo
 exit=0

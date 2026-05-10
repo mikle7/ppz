@@ -394,8 +394,21 @@ truncated to 60 chars (UTF-8 safe), with ANSI CSI sequences and C0 controls
 stripped.
 
 ```
-<handle>.<pipe> <total> <unread> <last_at|-> <preview60|->
+<handle>.<pipe> <total> <unread> <last_at|-> <preview60|-> <creator>
 ```
+
+Columns rendered (header form): `PIPE  UNREAD  BUFFERED  LAST  PAYLOAD  CREATOR`.
+
+`<creator>` is the username that created the (source, pipe). Per-pipe attribution
+falls back to the source's creator when the pipe row carries no creator of its
+own (i.e. for the auto-provisioned `broadcast` / `inbox` / `stdin` / `stdout` /
+`stdctrl` pipes, which have no row in the `pipes` table). The seeded API keys
+attribute deterministically: `alpha-primary→foo`, `alpha-secondary→bar`,
+`beta-primary→bar`.
+
+`ppz ls --json` emits one JSON object per row with the keys `{handle, pipe,
+total, unread, last_at, payload, creator}` (full untruncated payload, ISO
+timestamp). The `creator` key carries the same username the table renders.
 
 Empty list: zero output, exit 0.
 

@@ -1,5 +1,5 @@
 --- ls reports 1 buffered message (atomic) ---
-foo.broadcast 1 1 RELATIVE first second third
+foo.broadcast 1 1 RELATIVE first second third foo
 --- reread emits a single multi-line payload, newlines preserved ---
 first
 second
