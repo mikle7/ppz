@@ -49,12 +49,12 @@ func TestPipesForKindIncludesInbox(t *testing.T) {
 		{
 			name: "message source",
 			kind: "",
-			want: []string{"broadcast", "inbox"},
+			want: []string{"inbox"},
 		},
 		{
 			name: "pty source",
 			kind: "pty",
-			want: []string{"broadcast", "inbox", "stdctrl", "stdin", "stdout"},
+			want: []string{"inbox", "stdctrl", "stdin", "stdout"},
 		},
 	}
 	for _, c := range cases {

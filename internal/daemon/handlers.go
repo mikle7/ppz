@@ -891,13 +891,14 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 }
 
 // pipesForKind mirrors db.Source.Pipes() at the daemon level so we don't
-// import internal/db just for this helper.
+// import internal/db just for this helper. Sorted alphabetically so ls
+// output is deterministic. `broadcast` was removed pre-launch (locked
+// decision #16).
 func pipesForKind(kind string) []string {
 	if kind == string(cliproto.KindPTY) {
-		// Sorted alphabetically so ls output is deterministic.
-		return []string{"broadcast", "inbox", "stdctrl", "stdin", "stdout"}
+		return []string{"inbox", "stdctrl", "stdin", "stdout"}
 	}
-	return []string{"broadcast", "inbox"}
+	return []string{"inbox"}
 }
 
 func daemonCursorKey(accountID uuid.UUID, handle, pipe string) string {

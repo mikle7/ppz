@@ -1,4 +1,4 @@
-created handle=chat subject=ORG_ALPHA.chat.broadcast
+created handle=chat subject=ORG_ALPHA.chat.inbox
 current handle=chat
 --- status ---
 current source: chat
