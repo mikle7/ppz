@@ -1,0 +1,18 @@
+--- 1: missing handle ---
+ppz agent create: missing handle: ppz agent create <name> [<prompt>] [flags...]
+rc=2
+--- 2: --claude --codex (mutually exclusive harnesses) ---
+ppz agent create: only one of --claude/--copilot/--codex/--gemini/--pi may be set; got [claude codex]
+rc=2
+--- 3: --opus --sonnet (mutually exclusive shortcuts) ---
+ppz agent create: only one of --opus/--sonnet/--haiku may be set
+rc=2
+--- 4: --opus on --codex (claude-only shortcut) ---
+ppz agent create: --opus is claude-only; use --model with --codex
+rc=2
+--- 5: positional + --prompt-file conflict ---
+ppz agent create: positional prompt and --prompt-file are mutually exclusive
+rc=2
+--- 6: --new-window flag is accepted by parser ---
+OK: --new-window accepted by flag parser
+exit=0
