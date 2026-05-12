@@ -47,7 +47,7 @@ func captureComplete(t *testing.T, args []string) []string {
 // TestComplete_TopLevel: `ppz <tab>` lists every top-level verb.
 func TestComplete_TopLevel(t *testing.T) {
 	got := captureComplete(t, []string{""})
-	if !contains(got, "status") || !contains(got, "source") || !contains(got, "read") {
+	if !contains(got, "status") || !contains(got, "pipe") || !contains(got, "read") {
 		t.Errorf("expected top-level verbs, got %v", got)
 	}
 }
@@ -60,18 +60,18 @@ func TestComplete_PrefixFilter(t *testing.T) {
 			t.Errorf("got non-s prefix: %q", g)
 		}
 	}
-	// At minimum: send, source, status.
-	for _, want := range []string{"send", "source", "status"} {
+	// At minimum: send, status.
+	for _, want := range []string{"send", "status"} {
 		if !contains(got, want) {
 			t.Errorf("missing %q in %v", want, got)
 		}
 	}
 }
 
-// TestComplete_Subverb: `ppz source <tab>` returns all four subverbs.
+// TestComplete_Subverb: `ppz pipe <tab>` returns all two subverbs.
 func TestComplete_Subverb(t *testing.T) {
-	got := captureComplete(t, []string{"source", ""})
-	want := []string{"create", "switch", "clear", "destroy"}
+	got := captureComplete(t, []string{"pipe", ""})
+	want := []string{"create", "destroy"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -82,9 +82,9 @@ func TestComplete_Subverb(t *testing.T) {
 	}
 }
 
-// TestComplete_SubverbPrefix: `ppz source cr<tab>` narrows to "create".
+// TestComplete_SubverbPrefix: `ppz pipe cr<tab>` narrows to "create".
 func TestComplete_SubverbPrefix(t *testing.T) {
-	got := captureComplete(t, []string{"source", "cr"})
+	got := captureComplete(t, []string{"pipe", "cr"})
 	if len(got) != 1 || got[0] != "create" {
 		t.Errorf("got %v, want [create]", got)
 	}
@@ -94,9 +94,9 @@ func TestComplete_SubverbPrefix(t *testing.T) {
 // first arg; cmdComplete must skip it. Without this, a verb at index 0
 // would be misinterpreted as a partial.
 func TestComplete_DashDashStripped(t *testing.T) {
-	got := captureComplete(t, []string{"--", "source", ""})
+	got := captureComplete(t, []string{"--", "pipe", ""})
 	if !contains(got, "create") {
-		t.Errorf("expected source subverbs after --, got %v", got)
+		t.Errorf("expected pipe subverbs after --, got %v", got)
 	}
 }
 
