@@ -1,5 +1,4 @@
 --- foo source-rows in GUI ---
-foo:broadcast::
 foo:inbox::
 foo:stdctrl:RELATIVE:STDCTRL_JSON
 foo:stdin::

@@ -123,12 +123,6 @@ func Subject(accountID uuid.UUID, handle, pipe string) string {
 	return fmt.Sprintf("%s.%s.%s", accountID.String(), handle, pipe)
 }
 
-// Broadcast is the canonical helper for the broadcast channel — preserved
-// for callers that don't think in terms of channels yet.
-func Broadcast(accountID uuid.UUID, handle string) string {
-	return Subject(accountID, handle, "broadcast")
-}
-
 // StreamName produces the JetStream stream name per WIRE.md §2:
 //
 //	source_<orgshort>_<handle>_<pipe>

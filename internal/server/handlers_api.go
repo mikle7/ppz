@@ -211,7 +211,10 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 			return
 		}
 	}
-	subject := natsubj.Broadcast(key.AccountID, src.Handle)
+	// Surface a representative subject for the new handle. Broadcast is
+	// gone (locked decision #16); inbox is the post-Phase-1 default that
+	// every handle gets, regardless of kind.
+	subject := natsubj.Subject(key.AccountID, src.Handle, "inbox")
 
 	writeJSON(w, http.StatusCreated, cliproto.CreateSourceReply{
 		ID:        src.ID.String(),

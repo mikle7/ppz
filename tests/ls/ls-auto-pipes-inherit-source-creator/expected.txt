@@ -1,4 +1,6 @@
-{"pipe":"broadcast","creator":"foo"}
 {"pipe":"inbox","creator":"foo"}
 {"pipe":"notes","creator":"bar"}
+{"pipe":"stdctrl","creator":"foo"}
+{"pipe":"stdin","creator":"foo"}
+{"pipe":"stdout","creator":"foo"}
 exit=0

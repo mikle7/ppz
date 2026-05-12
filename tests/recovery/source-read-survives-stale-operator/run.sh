@@ -16,8 +16,8 @@ HANDLE="recovery-read"
 KEY=$(key_alpha)
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$KEY" >/dev/null
-ppz_a source create "$HANDLE" >/dev/null 2>&1 || true
-ppz_a source switch "$HANDLE" >/dev/null
+ppz_a terminal create "$HANDLE" >/dev/null 2>&1 || true
+ppz_a set handle "$HANDLE" >/dev/null
 ppz_a send "$HANDLE.inbox" "before-stale" >/dev/null
 wait_for 20 "ppz_a ls | grep -q before-stale" >/dev/null
 echo "before-readable=$(ppz_a ls | grep -oE 'before-stale' | head -1)"

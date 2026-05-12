@@ -18,7 +18,7 @@ wait_for 20 "ppz_a ls 2>/dev/null | grep -q '^agent.stdin'" >/dev/null
 # Shift session current to a different handle so sender ≠ destination.
 # (Source create on a non-pty handle sets current; agent stays kind=pty
 # so sources differ — the test discriminates the two.)
-ppz_a source create operator >/dev/null
+ppz_a terminal create operator >/dev/null
 
 # `--none` suppresses the trailing control sequence so only one envelope
 # lands on agent.stdin — keeps the assertion deterministic.

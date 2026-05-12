@@ -91,7 +91,7 @@ var topLevelVerbs = []string{
 var subverbs = map[string][]string{
 	"daemon":   {"start", "stop", "login", "logout"},
 	"pipe":     {"create", "destroy"},
-	"terminal": {"share", "watch", "read"},
+	"terminal": {"create", "share", "watch", "read"},
 	"set":      {"handle"},
 	"unset":    {"handle"},
 	"get":      {"handle"},

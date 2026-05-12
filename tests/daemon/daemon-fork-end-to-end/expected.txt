@@ -1,3 +1,6 @@
 daemon started pid=PID
 fresh-flow.inbox 1 1 RELATIVE it just works foo
+fresh-flow.stdctrl 0 0 - - foo
+fresh-flow.stdin 0 0 - - foo
+fresh-flow.stdout 0 0 - - foo
 exit=0

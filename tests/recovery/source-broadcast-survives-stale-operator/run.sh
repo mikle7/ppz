@@ -31,8 +31,8 @@ KEY=$(key_alpha)
 
 # 1. Setup: log in alpha, create a source, baseline send must work.
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$KEY" >/dev/null
-ppz_a source create "$HANDLE" >/dev/null 2>&1 || true
-ppz_a source switch "$HANDLE" >/dev/null
+ppz_a terminal create "$HANDLE" >/dev/null 2>&1 || true
+ppz_a set handle "$HANDLE" >/dev/null
 out1=$(ppz_a send "$HANDLE.inbox" "before" 2>&1)
 echo "before=$(echo "$out1" | grep -oE '^sent\b|^error: E_[A-Z_]+' | head -1)"
 

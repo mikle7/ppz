@@ -26,7 +26,7 @@ fi
 
 echo ""
 echo "--- send within own org succeeds ---"
-ppz_a source create chat >/dev/null
+ppz_a terminal create chat >/dev/null
 ppz_a send chat.inbox "phase 3 hello" >/dev/null && echo "send=ok" || echo "send=fail"
 
 echo ""

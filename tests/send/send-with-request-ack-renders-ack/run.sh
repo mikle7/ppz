@@ -15,8 +15,8 @@ ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha2)" >/dev/null
 # AND so the receiver knows where to send the ack back to. Beta sets up
 # its own source so it can read its inbox (and so the formatter has a
 # self handle to stamp on the ack as Sender=beta).
-ppz_a source create alpha-side >/dev/null
-ppz_b source create beta-side  >/dev/null
+ppz_a terminal create alpha-side >/dev/null
+ppz_b terminal create beta-side  >/dev/null
 
 # Send a request-ack message to beta-side's inbox. Discard stderr so the
 # stdout of the test scenario stays clean — the assertion is on the

@@ -7,7 +7,7 @@
 auth_as_foo
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a source create regular >/dev/null
+ppz_a terminal create regular >/dev/null
 ppz_a terminal share pty-pipe -- true >/dev/null
 
 PAGE=$(curl_server "/orgs/alpha")

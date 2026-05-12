@@ -1,2 +1,5 @@
 {"handle":"chat","pipe":"inbox","creator":"foo","has_payload_key":true}
+{"handle":"chat","pipe":"stdctrl","creator":"foo","has_payload_key":true}
+{"handle":"chat","pipe":"stdin","creator":"foo","has_payload_key":true}
+{"handle":"chat","pipe":"stdout","creator":"foo","has_payload_key":true}
 exit=0

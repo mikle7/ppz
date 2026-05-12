@@ -25,8 +25,12 @@ import (
 
 // cmdTerminal dispatches `ppz terminal <subverb>`.
 //
-//	wrap H [-- CMD ...]   create a pty source bound to handle H and run
-//	                      CMD (or $SHELL) inside it.
+//	create H              provision a pty-kind handle H (broadcast + inbox +
+//	                      stdin/stdout/stdctrl auto-pipes) and set as the
+//	                      session's current handle. No process is run inside
+//	                      the pty — for that use `terminal share`.
+//	share H [-- CMD ...]  run CMD (or $SHELL) inside a pty bound to H,
+//	                      publishing stdout and subscribing to stdin.
 //	watch H               follow H.stdout in alt-screen TUI (interactive,
 //	                      renders to the local terminal).
 //	read H [flags]        wrapper for `read <H>.stdout` with --tty as the
@@ -34,10 +38,12 @@ import (
 //	                      text snapshots (agents, pipes, scripts).
 func cmdTerminal(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz terminal {share|watch|read} <handle> [...]")
+		fmt.Fprintln(os.Stderr, "usage: ppz terminal {create|share|watch|read} <handle> [...]")
 		os.Exit(2)
 	}
 	switch args[0] {
+	case "create":
+		return cmdTerminalCreate(args[1:])
 	case "share":
 		return cmdTerminalShare(args[1:])
 	case "watch":
@@ -47,6 +53,47 @@ func cmdTerminal(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "ppz terminal: unknown subcommand %q\n", args[0])
 	os.Exit(2)
+	return nil
+}
+
+// cmdTerminalCreate provisions a fresh pty-kind handle (the same shape
+// `ppz terminal share H` auto-creates on first use, minus the wrapped
+// child process) AND sets it as the session's current handle. Strict:
+// errors with E_HANDLE_TAKEN if it already exists.
+//
+// Replaces the retired `ppz source create HANDLE` from Phase 1.
+// The daemon's IPCCreate skips the SetCurrent step for PTY-kind sources
+// (so an in-pty `ppz terminal share x` doesn't clobber the user's
+// outer-shell current). For the CLI-surface `terminal create` verb we
+// want the old `source create` semantics — provision + become current —
+// so we issue a follow-up IPCSwitch from the client side.
+func cmdTerminalCreate(args []string) error {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: ppz terminal create HANDLE")
+		os.Exit(2)
+	}
+	handle := args[0]
+	var reply cliproto.CreateReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCCreate,
+		cliproto.CreateRequest{
+			Handle:  handle,
+			Kind:    string(cliproto.KindPTY),
+			Session: sessionID(),
+		}, &reply); err != nil {
+		return err
+	}
+	// PTY-kind sources don't auto-become current in the daemon (handlers.go
+	// reasoning: preserve outer shell's current when a wrapped process
+	// auto-creates its pty). For the user-facing `terminal create` verb,
+	// the muscle-memory parity with old `source create` requires the new
+	// handle BE the current — issue an explicit switch.
+	var sw cliproto.SwitchReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCSwitch,
+		cliproto.SwitchRequest{Handle: reply.Handle, Session: sessionID()}, &sw); err != nil {
+		return err
+	}
+	cliproto.PrintCreate(os.Stdout, reply)
+	warnIfHandleEnvOverride("updated")
 	return nil
 }
 

@@ -3,6 +3,8 @@ current handle=chat
 --- status ---
 current source: chat
 --- ls ---
-chat.broadcast 0 0 - - foo
 chat.inbox 0 0 - - foo
+chat.stdctrl 0 0 - - foo
+chat.stdin 0 0 - - foo
+chat.stdout 0 0 - - foo
 exit=0

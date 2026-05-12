@@ -1,3 +1,5 @@
-only.broadcast 0 0 - - foo
 only.inbox 0 0 - - foo
+only.stdctrl 0 0 - - foo
+only.stdin 0 0 - - foo
+only.stdout 0 0 - - foo
 exit=0

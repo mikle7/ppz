@@ -12,7 +12,7 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)"  >/dev/null  # foo
 ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha2)" >/dev/null  # bar
 
-ppz_a source create chat     >/dev/null
+ppz_a terminal create chat     >/dev/null
 ppz_b pipe create chat.notes >/dev/null
 
 wait_for 20 "ppz_a ls --json | grep -q '\"notes\"'" >/dev/null

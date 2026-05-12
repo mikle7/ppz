@@ -1,2 +1,5 @@
 chat.inbox 1 1 RELATIVE first message foo
+chat.stdctrl 0 0 - - foo
+chat.stdin 0 0 - - foo
+chat.stdout 0 0 - - foo
 exit=0

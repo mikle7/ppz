@@ -5,7 +5,7 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a source create chat >/dev/null
+ppz_a terminal create chat >/dev/null
 ppz_a pipe create archive >/dev/null
 ppz_a send chat.archive "long-term-1" >/dev/null
 ppz_a send chat.archive "long-term-2" >/dev/null

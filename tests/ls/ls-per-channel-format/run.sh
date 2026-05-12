@@ -6,7 +6,7 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a source create regular >/dev/null
+ppz_a terminal create regular >/dev/null
 ppz_a terminal share pty-pipe -- true >/dev/null
 
 # Normalise the stdctrl JSON preview to a placeholder so the test isn't
