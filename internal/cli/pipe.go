@@ -92,13 +92,42 @@ func cmdPipeCreate(args []string) error {
 	return nil
 }
 
-// cmdPipeDestroy: `ppz pipe destroy [<handle>.]<name>`.
+// cmdPipeDestroy: `ppz pipe destroy [<handle>.]<name>` or
+// `ppz pipe destroy --recursive HANDLE`.
+//
+// The --recursive form destroys every pipe under the handle (and the
+// handle's underlying source row). Replaces `ppz source destroy HANDLE`
+// from pre-Phase 1 (locked decision #21). Without --recursive, the
+// target must be a single pipe name — passing a bare handle would
+// previously have routed through the source-destroy glob; that path
+// is gone, so a bare handle without --recursive errors out.
 func cmdPipeDestroy(args []string) error {
-	if len(args) != 1 {
+	fs := flag.NewFlagSet("pipe destroy", flag.ExitOnError)
+	recursive := fs.Bool("recursive", false, "destroy all pipes under HANDLE (and the handle itself)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest := fs.Args()
+	if len(rest) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: ppz pipe destroy [<handle>.]<name>")
+		fmt.Fprintln(os.Stderr, "       ppz pipe destroy --recursive HANDLE")
 		os.Exit(2)
 	}
-	handle, name, err := splitHandleName(args[0])
+
+	if *recursive {
+		// Bare handle (no dot). Use IPCSourceDestroy to clear all
+		// pipes under it. The IPC verb name retains "source" for
+		// now — the user-facing surface is the --recursive flag.
+		var reply cliproto.SourceDestroyReply
+		if err := daemon.Call(ipcSocket(), cliproto.IPCSourceDestroy,
+			cliproto.SourceDestroyRequest{Handle: rest[0]}, &reply); err != nil {
+			return err
+		}
+		cliproto.PrintSourceDestroy(os.Stdout, reply)
+		return nil
+	}
+
+	handle, name, err := splitHandleName(rest[0])
 	if err != nil {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}

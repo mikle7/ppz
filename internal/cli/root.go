@@ -44,6 +44,12 @@ func Run(args []string) error {
 		return cmdStatus(rest)
 	case "diag":
 		return cmdDiag(rest)
+	case "set":
+		return cmdSet(rest)
+	case "unset":
+		return cmdUnset(rest)
+	case "get":
+		return cmdGet(rest)
 	case "version":
 		return cmdVersion(rest)
 	case "upgrade":

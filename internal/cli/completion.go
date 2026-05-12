@@ -73,14 +73,17 @@ func cmdCompletion(args []string) error {
 var topLevelVerbs = []string{
 	"command",
 	"daemon",
+	"get",
 	"login",
 	"ls",
 	"pipe",
 	"read",
 	"reread",
 	"send",
+	"set",
 	"status",
 	"terminal",
+	"unset",
 	"upgrade",
 	"version",
 }
@@ -89,6 +92,9 @@ var subverbs = map[string][]string{
 	"daemon":   {"start", "stop", "login", "logout"},
 	"pipe":     {"create", "destroy"},
 	"terminal": {"share", "watch", "read"},
+	"set":      {"handle"},
+	"unset":    {"handle"},
+	"get":      {"handle"},
 }
 
 // Verbs that take a `<handle>.<pipe>` target as their first positional.
