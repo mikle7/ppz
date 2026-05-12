@@ -1,3 +1,0 @@
-alpha member
-beta member
-exit=0

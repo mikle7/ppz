@@ -20,12 +20,6 @@ const (
 	IPCPipeDestroy   = "PipeDestroy"
 	IPCSourceDestroy = "SourceDestroy"
 
-	// Org / invite verbs (Phase 4 — multi-org support).
-	IPCOrgList   = "OrgList"
-	IPCOrgSwitch = "OrgSwitch"
-	IPCOrgCreate = "OrgCreate"
-	IPCOrgInvite = "OrgInvite"
-
 	// Diag verb (Phase 0 — agent hardening). Returns the daemon's
 	// recent NATS connection-state events for `ppz diag`. Works
 	// without credentials and without a live NATS connection — the
@@ -337,36 +331,6 @@ type AuthExchangeRequest struct {
 	AccountID string `json:"account_id,omitempty"`
 }
 
-// OrgInfo is one row in the ListOrgs response — what `ppz orgs ls`
-// prints. UUID + display name + role; no NATS-side fields here, this
-// endpoint is purely "which orgs am I in".
-type OrgInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Role string `json:"role,omitempty"` // owner / member / viewer / bot (Phase 3.6)
-	// Current is true for the org the daemon is currently bound to
-	// (per `ppz org switch`). Set by the daemon's IPCOrgList handler
-	// after the server returns the membership list — the server has
-	// no notion of "current org" since that's daemon-side state.
-	Current bool `json:"current,omitempty"`
-}
-
-type ListOrgsReply struct {
-	Orgs []OrgInfo `json:"orgs"`
-}
-
-// CreateOrgRequest is the body for POST /api/v1/orgs — bearer-auth'd
-// org create from the CLI (`ppz org create <name>`). Caller becomes
-// the owner.
-type CreateOrgRequest struct {
-	Name string `json:"name"`
-}
-
-type CreateOrgReply struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
 // CreateInviteRequest is the body for POST /api/v1/orgs/{slug}/invites
 // and the /orgs/{id}/invites GUI form. Owner-only — handlers gate.
 type CreateInviteRequest struct {
@@ -395,32 +359,6 @@ type ListInvitesReply struct {
 	Invites []Invite `json:"invites"`
 }
 
-// OrgSwitchRequest carries the daemon-side IPC payload for `ppz org
-// switch <name>`. Daemon resolves name → org_id, re-runs auth/exchange
-// with the new org, persists.
-type OrgSwitchRequest struct {
-	Name string `json:"name"`
-}
-
-// OrgSwitchReply mirrors what `ppz status` cares about — the new
-// active org. Daemon returns the resolved id+name so the CLI can
-// echo back "switched to org=<name>".
-type OrgSwitchReply struct {
-	AccountID   string `json:"account_id"`
-	AccountName string `json:"account_name"`
-}
-
-// OrgCreateRequest is the IPC payload for `ppz org create <name>` —
-// daemon proxies to the server's POST /api/v1/orgs.
-type OrgCreateRequest struct {
-	Name string `json:"name"`
-}
-
-// OrgInviteRequest is the IPC payload for `ppz org invite <username>` —
-// daemon resolves "current org" and proxies to POST /api/v1/orgs/{slug}/invites.
-type OrgInviteRequest struct {
-	Username string `json:"username"`
-}
 
 type AuthExchangeReply struct {
 	JWT       string    `json:"jwt"`

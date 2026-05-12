@@ -117,24 +117,6 @@ func TestComplete_TopLevel_IncludesCommand(t *testing.T) {
 	}
 }
 
-// TestComplete_TopLevel_IncludesOrg: `ppz <tab>` must include "org".
-func TestComplete_TopLevel_IncludesOrg(t *testing.T) {
-	got := captureComplete(t, []string{""})
-	if !contains(got, "org") {
-		t.Errorf("expected 'org' in top-level completions, got %v", got)
-	}
-}
-
-// TestComplete_OrgSubverbs: `ppz org <tab>` returns list/switch/invite.
-func TestComplete_OrgSubverbs(t *testing.T) {
-	got := captureComplete(t, []string{"org", ""})
-	for _, want := range []string{"list", "switch", "invite"} {
-		if !contains(got, want) {
-			t.Errorf("missing %q in org subverbs %v", want, got)
-		}
-	}
-}
-
 func contains(xs []string, s string) bool {
 	for _, x := range xs {
 		if x == s {

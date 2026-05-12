@@ -1,3 +1,0 @@
-create_status:201
-my-source org=gamma
-exit=0

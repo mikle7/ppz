@@ -91,14 +91,6 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handlePipeDestroy(ctx, conn, req.Params)
 	case cliproto.IPCSourceDestroy:
 		d.handleSourceDestroy(ctx, conn, req.Params)
-	case cliproto.IPCOrgList:
-		d.handleOrgList(ctx, conn, req.Params)
-	case cliproto.IPCOrgSwitch:
-		d.handleOrgSwitch(ctx, conn, req.Params)
-	case cliproto.IPCOrgCreate:
-		d.handleOrgCreate(ctx, conn, req.Params)
-	case cliproto.IPCOrgInvite:
-		d.handleOrgInvite(ctx, conn, req.Params)
 	case cliproto.IPCDiag:
 		d.handleDiag(ctx, conn, req.Params)
 	default:

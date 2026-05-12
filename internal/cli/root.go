@@ -61,8 +61,6 @@ func Run(args []string) error {
 		return cmdSend(rest)
 	case "command":
 		return cmdCommand(rest)
-	case "org", "orgs":
-		return cmdOrg(rest)
 	case "completion":
 		return cmdCompletion(rest)
 	case "__complete":
@@ -195,8 +193,6 @@ Other:
                                    events. Works without login — useful
                                    when 'ppz status' shows "not running"
                                    or "authentication error".
-  ppz org {list|switch|create|invite}
-                                   multi-org operations
   ppz completion {bash|zsh}        tab-completion script
                                    add 'eval "$(ppz completion bash)"' to
                                    your shell rc`)

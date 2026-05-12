@@ -421,49 +421,6 @@ func writeListTable(w io.Writer, rows []listRow) {
 	}
 }
 
-// PrintOrgList renders `ppz org list` as an aligned NAME/ROLE table —
-// same column-padding style as `ppz ls`. The org the daemon is
-// currently bound to (Current=true) gets a "(current)" suffix in
-// green when colour is enabled.
-//
-// Empty input → empty output (no orphan header), matching the same
-// convention as PrintList.
-func PrintOrgList(w io.Writer, orgs []OrgInfo, color bool) {
-	if len(orgs) == 0 {
-		return
-	}
-	headers := []string{"NAME", "ROLE"}
-	widths := []int{len(headers[0]), len(headers[1])}
-	for _, o := range orgs {
-		role := o.Role
-		if role == "" {
-			role = "member"
-		}
-		if w := len(o.Name); w > widths[0] {
-			widths[0] = w
-		}
-		if w := len(role); w > widths[1] {
-			widths[1] = w
-		}
-	}
-	green := func(s string) string { return s }
-	if color {
-		green = func(s string) string { return "\x1b[32m" + s + "\x1b[0m" }
-	}
-	fmt.Fprintf(w, "%-*s  %s\n", widths[0], headers[0], headers[1])
-	for _, o := range orgs {
-		role := o.Role
-		if role == "" {
-			role = "member"
-		}
-		line := fmt.Sprintf("%-*s  %-*s", widths[0], o.Name, widths[1], role)
-		if o.Current {
-			line += "  " + green("(current)")
-		}
-		fmt.Fprintln(w, line)
-	}
-}
-
 // timeNow is overridable in tests if we ever need deterministic relative
 // times. Production: just time.Now.
 var timeNow = func() time.Time { return time.Now() }
