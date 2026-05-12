@@ -1,4 +1,4 @@
-// Package seed provisions the deterministic test fixture: two organisations
+// Package seed provisions the deterministic test fixture: two accounts
 // (alpha, beta) and three plaintext API keys (key-alpha, key-alpha2,
 // key-beta). Plaintext keys + org IDs are written to <dir>/{key,org}-*.txt
 // for the test runner to consume by file.
@@ -85,7 +85,7 @@ func Run(ctx context.Context, pool *db.Pool, dir string) error {
 			return fmt.Errorf("seed-owner foo: %w", err)
 		}
 		if _, err := pool.Exec(ctx,
-			`UPDATE organisations SET owner_user_id = $1 WHERE id = $2`,
+			`UPDATE accounts SET owner_user_id = $1 WHERE id = $2`,
 			foo.ID, org.ID); err != nil {
 			return fmt.Errorf("seed-owner update alpha→foo: %w", err)
 		}
@@ -127,20 +127,20 @@ func Run(ctx context.Context, pool *db.Pool, dir string) error {
 	return nil
 }
 
-func getOrCreateOrg(ctx context.Context, pool *db.Pool, name string) (db.Organisation, error) {
-	orgs, err := db.ListOrganisations(ctx, pool)
+func getOrCreateOrg(ctx context.Context, pool *db.Pool, name string) (db.Account, error) {
+	orgs, err := db.ListAccounts(ctx, pool)
 	if err != nil {
-		return db.Organisation{}, err
+		return db.Account{}, err
 	}
 	for _, o := range orgs {
 		if o.Name == name {
 			return o, nil
 		}
 	}
-	// uuid.Nil tells InsertOrganisation to fall back to the seeded
+	// uuid.Nil tells InsertAccount to fall back to the seeded
 	// "unauthenticated" user as owner — exactly what we want for
 	// the alpha/beta test orgs.
-	return db.InsertOrganisation(ctx, pool, name, uuid.Nil)
+	return db.InsertAccount(ctx, pool, name, uuid.Nil)
 }
 
 // getOrCreateUser is the user counterpart to getOrCreateOrg —

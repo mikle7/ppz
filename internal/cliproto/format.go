@@ -127,10 +127,10 @@ func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, cur
 		fmt.Fprintf(w, "last token refresh: %s\n", c.dim("-"))
 	}
 	fmt.Fprintf(w, "server: %s\n", c.green(s.URL))
-	if name := s.OrgName; name != "" {
+	if name := s.AccountName; name != "" {
 		fmt.Fprintf(w, "org: %s\n", c.green(name))
 	} else {
-		fmt.Fprintf(w, "org: %s\n", c.green(s.OrgID))
+		fmt.Fprintf(w, "org: %s\n", c.green(s.AccountID))
 	}
 	fmt.Fprintln(w, formatNATSLine(c, s))
 
@@ -215,7 +215,7 @@ func coloredTokenRefreshAge(c statusColors, t, now time.Time) string {
 }
 
 func PrintLogin(w io.Writer, r LoginReply) {
-	fmt.Fprintf(w, "logged in url=%s key=%s org=%s\n", r.URL, r.KeyPrefix, r.OrgID)
+	fmt.Fprintf(w, "logged in url=%s key=%s org=%s\n", r.URL, r.KeyPrefix, r.AccountID)
 }
 
 func PrintCreate(w io.Writer, r CreateReply) {

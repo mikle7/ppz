@@ -32,8 +32,8 @@ const (
 // ensurePipeStream creates a JetStream stream backing one (source, pipe)
 // pair (source_<orgshort>_<handle>_<pipe>) with the default retention.
 // Idempotent on duplicate creation.
-func ensurePipeStream(ctx context.Context, js jetstream.JetStream, orgID uuid.UUID, handle, pipe string) error {
-	return ensurePipeStreamWithRetention(ctx, js, orgID, handle, pipe,
+func ensurePipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle, pipe string) error {
+	return ensurePipeStreamWithRetention(ctx, js, accountID, handle, pipe,
 		defaultStreamMaxAge, defaultStreamMaxMsgs, defaultStreamMaxBytes)
 }
 
@@ -41,10 +41,10 @@ func ensurePipeStream(ctx context.Context, js jetstream.JetStream, orgID uuid.UU
 // `pipe create` to honour --ttl / --max-msgs / --max-bytes flags. Every
 // arg is mandatory (the caller fills in defaults for any flag the user
 // didn't pass) so the resulting stream config is fully deterministic.
-func ensurePipeStreamWithRetention(ctx context.Context, js jetstream.JetStream, orgID uuid.UUID, handle, pipe string, maxAge time.Duration, maxMsgs int, maxBytes int64) error {
+func ensurePipeStreamWithRetention(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle, pipe string, maxAge time.Duration, maxMsgs int, maxBytes int64) error {
 	cfg := jetstream.StreamConfig{
-		Name:      natsubj.StreamName(orgID, handle, pipe),
-		Subjects:  []string{natsubj.Subject(orgID, handle, pipe)},
+		Name:      natsubj.StreamName(accountID, handle, pipe),
+		Subjects:  []string{natsubj.Subject(accountID, handle, pipe)},
 		Retention: jetstream.LimitsPolicy,
 		MaxAge:    maxAge,
 		MaxMsgs:   int64(maxMsgs),
@@ -65,8 +65,8 @@ func ensurePipeStreamWithRetention(ctx context.Context, js jetstream.JetStream, 
 
 // deletePipeStream removes the JetStream stream backing one (source, pipe).
 // Idempotent — already-absent stream is a success.
-func deletePipeStream(ctx context.Context, js jetstream.JetStream, orgID uuid.UUID, handle, pipe string) error {
-	name := natsubj.StreamName(orgID, handle, pipe)
+func deletePipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle, pipe string) error {
+	name := natsubj.StreamName(accountID, handle, pipe)
 	if err := js.DeleteStream(ctx, name); err != nil {
 		if errors.Is(err, jetstream.ErrStreamNotFound) {
 			return nil

@@ -22,16 +22,16 @@ const (
 
 // RoleInOrg returns the calling user's role in the given org.
 //
-//   - OrgRoleOwner  if users.id == organisations.owner_user_id
-//   - OrgRoleMember if listed in organisation_members (and not owner)
+//   - OrgRoleOwner  if users.id == accounts.owner_user_id
+//   - OrgRoleMember if listed in account_members (and not owner)
 //   - OrgRoleNone   otherwise
-func (s *Server) RoleInOrg(ctx context.Context, userID, orgID uuid.UUID) (OrgRole, error) {
-	if userID == uuid.Nil || orgID == uuid.Nil {
+func (s *Server) RoleInOrg(ctx context.Context, userID, accountID uuid.UUID) (OrgRole, error) {
+	if userID == uuid.Nil || accountID == uuid.Nil {
 		return OrgRoleNone, nil
 	}
 	var ownerID uuid.UUID
 	err := s.Pool.QueryRow(ctx,
-		`SELECT owner_user_id FROM organisations WHERE id = $1`, orgID).
+		`SELECT owner_user_id FROM accounts WHERE id = $1`, accountID).
 		Scan(&ownerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OrgRoleNone, nil
@@ -44,8 +44,8 @@ func (s *Server) RoleInOrg(ctx context.Context, userID, orgID uuid.UUID) (OrgRol
 	}
 	var ignored uuid.UUID
 	err = s.Pool.QueryRow(ctx,
-		`SELECT user_id FROM organisation_members
-		  WHERE organisation_id = $1 AND user_id = $2`, orgID, userID).
+		`SELECT user_id FROM account_members
+		  WHERE account_id = $1 AND user_id = $2`, accountID, userID).
 		Scan(&ignored)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OrgRoleNone, nil

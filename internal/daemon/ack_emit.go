@@ -48,7 +48,7 @@ func buildAckEnvelope(original cliproto.ReadMessage, self string, now time.Time)
 // production wiring binds this to Daemon.publishEnvelope; tests inject
 // a stub to verify call shape and to exercise the failure path
 // (failures must not abort the loop — §4 "best-effort, fire-and-forget").
-type emitAckFn func(orgID uuid.UUID, dest, pipe string, env envelope.Message) error
+type emitAckFn func(accountID uuid.UUID, dest, pipe string, env envelope.Message) error
 
 // emitAcks walks `retained` (the messages the read handler just
 // delivered) and publishes one `ack:read` back to each qualifying
@@ -59,7 +59,7 @@ type emitAckFn func(orgID uuid.UUID, dest, pipe string, env envelope.Message) er
 //
 // Caller is responsible for advancing the cursor BEFORE invoking this
 // function (per spec §4 advance-then-emit ordering).
-func emitAcks(orgID uuid.UUID, self string, retained []cliproto.ReadMessage, now time.Time, publish emitAckFn) {
+func emitAcks(accountID uuid.UUID, self string, retained []cliproto.ReadMessage, now time.Time, publish emitAckFn) {
 	for _, m := range retained {
 		if !shouldEmitAck(m) {
 			continue
@@ -67,6 +67,6 @@ func emitAcks(orgID uuid.UUID, self string, retained []cliproto.ReadMessage, now
 		ack := buildAckEnvelope(m, self, now)
 		// Best-effort: ignore the error. Don't break, don't return —
 		// each message is independent.
-		_ = publish(orgID, m.Sender, "inbox", ack)
+		_ = publish(accountID, m.Sender, "inbox", ack)
 	}
 }

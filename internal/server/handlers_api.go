@@ -28,20 +28,20 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the credential into an org. Two shapes:
 	//   ppz_oauth_<…> → OAuth bearer; org defaults to caller's first
-	//                    owned org. If req.OrgID is set, validate the
+	//                    owned org. If req.AccountID is set, validate the
 	//                    user is a member of that org and use it.
-	//   ppz_<…>       → V1 API key; org = key.OrganisationID. req.OrgID
+	//   ppz_<…>       → V1 API key; org = key.AccountID. req.AccountID
 	//                    must match (or be empty) — API keys are
 	//                    org-scoped at issuance.
-	var orgID uuid.UUID
+	var accountID uuid.UUID
 	if strings.HasPrefix(req.APIKey, bearerPrefixOAuth) {
 		tok, err := db.LookupBearerToken(ctx, s.Pool, req.APIKey)
 		if err != nil {
 			writeErr(w, cliproto.New(cliproto.EInvalidAPIKey))
 			return
 		}
-		if req.OrgID != "" {
-			parsed, err := uuid.Parse(req.OrgID)
+		if req.AccountID != "" {
+			parsed, err := uuid.Parse(req.AccountID)
 			if err != nil {
 				writeErr(w, &cliproto.Error{Code: "E_INVALID_ORG", Message: "org_id is not a valid uuid"})
 				return
@@ -50,14 +50,14 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 				writeErr(w, &cliproto.Error{Code: "E_INVALID_ORG", Message: "user is not a member of org"})
 				return
 			}
-			orgID = parsed
+			accountID = parsed
 		} else {
-			ownedOrg, err := db.FirstOwnedOrgFor(ctx, s.Pool, tok.UserID)
+			ownedOrg, err := db.FirstOwnedAccountFor(ctx, s.Pool, tok.UserID)
 			if err != nil {
 				writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "no org owned by user"})
 				return
 			}
-			orgID = ownedOrg.ID
+			accountID = ownedOrg.ID
 		}
 	} else {
 		key, err := db.LookupAPIKey(ctx, s.Pool, req.APIKey)
@@ -65,8 +65,8 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, cliproto.New(cliproto.EInvalidAPIKey))
 			return
 		}
-		orgID = key.OrganisationID
-		if req.OrgID != "" && req.OrgID != orgID.String() {
+		accountID = key.AccountID
+		if req.AccountID != "" && req.AccountID != accountID.String() {
 			writeErr(w, &cliproto.Error{Code: "E_INVALID_ORG", Message: "api key is not for this org"})
 			return
 		}
@@ -75,7 +75,7 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 	// Org name is surfaced in `ppz status` so users see "alpha" instead
 	// of a UUID. Looking it up here keeps it on the same round-trip as
 	// the auth result; the daemon caches it alongside Credentials.
-	org, err := db.GetOrganisation(ctx, s.Pool, orgID)
+	org, err := db.GetAccount(ctx, s.Pool, accountID)
 	if err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "org lookup: " + err.Error()})
 		return
@@ -110,14 +110,14 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	oa, err := s.AccountPool.Get(ctx, orgID)
+	oa, err := s.AccountPool.Get(ctx, accountID)
 	if err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "provision org account: " + err.Error()})
 		return
 	}
 	natsJWT, natsSeed, err := natsauth.MintUserJWTInAccount(
 		oa.AccountPub, oa.SigningKP,
-		"ppz-user-"+orgID.String(),
+		"ppz-user-"+accountID.String(),
 		[]string{">"}, []string{">"},
 		clock.Now().Add(natsUserJWTTTL).Unix(),
 	)
@@ -130,8 +130,8 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cliproto.AuthExchangeReply{
 		JWT:          "stub-jwt-not-yet-issued",
 		NATSURL:      natsURL,
-		OrgID:        orgID.String(),
-		OrgName:      org.Name,
+		AccountID:        accountID.String(),
+		AccountName:      org.Name,
 		ExpiresAt:    now.Add(natsUserJWTTTL),
 		NATSUserJWT:  natsJWT,
 		NATSUserSeed: natsSeed,
@@ -190,7 +190,7 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 		return
 	}
 
-	src, err := db.InsertSource(ctx, s.Pool, key.OrganisationID, key.CreatedByUserID, req.Handle, kind)
+	src, err := db.InsertSource(ctx, s.Pool, key.AccountID, key.CreatedByUserID, req.Handle, kind)
 	if err != nil {
 		if errors.Is(err, db.ErrHandleTaken) {
 			writeErr(w, cliproto.NewSourceTaken(req.Handle))
@@ -200,18 +200,18 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 		return
 	}
 
-	js, err := s.JSFor(ctx, key.OrganisationID)
+	js, err := s.JSFor(ctx, key.AccountID)
 	if err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "org account: " + err.Error()})
 		return
 	}
 	for _, p := range src.Pipes() {
-		if err := ensurePipeStream(ctx, js, key.OrganisationID, src.Handle, p); err != nil {
+		if err := ensurePipeStream(ctx, js, key.AccountID, src.Handle, p); err != nil {
 			writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 			return
 		}
 	}
-	subject := natsubj.Broadcast(key.OrganisationID, src.Handle)
+	subject := natsubj.Broadcast(key.AccountID, src.Handle)
 
 	writeJSON(w, http.StatusCreated, cliproto.CreateSourceReply{
 		ID:        src.ID.String(),
@@ -225,7 +225,7 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request, key db.APIKey) {
 	ctx, cancel := withTimeout(r)
 	defer cancel()
-	sources, err := db.ListSourcesForOrg(ctx, s.Pool, key.OrganisationID)
+	sources, err := db.ListSourcesForOrg(ctx, s.Pool, key.AccountID)
 	if err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -315,7 +315,7 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 
-	src, err := db.GetSourceByHandle(ctx, s.Pool, key.OrganisationID, handle)
+	src, err := db.GetSourceByHandle(ctx, s.Pool, key.AccountID, handle)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeErr(w, cliproto.NewSourceNotFound(handle))
@@ -350,12 +350,12 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 		maxBytes = *pipe.MaxBytes
 	}
 
-	js, err := s.JSFor(ctx, key.OrganisationID)
+	js, err := s.JSFor(ctx, key.AccountID)
 	if err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "org account: " + err.Error()})
 		return
 	}
-	if err := ensurePipeStreamWithRetention(ctx, js, key.OrganisationID,
+	if err := ensurePipeStreamWithRetention(ctx, js, key.AccountID,
 		src.Handle, pipe.Name, maxAge, maxMsgs, maxBytes); err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -364,7 +364,7 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 	writeJSON(w, http.StatusCreated, cliproto.PipeCreateReply{
 		Handle:     src.Handle,
 		Name:       pipe.Name,
-		StreamName: natsubj.StreamName(key.OrganisationID, src.Handle, pipe.Name),
+		StreamName: natsubj.StreamName(key.AccountID, src.Handle, pipe.Name),
 		TTLSeconds: int(maxAge / time.Second),
 		MaxMsgs:    maxMsgs,
 		MaxBytes:   maxBytes,
@@ -384,7 +384,7 @@ func (s *Server) handleDestroySource(w http.ResponseWriter, r *http.Request, key
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 
-	src, err := db.GetSourceByHandle(ctx, s.Pool, key.OrganisationID, handle)
+	src, err := db.GetSourceByHandle(ctx, s.Pool, key.AccountID, handle)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeErr(w, cliproto.NewSourceNotFound(handle))
@@ -401,7 +401,7 @@ func (s *Server) handleDestroySource(w http.ResponseWriter, r *http.Request, key
 		return
 	}
 
-	if err := db.DeleteSource(ctx, s.Pool, key.OrganisationID, handle); err != nil {
+	if err := db.DeleteSource(ctx, s.Pool, key.AccountID, handle); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeErr(w, cliproto.NewSourceNotFound(handle))
 			return
@@ -412,13 +412,13 @@ func (s *Server) handleDestroySource(w http.ResponseWriter, r *http.Request, key
 
 	// Stream cleanup is best-effort — the DB row is already gone so orphaned
 	// streams are storage waste only, not a correctness problem.
-	js, err := s.JSFor(ctx, key.OrganisationID)
+	js, err := s.JSFor(ctx, key.AccountID)
 	if err == nil {
 		for _, p := range userPipes {
-			_ = deletePipeStream(ctx, js, key.OrganisationID, handle, p.Name)
+			_ = deletePipeStream(ctx, js, key.AccountID, handle, p.Name)
 		}
 		for _, p := range src.Pipes() {
-			_ = deletePipeStream(ctx, js, key.OrganisationID, handle, p)
+			_ = deletePipeStream(ctx, js, key.AccountID, handle, p)
 		}
 	}
 
@@ -439,7 +439,7 @@ func (s *Server) handleDestroyPipe(w http.ResponseWriter, r *http.Request, key d
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 
-	src, err := db.GetSourceByHandle(ctx, s.Pool, key.OrganisationID, handle)
+	src, err := db.GetSourceByHandle(ctx, s.Pool, key.AccountID, handle)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeErr(w, cliproto.NewSourceNotFound(handle))
@@ -465,12 +465,12 @@ func (s *Server) handleDestroyPipe(w http.ResponseWriter, r *http.Request, key d
 			return
 		}
 	}
-	js, err := s.JSFor(ctx, key.OrganisationID)
+	js, err := s.JSFor(ctx, key.AccountID)
 	if err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "org account: " + err.Error()})
 		return
 	}
-	if err := deletePipeStream(ctx, js, key.OrganisationID, src.Handle, name); err != nil {
+	if err := deletePipeStream(ctx, js, key.AccountID, src.Handle, name); err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
@@ -481,7 +481,7 @@ func (s *Server) handleGetSource(w http.ResponseWriter, r *http.Request, key db.
 	handle := r.PathValue("handle")
 	ctx, cancel := withTimeout(r)
 	defer cancel()
-	src, err := db.GetSourceByHandle(ctx, s.Pool, key.OrganisationID, handle)
+	src, err := db.GetSourceByHandle(ctx, s.Pool, key.AccountID, handle)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeErr(w, cliproto.NewSourceNotFound(handle))

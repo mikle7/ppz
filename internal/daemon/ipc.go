@@ -126,8 +126,8 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		reply.LoggedIn = true
 		reply.URL = creds.URL
 		reply.KeyPrefix = d.State.KeyPrefix()
-		reply.OrgID = d.State.OrgID()
-		reply.OrgName = d.State.OrgName()
+		reply.AccountID = d.State.AccountID()
+		reply.AccountName = d.State.AccountName()
 		if d.Refresh != nil {
 			lastRefresh := d.Refresh.LastRefreshAt()
 			if !lastRefresh.IsZero() {

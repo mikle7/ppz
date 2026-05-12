@@ -12,15 +12,15 @@ import (
 )
 
 func TestStreamInfoByNameListsStreamsOnce(t *testing.T) {
-	orgID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	streamName := natsubj.StreamName(orgID, "agent", "broadcast")
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	streamName := natsubj.StreamName(accountID, "agent", "broadcast")
 	provider := &fakeStreamInfoProvider{
 		infos: []*jetstream.StreamInfo{
 			{Config: jetstream.StreamConfig{Name: streamName}},
 		},
 	}
 
-	got, err := streamInfoByName(context.Background(), provider, orgID)
+	got, err := streamInfoByName(context.Background(), provider, accountID)
 	if err != nil {
 		t.Fatalf("streamInfoByName: %v", err)
 	}

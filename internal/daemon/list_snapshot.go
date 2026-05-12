@@ -19,8 +19,8 @@ type streamInfoListProvider interface {
 	ListStreams(context.Context, ...jetstream.StreamListOpt) jetstream.StreamInfoLister
 }
 
-func streamInfoByName(ctx context.Context, js streamInfoListProvider, orgID uuid.UUID) (map[string]*jetstream.StreamInfo, error) {
-	lister := js.ListStreams(ctx, jetstream.WithStreamListSubject(natsubj.OrgSubscription(orgID)))
+func streamInfoByName(ctx context.Context, js streamInfoListProvider, accountID uuid.UUID) (map[string]*jetstream.StreamInfo, error) {
+	lister := js.ListStreams(ctx, jetstream.WithStreamListSubject(natsubj.OrgSubscription(accountID)))
 	infos := map[string]*jetstream.StreamInfo{}
 	for info := range lister.Info() {
 		infos[info.Config.Name] = info
@@ -45,8 +45,8 @@ type listPreviewResult struct {
 	payload   string
 }
 
-func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sources []cliproto.Source, orgID uuid.UUID, session string, patterns []string, cursors map[string]uint64) ([]cliproto.Source, error) {
-	streamInfos, err := streamInfoByName(ctx, js, orgID)
+func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sources []cliproto.Source, accountID uuid.UUID, session string, patterns []string, cursors map[string]uint64) ([]cliproto.Source, error) {
+	streamInfos, err := streamInfoByName(ctx, js, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sour
 			}
 
 			info := cliproto.PipeInfo{Pipe: p, CreatedBy: pipeCreator[p]}
-			streamName := natsubj.StreamName(orgID, s.Handle, p)
+			streamName := natsubj.StreamName(accountID, s.Handle, p)
 			if si := streamInfos[streamName]; si != nil {
 				info.Total = si.State.Msgs
 				info.LastSeq = si.State.LastSeq
@@ -83,7 +83,7 @@ func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sour
 					lt := si.State.LastTime.UTC()
 					info.LastAt = &lt
 				}
-				if cursor := cursors[daemonCursorKey(orgID, s.Handle, p)]; info.LastSeq > cursor {
+				if cursor := cursors[daemonCursorKey(accountID, s.Handle, p)]; info.LastSeq > cursor {
 					info.Unread = info.LastSeq - cursor
 				}
 				if info.LastSeq > 0 {

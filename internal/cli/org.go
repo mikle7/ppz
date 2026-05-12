@@ -57,7 +57,7 @@ func cmdOrgSwitch(args []string) error {
 		cliproto.OrgSwitchRequest{Name: args[0]}, &reply); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "switched org=%s id=%s\n", reply.OrgName, reply.OrgID)
+	fmt.Fprintf(os.Stdout, "switched org=%s id=%s\n", reply.AccountName, reply.AccountID)
 	return nil
 }
 
@@ -86,6 +86,6 @@ func cmdOrgInvite(args []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "invited username=%s org=%s id=%s\n",
-		reply.Invite.InviteeUsername, reply.Invite.OrganisationName, reply.Invite.ID)
+		reply.Invite.InviteeUsername, reply.Invite.AccountName, reply.Invite.ID)
 	return nil
 }

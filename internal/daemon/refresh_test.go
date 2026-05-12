@@ -17,7 +17,7 @@ func TestRefreshTimer_FiresBeforeExp(t *testing.T) {
 	var calls int32
 	exchanged := make(chan struct{}, 1)
 
-	fn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+	fn := func(ctx context.Context, accountID string) (string, string, int64, error) {
 		atomic.AddInt32(&calls, 1)
 		select {
 		case exchanged <- struct{}{}:
@@ -26,7 +26,7 @@ func TestRefreshTimer_FiresBeforeExp(t *testing.T) {
 		return "new-jwt", "new-seed", time.Now().Add(time.Hour).Unix(), nil
 	}
 
-	r := &RefreshLoop{OrgID: "test-org", Refresh: fn}
+	r := &RefreshLoop{AccountID: "test-org", Refresh: fn}
 
 	// Initial JWT expires in 1s — refresh should fire before that.
 	expSoon := time.Now().Add(1 * time.Second).Unix()
@@ -51,7 +51,7 @@ func TestRefreshTimer_FiresBeforeExp(t *testing.T) {
 
 func TestRefreshLoop_TracksLastRefreshAt(t *testing.T) {
 	refreshed := make(chan struct{}, 1)
-	fn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+	fn := func(ctx context.Context, accountID string) (string, string, int64, error) {
 		select {
 		case refreshed <- struct{}{}:
 		default:
@@ -59,7 +59,7 @@ func TestRefreshLoop_TracksLastRefreshAt(t *testing.T) {
 		return "new-jwt", "new-seed", time.Now().Add(time.Hour).Unix(), nil
 	}
 
-	r := &RefreshLoop{OrgID: "test-org", Refresh: fn}
+	r := &RefreshLoop{AccountID: "test-org", Refresh: fn}
 
 	beforeStart := time.Now()
 	expSoon := time.Now().Add(500 * time.Millisecond).Unix()
@@ -90,7 +90,7 @@ func TestEnsureRefreshLoopFromCredsStartsLoopFromPersistedCredentials(t *testing
 	creds := Credentials{
 		URL:          "http://127.0.0.1:1",
 		APIKey:       "ppz_test_key",
-		OrgID:        "test-org",
+		AccountID:        "test-org",
 		NATSUserJWT:  "persisted-jwt",
 		NATSUserSeed: "persisted-seed",
 	}
@@ -112,15 +112,15 @@ func TestEnsureRefreshLoopFromCredsStartsLoopFromPersistedCredentials(t *testing
 func TestRefreshLoopRefreshNowIfDueRefreshesExpiredCredentialSynchronously(t *testing.T) {
 	var calls int32
 	now := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
-	fn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+	fn := func(ctx context.Context, accountID string) (string, string, int64, error) {
 		atomic.AddInt32(&calls, 1)
-		if orgID != "test-org" {
-			t.Fatalf("RefreshFn orgID = %q, want test-org", orgID)
+		if accountID != "test-org" {
+			t.Fatalf("RefreshFn accountID = %q, want test-org", accountID)
 		}
 		return "fresh-jwt", "fresh-seed", now.Add(time.Hour).Unix(), nil
 	}
 
-	r := &RefreshLoop{OrgID: "test-org", Refresh: fn}
+	r := &RefreshLoop{AccountID: "test-org", Refresh: fn}
 	if err := r.Start(context.Background(), "expired-jwt", "expired-seed", now.Add(-time.Hour).Unix()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -148,12 +148,12 @@ func TestRefreshLoopRefreshNowIfDueRefreshesExpiredCredentialSynchronously(t *te
 func TestRefreshLoopRefreshNowIfDueSkipsFreshCredential(t *testing.T) {
 	var calls int32
 	now := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
-	fn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+	fn := func(ctx context.Context, accountID string) (string, string, int64, error) {
 		atomic.AddInt32(&calls, 1)
 		return "unexpected", "unexpected", now.Add(time.Hour).Unix(), nil
 	}
 
-	r := &RefreshLoop{OrgID: "test-org", Refresh: fn}
+	r := &RefreshLoop{AccountID: "test-org", Refresh: fn}
 	if err := r.Start(context.Background(), "current-jwt", "current-seed", now.Add(time.Hour).Unix()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -179,17 +179,17 @@ func TestRefreshTimer_HandlesUnauthorized(t *testing.T) {
 	var unauthOrg string
 	var mu sync.Mutex
 
-	failingFn := func(ctx context.Context, orgID string) (string, string, int64, error) {
+	failingFn := func(ctx context.Context, accountID string) (string, string, int64, error) {
 		return "", "", 0, ErrUnauthorized
 	}
 
 	r := &RefreshLoop{
-		OrgID:   "acme",
+		AccountID:   "acme",
 		Refresh: failingFn,
-		OnUnauthorized: func(orgID string) {
+		OnUnauthorized: func(accountID string) {
 			atomic.AddInt32(&unauthCount, 1)
 			mu.Lock()
-			unauthOrg = orgID
+			unauthOrg = accountID
 			mu.Unlock()
 		},
 	}
@@ -215,7 +215,7 @@ func TestRefreshTimer_HandlesUnauthorized(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if unauthOrg != "acme" {
-		t.Errorf("OnUnauthorized got orgID=%q want %q", unauthOrg, "acme")
+		t.Errorf("OnUnauthorized got accountID=%q want %q", unauthOrg, "acme")
 	}
 
 	// After unauth, Current() should still return the last known good
@@ -230,8 +230,8 @@ func TestRefreshTimer_HandlesUnauthorized(t *testing.T) {
 // Catches the "send on closed channel" panic class.
 func TestRefreshTimer_StopIsIdempotent(t *testing.T) {
 	r := &RefreshLoop{
-		OrgID: "x",
-		Refresh: func(ctx context.Context, orgID string) (string, string, int64, error) {
+		AccountID: "x",
+		Refresh: func(ctx context.Context, accountID string) (string, string, int64, error) {
 			return "", "", 0, errors.New("never called")
 		},
 	}

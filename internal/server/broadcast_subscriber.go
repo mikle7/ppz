@@ -57,7 +57,7 @@ func (s *Server) handleBroadcastMsg(ctx context.Context, m *nats.Msg) {
 	if len(parts) != 3 || parts[2] != "broadcast" {
 		return
 	}
-	orgID, err := uuid.Parse(parts[0])
+	accountID, err := uuid.Parse(parts[0])
 	if err != nil {
 		return
 	}
@@ -71,7 +71,7 @@ func (s *Server) handleBroadcastMsg(ctx context.Context, m *nats.Msg) {
 	// (the envelope's own `sender` is publisher-side context, distinct
 	// from destination). Always source destination from the subject.
 	destHandle := parts[1]
-	if err := db.UpdateLastBroadcast(ctx, s.Pool, orgID, destHandle, env.CreatedAt, env.Payload); err != nil {
-		log.Printf("ppz-server: update last_broadcast for %s/%s: %v", orgID, destHandle, err)
+	if err := db.UpdateLastBroadcast(ctx, s.Pool, accountID, destHandle, env.CreatedAt, env.Payload); err != nil {
+		log.Printf("ppz-server: update last_broadcast for %s/%s: %v", accountID, destHandle, err)
 	}
 }

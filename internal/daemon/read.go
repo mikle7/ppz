@@ -69,12 +69,12 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
-	orgID, err := uuid.Parse(d.State.OrgID())
+	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
 		writeReadErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
 		return
 	}
-	streamName := natsubj.StreamName(orgID, req.Handle, req.Channel)
+	streamName := natsubj.StreamName(accountID, req.Handle, req.Channel)
 
 	js, err := jetstream.New(d.NC)
 	if err != nil {
@@ -123,7 +123,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// when vt10x's grid wraps. Stdctrl missing / unparseable / dims=0
 	// are all treated as "no info" — caller falls back to defaults.
 	if req.Channel == "stdout" {
-		if cols, rows, ok := latestStdctrlResize(ctx, js, orgID, req.Handle); ok {
+		if cols, rows, ok := latestStdctrlResize(ctx, js, accountID, req.Handle); ok {
 			_ = json.NewEncoder(conn).Encode(cliproto.ReadEvent{
 				Meta: &cliproto.ReadMeta{Cols: cols, Rows: rows},
 			})
@@ -138,7 +138,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// the agent only sees what's new since they last looked. `reread`
 	// (req.All=true) ignores the cursor entirely — replay the full retained
 	// stream. NoAdvance is implied by All; cursor never moves under reread.
-	cursorKey := daemonCursorKey(orgID, req.Handle, req.Channel)
+	cursorKey := daemonCursorKey(accountID, req.Handle, req.Channel)
 	startSeq := info.State.FirstSeq
 	if !req.All && info.State.Msgs > 0 {
 		cursor := d.Cursors.Get(req.Session, cursorKey)
@@ -163,7 +163,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		historicalEnd := info.State.LastSeq
 		expected := int(historicalEnd - startSeq + 1)
 		consumer, cerr := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-			FilterSubject:     natsubj.Subject(orgID, req.Handle, req.Channel),
+			FilterSubject:     natsubj.Subject(accountID, req.Handle, req.Channel),
 			DeliverPolicy:     jetstream.DeliverByStartSequencePolicy,
 			OptStartSeq:       startSeq,
 			AckPolicy:         jetstream.AckNonePolicy,
@@ -256,7 +256,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		// Reread / NoAdvance reads do NOT emit acks — the cursor isn't
 		// moving from the recipient's perspective, so claiming "they
 		// read it" would be wrong.
-		go emitAcks(orgID, d.State.Current(req.Session), retained, clock.Now(), d.publishEnvelope)
+		go emitAcks(accountID, d.State.Current(req.Session), retained, clock.Now(), d.publishEnvelope)
 	}
 
 	if !req.Follow {
@@ -267,7 +267,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// sequence we drained (so we don't double-deliver). Stream until the
 	// CLI closes the socket or the request ctx is cancelled.
 	consumer, err := stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
-		FilterSubjects: []string{natsubj.Subject(orgID, req.Handle, req.Channel)},
+		FilterSubjects: []string{natsubj.Subject(accountID, req.Handle, req.Channel)},
 		DeliverPolicy:  jetstream.DeliverByStartSequencePolicy,
 		OptStartSeq:    lastSeqSeen + 1,
 	})
@@ -306,7 +306,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 			// for the previous ack's Flush), chunking the live stream by
 			// per-ack RTT. Same fire-and-forget semantics as the
 			// historical-drain path above.
-			go emitAcks(orgID, d.State.Current(req.Session), []cliproto.ReadMessage{rm}, clock.Now(), d.publishEnvelope)
+			go emitAcks(accountID, d.State.Current(req.Session), []cliproto.ReadMessage{rm}, clock.Now(), d.publishEnvelope)
 		}
 		_ = msg.Ack()
 	})
@@ -367,8 +367,8 @@ type stdctrlResizePayload struct {
 //
 // Dimensions are clamped to [1, 1000] on each axis so a malformed or
 // runaway publisher can't pass nonsense to vt10x.
-func latestStdctrlResize(ctx context.Context, js jetstream.JetStream, orgID uuid.UUID, handle string) (cols, rows int, ok bool) {
-	streamName := natsubj.StreamName(orgID, handle, "stdctrl")
+func latestStdctrlResize(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle string) (cols, rows int, ok bool) {
+	streamName := natsubj.StreamName(accountID, handle, "stdctrl")
 	stream, err := js.Stream(ctx, streamName)
 	if err != nil {
 		return 0, 0, false

@@ -60,9 +60,9 @@ func newTestAccount(t *testing.T) (*Account, string) {
 // the caller's org.
 func TestNATSJWT_MintForUser_ContainsExpectedSubjects(t *testing.T) {
 	acc, _ := newTestAccount(t)
-	const orgID = "alpha-uuid"
+	const accountID = "alpha-uuid"
 
-	tokStr, seed, err := acc.MintUserJWT(orgID, 5*time.Minute)
+	tokStr, seed, err := acc.MintUserJWT(accountID, 5*time.Minute)
 	if err != nil {
 		t.Fatalf("MintUserJWT: %v", err)
 	}
@@ -75,8 +75,8 @@ func TestNATSJWT_MintForUser_ContainsExpectedSubjects(t *testing.T) {
 		t.Fatalf("DecodeUserClaims: %v", err)
 	}
 
-	wantPub := orgID + ".>"
-	wantSub := orgID + ".>"
+	wantPub := accountID + ".>"
+	wantSub := accountID + ".>"
 
 	if !containsString(claims.Pub.Allow, wantPub) {
 		t.Errorf("pub allow: want %q in %v", wantPub, claims.Pub.Allow)

@@ -18,7 +18,7 @@ func TestPrintStatus_IncludesLastTokenRefreshRelativeTime(t *testing.T) {
 		DaemonPID:          12953,
 		LoggedIn:           true,
 		URL:                "https://pipescloud.io",
-		OrgName:            "jamesmiles",
+		AccountName:            "jamesmiles",
 		LastTokenRefreshAt: &lastRefresh,
 		Current:            "foo",
 	}, "", "", false)
@@ -41,7 +41,7 @@ func TestPrintStatus_IncludesMissingLastTokenRefreshPlaceholder(t *testing.T) {
 		DaemonPID: 12953,
 		LoggedIn:  true,
 		URL:       "https://pipescloud.io",
-		OrgName:   "jamesmiles",
+		AccountName:   "jamesmiles",
 		Current:   "foo",
 	}, "", "", false)
 
@@ -87,7 +87,7 @@ func TestPrintStatus_ColorsLastTokenRefreshAgeByThreshold(t *testing.T) {
 				DaemonPID:          12953,
 				LoggedIn:           true,
 				URL:                "https://pipescloud.io",
-				OrgName:            "jamesmiles",
+				AccountName:            "jamesmiles",
 				LastTokenRefreshAt: &tt.lastRefresh,
 				Current:            "foo",
 			}, "", "", true)
@@ -105,7 +105,7 @@ func TestPrintStatus_ColorsServerAndOrgValuesWhenSet(t *testing.T) {
 		DaemonPID: 12953,
 		LoggedIn:  true,
 		URL:       "https://pipescloud.io",
-		OrgName:   "jamesmiles",
+		AccountName:   "jamesmiles",
 		Current:   "foo",
 	}, "", "", true)
 
@@ -127,7 +127,7 @@ func TestPrintStatus_IncludesDaemonVersionMatch(t *testing.T) {
 		DaemonVersion: "v0.18.0",
 		LoggedIn:      true,
 		URL:           "https://pipescloud.io",
-		OrgName:       "jamesmiles",
+		AccountName:       "jamesmiles",
 		Current:       "foo",
 	}, "", "", false, "v0.18.0")
 
@@ -172,7 +172,7 @@ func TestPrintStatus_ColorsDaemonVersionByCLIMatch(t *testing.T) {
 				DaemonVersion: tt.daemonVersion,
 				LoggedIn:      true,
 				URL:           "https://pipescloud.io",
-				OrgName:       "jamesmiles",
+				AccountName:       "jamesmiles",
 				Current:       "foo",
 			}, "", "", true, tt.cliVersion)
 
@@ -189,7 +189,7 @@ func TestPrintStatus_ClarifiesUnknownDaemonVersion(t *testing.T) {
 		DaemonPID: 12953,
 		LoggedIn:  true,
 		URL:       "https://pipescloud.io",
-		OrgName:   "jamesmiles",
+		AccountName:   "jamesmiles",
 		Current:   "foo",
 	}, "", "", false, "v0.18.0")
 

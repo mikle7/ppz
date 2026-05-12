@@ -27,7 +27,7 @@ func (d *Daemon) handleOrgList(ctx context.Context, conn net.Conn, _ json.RawMes
 	// Annotate the org the daemon is currently bound to. The server
 	// doesn't know — that's daemon-side state set by login / org
 	// switch — so we stamp it here before handing back to the CLI.
-	if cur := d.State.OrgID(); cur != "" {
+	if cur := d.State.AccountID(); cur != "" {
 		for i := range reply.Orgs {
 			if reply.Orgs[i].ID == cur {
 				reply.Orgs[i].Current = true
@@ -57,13 +57,13 @@ func (d *Daemon) handleOrgInvite(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
 	}
-	orgName := d.State.OrgName()
-	if orgName == "" {
+	accountName := d.State.AccountName()
+	if accountName == "" {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_NO_CURRENT_ORG", Message: "not logged in or no current org"})
 		return
 	}
 	var reply cliproto.CreateInviteReply
-	if e := d.callServer(ctx, "POST", "/api/v1/orgs/"+orgName+"/invites",
+	if e := d.callServer(ctx, "POST", "/api/v1/orgs/"+accountName+"/invites",
 		cliproto.CreateInviteRequest{Username: req.Username}, &reply); e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -111,7 +111,7 @@ func (d *Daemon) handleOrgSwitch(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
-	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey, OrgID: targetID})
+	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey, AccountID: targetID})
 	httpReq, _ := http.NewRequestWithContext(ctx, "POST", creds.URL+"/api/v1/auth/exchange", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	resp, err := d.HTTP.Do(httpReq)
@@ -136,7 +136,7 @@ func (d *Daemon) handleOrgSwitch(ctx context.Context, conn net.Conn, params json
 
 	creds.NATSUserJWT = ex.NATSUserJWT
 	creds.NATSUserSeed = ex.NATSUserSeed
-	if err := d.State.SetLogin(*creds, ex.OrgID, ex.OrgName, keyPrefix(creds.APIKey)); err != nil {
+	if err := d.State.SetLogin(*creds, ex.AccountID, ex.AccountName, keyPrefix(creds.APIKey)); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
@@ -151,11 +151,11 @@ func (d *Daemon) handleOrgSwitch(ctx context.Context, conn net.Conn, params json
 		d.NC.Close()
 		d.NC = nil
 	}
-	d.startRefreshLoop(ex.OrgID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
+	d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
 	if nc, err := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents); err == nil {
 		d.NC = nc
 	}
 
-	writeIPC(conn, cliproto.OrgSwitchReply{OrgID: ex.OrgID, OrgName: ex.OrgName})
+	writeIPC(conn, cliproto.OrgSwitchReply{AccountID: ex.AccountID, AccountName: ex.AccountName})
 }
 

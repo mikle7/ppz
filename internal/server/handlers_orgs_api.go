@@ -30,7 +30,7 @@ func (s *Server) handleAPIListOrgs(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := withTimeout(r)
 	defer cancel()
-	orgs, err := db.ListOrganisationsForUser(ctx, s.Pool, caller.UserID)
+	orgs, err := db.ListAccountsForUser(ctx, s.Pool, caller.UserID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -70,11 +70,11 @@ func (s *Server) handleAPICreateOrg(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := withTimeout(r)
 	defer cancel()
-	if _, err := db.GetOrganisationByName(ctx, s.Pool, name); err == nil {
+	if _, err := db.GetAccountByName(ctx, s.Pool, name); err == nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "name already taken"})
 		return
 	}
-	org, err := db.InsertOrganisation(ctx, s.Pool, name, caller.UserID)
+	org, err := db.InsertAccount(ctx, s.Pool, name, caller.UserID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

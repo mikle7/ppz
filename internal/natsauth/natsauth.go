@@ -27,31 +27,31 @@ type Subjects struct {
 }
 
 // SubjectsForOrgUser returns the standard ppz subject scope for a user
-// in orgID. The org_id is the lowercase-hyphenated UUID, used as the
+// in accountID. The org_id is the lowercase-hyphenated UUID, used as the
 // subject root (matches natsubj.SubjectFor).
 //
-//   pub: <orgID>.>      — own data-plane subjects
+//   pub: <accountID>.>      — own data-plane subjects
 //        _INBOX.>       — reply subjects for NATS request/reply
 //        $JS.API.>      — JetStream API (stream/consumer mgmt)
-//   sub: <orgID>.>      — own data-plane subjects
+//   sub: <accountID>.>      — own data-plane subjects
 //        _INBOX.>       — receive replies
 //
 // Known limitation: $JS.API.> isn't subject-pattern scopable per-org
 // (stream names occupy a single subject token, so wildcards can't
 // constrain the prefix). All orgs share the same JetStream API
 // surface. Data-plane isolation (the load-bearing case for
-// broadcasts) IS enforced via the <orgID>.> scope. Per-org account
+// broadcasts) IS enforced via the <accountID>.> scope. Per-org account
 // isolation is the proper fix; tracked in V3+ out-of-scope.
-func SubjectsForOrgUser(orgID string) Subjects {
+func SubjectsForOrgUser(accountID string) Subjects {
 	return Subjects{
 		Publish: []string{
-			orgID + ".>", // own data-plane subjects
+			accountID + ".>", // own data-plane subjects
 			"_INBOX.>",   // reply-subjects for request/reply
 			"$JS.API.>",  // JetStream API (stream/consumer mgmt)
 			"$JS.ACK.>",  // consumer message acknowledgements
 		},
 		Subscribe: []string{
-			orgID + ".>",
+			accountID + ".>",
 			"_INBOX.>",
 		},
 	}
@@ -101,12 +101,12 @@ func (a *Account) MintServerUserJWT(expiry time.Duration) (jwtStr, seed string, 
 }
 
 // MintUserJWT generates a fresh user nkey pair, signs a short-lived
-// User JWT (with the subject scope for orgID embedded), and returns
+// User JWT (with the subject scope for accountID embedded), and returns
 // (jwt, seed) for handing to a daemon over /auth/exchange. The seed
 // is the user's own private key — ppz-server keeps no copy.
-func (a *Account) MintUserJWT(orgID string, expiry time.Duration) (jwtStr, seed string, err error) {
-	subj := SubjectsForOrgUser(orgID)
-	return a.mintUser("ppz-user-"+orgID, subj.Publish, subj.Subscribe, expiry)
+func (a *Account) MintUserJWT(accountID string, expiry time.Duration) (jwtStr, seed string, err error) {
+	subj := SubjectsForOrgUser(accountID)
+	return a.mintUser("ppz-user-"+accountID, subj.Publish, subj.Subscribe, expiry)
 }
 
 func (a *Account) mintUser(name string, pubAllow, subAllow []string, expiry time.Duration) (jwtStr, seed string, err error) {

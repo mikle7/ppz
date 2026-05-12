@@ -27,11 +27,11 @@ var tmpl = template.Must(template.ParseFS(templateFS, "templates/*.html"))
 // parse is tried first; on failure we fall back to a name lookup. A
 // UUID-shaped name would always be treated as an ID — names in practice are
 // short alphanumerics, so this is fine.
-func resolveOrg(ctx context.Context, pool *db.Pool, idOrSlug string) (db.Organisation, error) {
+func resolveOrg(ctx context.Context, pool *db.Pool, idOrSlug string) (db.Account, error) {
 	if id, err := uuid.Parse(idOrSlug); err == nil {
-		return db.GetOrganisation(ctx, pool, id)
+		return db.GetAccount(ctx, pool, id)
 	}
-	return db.GetOrganisationByName(ctx, pool, idOrSlug)
+	return db.GetAccountByName(ctx, pool, idOrSlug)
 }
 
 // base returns a map pre-populated with fields available to every template.
@@ -53,7 +53,7 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 	uid := UserIDFromCtx(r.Context())
-	orgs, err := db.ListOrganisationsForUser(ctx, s.Pool, uid)
+	orgs, err := db.ListAccountsForUser(ctx, s.Pool, uid)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -63,7 +63,7 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	// user_id). Failure here doesn't block the dashboard — render
 	// without the section and log via the standard 500 path only on
 	// outright user-lookup failure.
-	var invites []db.InviteWithOrg
+	var invites []db.InviteWithAccount
 	if user, err := db.GetUser(ctx, s.Pool, uid); err == nil {
 		invites, _ = db.ListPendingInvitesForUsername(ctx, s.Pool, user.Username)
 	}
@@ -102,7 +102,7 @@ func (s *Server) handleGUICreateOrg(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := withTimeout(r)
 	defer cancel()
-	if _, err := db.InsertOrganisation(ctx, s.Pool, name, ownerID); err != nil {
+	if _, err := db.InsertAccount(ctx, s.Pool, name, ownerID); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -316,8 +316,8 @@ func (s *Server) handleGUICreateKey(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(w, "key_created.html", map[string]any{
-		"OrgID":     org.ID.String(),
-		"OrgName":   org.Name,
+		"AccountID":     org.ID.String(),
+		"AccountName":   org.Name,
 		"KeyID":     key.ID.String(),
 		"Plaintext": plaintext,
 	}); err != nil {

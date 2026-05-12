@@ -116,8 +116,8 @@ type StatusReply struct {
 	LoggedIn           bool       `json:"logged_in"`
 	URL                string     `json:"url,omitempty"`
 	KeyPrefix          string     `json:"key_prefix,omitempty"`
-	OrgID              string     `json:"org_id,omitempty"`
-	OrgName            string     `json:"org_name,omitempty"`
+	AccountID              string     `json:"account_id,omitempty"`
+	AccountName            string     `json:"account_name,omitempty"`
 	LastTokenRefreshAt *time.Time `json:"last_token_refresh_at,omitempty"`
 	// LoginCheck is the daemon's last verification result against the
 	// server. "ok" means a recent server-touching call succeeded;
@@ -158,7 +158,7 @@ type LoginRequest struct {
 type LoginReply struct {
 	URL       string `json:"url"`
 	KeyPrefix string `json:"key_prefix"`
-	OrgID     string `json:"org_id"`
+	AccountID     string `json:"account_id"`
 }
 
 type CreateRequest struct {
@@ -330,11 +330,11 @@ type ListReply struct {
 
 type AuthExchangeRequest struct {
 	APIKey string `json:"api_key"`
-	// OrgID (Phase 3.5): which org's account to mint a User JWT in.
+	// AccountID (Phase 3.5): which org's account to mint a User JWT in.
 	// Optional — server defaults to the bearer's primary org (first
 	// owned, or first member). Multi-org users specify it explicitly
 	// to switch which org their daemon talks to.
-	OrgID string `json:"org_id,omitempty"`
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // OrgInfo is one row in the ListOrgs response — what `ppz orgs ls`
@@ -373,18 +373,18 @@ type CreateInviteRequest struct {
 	Username string `json:"username"`
 }
 
-// Invite is the API projection of a db.Invite row plus the org name
-// (so the dashboard can render "Pending invitation to <org>" without
+// Invite is the API projection of a db.Invite row plus the account name
+// (so the dashboard can render "Pending invitation to <account>" without
 // a second join).
 type Invite struct {
-	ID               string `json:"id"`
-	OrganisationID   string `json:"organisation_id"`
-	OrganisationName string `json:"organisation_name,omitempty"`
-	InviteeUsername  string `json:"invitee_username"`
-	InviterUserID    string `json:"inviter_user_id"`
-	Status           string `json:"status"`
-	CreatedAt        string `json:"created_at"`
-	DecidedAt        string `json:"decided_at,omitempty"`
+	ID              string `json:"id"`
+	AccountID       string `json:"account_id"`
+	AccountName     string `json:"account_name,omitempty"`
+	InviteeUsername string `json:"invitee_username"`
+	InviterUserID   string `json:"inviter_user_id"`
+	Status          string `json:"status"`
+	CreatedAt       string `json:"created_at"`
+	DecidedAt       string `json:"decided_at,omitempty"`
 }
 
 type CreateInviteReply struct {
@@ -406,8 +406,8 @@ type OrgSwitchRequest struct {
 // active org. Daemon returns the resolved id+name so the CLI can
 // echo back "switched to org=<name>".
 type OrgSwitchReply struct {
-	OrgID   string `json:"org_id"`
-	OrgName string `json:"org_name"`
+	AccountID   string `json:"account_id"`
+	AccountName string `json:"account_name"`
 }
 
 // OrgCreateRequest is the IPC payload for `ppz org create <name>` —
@@ -425,8 +425,8 @@ type OrgInviteRequest struct {
 type AuthExchangeReply struct {
 	JWT       string    `json:"jwt"`
 	NATSURL   string    `json:"nats_url"`
-	OrgID     string    `json:"org_id"`
-	OrgName   string    `json:"org_name"`
+	AccountID     string    `json:"account_id"`
+	AccountName   string    `json:"account_name"`
 	ExpiresAt time.Time `json:"expires_at"`
 
 	// Auth V2 Phase 3 — short-lived NATS user credentials. The daemon

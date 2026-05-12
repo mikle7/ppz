@@ -141,7 +141,7 @@ func TestBuildAckEnvelope_AllowsEmptySelf(t *testing.T) {
 // abort the loop.
 func TestEmitAcks_FireAndForget_ContinuesPastFailures(t *testing.T) {
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	orgID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	accountID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
 	retained := []cliproto.ReadMessage{
 		{ID: "msg-1", Sender: "alpha", AckRequested: true},
@@ -162,7 +162,7 @@ func TestEmitAcks_FireAndForget_ContinuesPastFailures(t *testing.T) {
 		return nil
 	}
 
-	emitAcks(orgID, "sheriff", retained, now, publish)
+	emitAcks(accountID, "sheriff", retained, now, publish)
 
 	if len(calls) != 3 {
 		t.Fatalf("expected 3 publish attempts (one per message), got %d", len(calls))
@@ -192,7 +192,7 @@ func TestEmitAcks_SkipsGuardedMessages(t *testing.T) {
 		{ID: "4", Sender: "alpha", Subject: "ack:read", AckRequested: true},     // no — loop guard
 	}
 	var dests []string
-	publish := func(orgID uuid.UUID, dest, pipe string, env envelope.Message) error {
+	publish := func(accountID uuid.UUID, dest, pipe string, env envelope.Message) error {
 		dests = append(dests, dest)
 		return nil
 	}

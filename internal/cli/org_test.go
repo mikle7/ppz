@@ -37,7 +37,7 @@ func TestOrg_SwitchDispatchesIPCOrgSwitch(t *testing.T) {
 	sock := tmpDaemonSock(t, "ppz-org-switch-")
 	t.Setenv("PPZ_IPC_SOCKET", sock)
 	requests := serveOrgFakeDaemon(t, sock, map[string]any{
-		cliproto.IPCOrgSwitch: cliproto.OrgSwitchReply{OrgID: "id-b", OrgName: "beta"},
+		cliproto.IPCOrgSwitch: cliproto.OrgSwitchReply{AccountID: "id-b", AccountName: "beta"},
 	})
 
 	if err := cmdOrg([]string{"switch", "beta"}); err != nil {
@@ -84,7 +84,7 @@ func TestOrg_InviteDispatchesIPCOrgInvite(t *testing.T) {
 		cliproto.IPCOrgInvite: cliproto.CreateInviteReply{Invite: cliproto.Invite{
 			ID:               "inv-1",
 			InviteeUsername:  "alice",
-			OrganisationName: "alpha",
+			AccountName: "alpha",
 		}},
 	})
 

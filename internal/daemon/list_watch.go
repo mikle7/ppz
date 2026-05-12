@@ -35,7 +35,7 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
-	orgID, err := uuid.Parse(d.State.OrgID())
+	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
 		return
@@ -55,8 +55,8 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 	// drain into a 1-slot wakeup channel which is enough for "tell me
 	// when something happened" semantics.
 	wakeup := make(chan struct{}, 1)
-	sub, err := d.NC.Subscribe(orgID.String()+".>", func(msg *nats.Msg) {
-		// Subjects are "<orgID>.<handle>.<pipe>" — parse both, match
+	sub, err := d.NC.Subscribe(accountID.String()+".>", func(msg *nats.Msg) {
+		// Subjects are "<accountID>.<handle>.<pipe>" — parse both, match
 		// against the full target so `*.stdout` patterns wake correctly
 		// (and not just on traffic to handles named *.stdout, which
 		// don't exist).
@@ -64,7 +64,7 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 		if len(parts) != 3 {
 			return
 		}
-		// parts[0] = orgID (already filtered by subscribe), parts[1] is
+		// parts[0] = accountID (already filtered by subscribe), parts[1] is
 		// the handle's first dot-bounded segment, parts[2] is the pipe
 		// name. UUIDs contain hyphens not dots so this split is safe.
 		handle, pipe := parts[1], parts[2]
@@ -83,7 +83,7 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 	defer sub.Unsubscribe()
 
 	// Initial snapshot.
-	reply, e := d.buildFilteredList(ctx, orgID, req.Session, req.Patterns)
+	reply, e := d.buildFilteredList(ctx, accountID, req.Session, req.Patterns)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -105,7 +105,7 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 
 	select {
 	case <-wakeup:
-		reply, e = d.buildFilteredList(ctx, orgID, req.Session, req.Patterns)
+		reply, e = d.buildFilteredList(ctx, accountID, req.Session, req.Patterns)
 		if e != nil {
 			writeIPCErr(conn, e)
 			return
@@ -121,7 +121,7 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 // buildFilteredList does the same per-pipe enumeration as handleList,
 // but filters sources by the patterns. Returns a ListReply whose Sources
 // only include matching handles.
-func (d *Daemon) buildFilteredList(ctx context.Context, orgID uuid.UUID, session string, patterns []string) (cliproto.ListReply, *cliproto.Error) {
+func (d *Daemon) buildFilteredList(ctx context.Context, accountID uuid.UUID, session string, patterns []string) (cliproto.ListReply, *cliproto.Error) {
 	var lr cliproto.ListSourcesReply
 	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
 		return cliproto.ListReply{}, e
@@ -131,7 +131,7 @@ func (d *Daemon) buildFilteredList(ctx context.Context, orgID uuid.UUID, session
 		return cliproto.ListReply{}, cliproto.New(cliproto.ENATSUnreachable)
 	}
 
-	enriched, err := enrichSourcesWithPipeInfo(ctx, js, lr.Sources, orgID, session, patterns, cursorSnapshot(d.Cursors, session))
+	enriched, err := enrichSourcesWithPipeInfo(ctx, js, lr.Sources, accountID, session, patterns, cursorSnapshot(d.Cursors, session))
 	if err != nil {
 		return cliproto.ListReply{}, cliproto.New(cliproto.ENATSUnreachable)
 	}

@@ -33,11 +33,11 @@ var ErrDuplicatePendingInvite = errors.New("a pending invite for this user alrea
 // ErrAlreadyMember is returned by CreateInvite when the invitee is
 // already a member or the owner of the org. Same intent as the
 // duplicate-pending case but a different cause — surface separately.
-var ErrAlreadyMember = errors.New("user is already a member of this organisation")
+var ErrAlreadyMember = errors.New("user is already a member of this account")
 
 type Invite struct {
 	ID              uuid.UUID
-	OrganisationID  uuid.UUID
+	AccountID  uuid.UUID
 	InviteeUsername string
 	InviterUserID   uuid.UUID
 	Status          InviteStatus
@@ -45,18 +45,18 @@ type Invite struct {
 	DecidedAt       *time.Time
 }
 
-// InviteWithOrg is the dashboard projection — invite plus org name so
+// InviteWithAccount is the dashboard projection — invite plus org name so
 // the user can see where the invite came from without a second query.
-type InviteWithOrg struct {
+type InviteWithAccount struct {
 	Invite
-	OrganisationName string
+	AccountName string
 }
 
-// CreateInvite inserts a pending invite for inviteeUsername into orgID,
+// CreateInvite inserts a pending invite for inviteeUsername into accountID,
 // recording inviterUserID as the sender. Pre-flights two error
 // conditions before the insert:
 //
-//   - inviteeUsername is already a member or the owner of orgID
+//   - inviteeUsername is already a member or the owner of accountID
 //     → ErrAlreadyMember
 //   - a pending invite for the same (org, username) already exists
 //     → ErrDuplicatePendingInvite
@@ -64,20 +64,20 @@ type InviteWithOrg struct {
 // Pre-flighting the duplicate case in addition to relying on the
 // partial unique index gives us a typed error without inspecting pg
 // error codes.
-func CreateInvite(ctx context.Context, p *Pool, orgID uuid.UUID, inviteeUsername string, inviterUserID uuid.UUID) (Invite, error) {
+func CreateInvite(ctx context.Context, p *Pool, accountID uuid.UUID, inviteeUsername string, inviterUserID uuid.UUID) (Invite, error) {
 	// Already a member or the owner?
 	var n int
 	err := p.QueryRow(ctx, `
 		SELECT 1
-		  FROM organisations o
+		  FROM accounts o
 		  JOIN users u ON u.id = o.owner_user_id
 		 WHERE o.id = $1 AND u.username = $2
 		UNION ALL
 		SELECT 1
-		  FROM organisation_members m
+		  FROM account_members m
 		  JOIN users u ON u.id = m.user_id
-		 WHERE m.organisation_id = $1 AND u.username = $2
-		 LIMIT 1`, orgID, inviteeUsername).Scan(&n)
+		 WHERE m.account_id = $1 AND u.username = $2
+		 LIMIT 1`, accountID, inviteeUsername).Scan(&n)
 	if err == nil {
 		return Invite{}, ErrAlreadyMember
 	}
@@ -88,8 +88,8 @@ func CreateInvite(ctx context.Context, p *Pool, orgID uuid.UUID, inviteeUsername
 	// Existing pending invite?
 	err = p.QueryRow(ctx, `
 		SELECT 1 FROM invites
-		 WHERE organisation_id = $1 AND invitee_username = $2 AND status = 'pending'
-		 LIMIT 1`, orgID, inviteeUsername).Scan(&n)
+		 WHERE account_id = $1 AND invitee_username = $2 AND status = 'pending'
+		 LIMIT 1`, accountID, inviteeUsername).Scan(&n)
 	if err == nil {
 		return Invite{}, ErrDuplicatePendingInvite
 	}
@@ -99,16 +99,16 @@ func CreateInvite(ctx context.Context, p *Pool, orgID uuid.UUID, inviteeUsername
 
 	inv := Invite{
 		ID:              uuid.New(),
-		OrganisationID:  orgID,
+		AccountID:  accountID,
 		InviteeUsername: inviteeUsername,
 		InviterUserID:   inviterUserID,
 		Status:          InviteStatusPending,
 		CreatedAt:       time.Now().UTC(),
 	}
 	if _, err := p.Exec(ctx,
-		`INSERT INTO invites (id, organisation_id, invitee_username, inviter_user_id, status, created_at)
+		`INSERT INTO invites (id, account_id, invitee_username, inviter_user_id, status, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		inv.ID, inv.OrganisationID, inv.InviteeUsername, inv.InviterUserID, string(inv.Status), inv.CreatedAt); err != nil {
+		inv.ID, inv.AccountID, inv.InviteeUsername, inv.InviterUserID, string(inv.Status), inv.CreatedAt); err != nil {
 		return Invite{}, err
 	}
 	return inv, nil
@@ -120,9 +120,9 @@ func GetInvite(ctx context.Context, p *Pool, id uuid.UUID) (Invite, error) {
 	var inv Invite
 	var status string
 	err := p.QueryRow(ctx,
-		`SELECT id, organisation_id, invitee_username, inviter_user_id, status, created_at, decided_at
+		`SELECT id, account_id, invitee_username, inviter_user_id, status, created_at, decided_at
 		   FROM invites WHERE id = $1`, id).
-		Scan(&inv.ID, &inv.OrganisationID, &inv.InviteeUsername, &inv.InviterUserID, &status, &inv.CreatedAt, &inv.DecidedAt)
+		Scan(&inv.ID, &inv.AccountID, &inv.InviteeUsername, &inv.InviterUserID, &status, &inv.CreatedAt, &inv.DecidedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Invite{}, ErrNotFound
 	}
@@ -134,26 +134,26 @@ func GetInvite(ctx context.Context, p *Pool, id uuid.UUID) (Invite, error) {
 }
 
 // ListPendingInvitesForUsername returns all pending invites whose
-// invitee_username matches. Joined with organisations so callers can
+// invitee_username matches. Joined with accounts so callers can
 // show the org name on the dashboard.
-func ListPendingInvitesForUsername(ctx context.Context, p *Pool, username string) ([]InviteWithOrg, error) {
+func ListPendingInvitesForUsername(ctx context.Context, p *Pool, username string) ([]InviteWithAccount, error) {
 	rows, err := p.Query(ctx, `
-		SELECT i.id, i.organisation_id, i.invitee_username, i.inviter_user_id,
+		SELECT i.id, i.account_id, i.invitee_username, i.inviter_user_id,
 		       i.status, i.created_at, i.decided_at, o.name
 		  FROM invites i
-		  JOIN organisations o ON o.id = i.organisation_id
+		  JOIN accounts o ON o.id = i.account_id
 		 WHERE i.invitee_username = $1 AND i.status = 'pending'
 		 ORDER BY i.created_at ASC`, username)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []InviteWithOrg
+	var out []InviteWithAccount
 	for rows.Next() {
-		var iw InviteWithOrg
+		var iw InviteWithAccount
 		var status string
-		if err := rows.Scan(&iw.ID, &iw.OrganisationID, &iw.InviteeUsername, &iw.InviterUserID,
-			&status, &iw.CreatedAt, &iw.DecidedAt, &iw.OrganisationName); err != nil {
+		if err := rows.Scan(&iw.ID, &iw.AccountID, &iw.InviteeUsername, &iw.InviterUserID,
+			&status, &iw.CreatedAt, &iw.DecidedAt, &iw.AccountName); err != nil {
 			return nil, err
 		}
 		iw.Status = InviteStatus(status)
@@ -162,14 +162,14 @@ func ListPendingInvitesForUsername(ctx context.Context, p *Pool, username string
 	return out, rows.Err()
 }
 
-// ListInvitesForOrg returns every invite (any status) for orgID,
+// ListInvitesForOrg returns every invite (any status) for accountID,
 // newest first. Used by the org page to show the invite history.
-func ListInvitesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Invite, error) {
+func ListInvitesForOrg(ctx context.Context, p *Pool, accountID uuid.UUID) ([]Invite, error) {
 	rows, err := p.Query(ctx, `
-		SELECT id, organisation_id, invitee_username, inviter_user_id, status, created_at, decided_at
+		SELECT id, account_id, invitee_username, inviter_user_id, status, created_at, decided_at
 		  FROM invites
-		 WHERE organisation_id = $1
-		 ORDER BY created_at DESC`, orgID)
+		 WHERE account_id = $1
+		 ORDER BY created_at DESC`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func ListInvitesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Invite,
 	for rows.Next() {
 		var inv Invite
 		var status string
-		if err := rows.Scan(&inv.ID, &inv.OrganisationID, &inv.InviteeUsername, &inv.InviterUserID,
+		if err := rows.Scan(&inv.ID, &inv.AccountID, &inv.InviteeUsername, &inv.InviterUserID,
 			&status, &inv.CreatedAt, &inv.DecidedAt); err != nil {
 			return nil, err
 		}
@@ -208,9 +208,9 @@ func AcceptInvite(ctx context.Context, p *Pool, inviteID, acceptingUserID uuid.U
 	var inv Invite
 	var status string
 	err = tx.QueryRow(ctx,
-		`SELECT id, organisation_id, invitee_username, inviter_user_id, status, created_at
+		`SELECT id, account_id, invitee_username, inviter_user_id, status, created_at
 		   FROM invites WHERE id = $1 FOR UPDATE`, inviteID).
-		Scan(&inv.ID, &inv.OrganisationID, &inv.InviteeUsername, &inv.InviterUserID, &status, &inv.CreatedAt)
+		Scan(&inv.ID, &inv.AccountID, &inv.InviteeUsername, &inv.InviterUserID, &status, &inv.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -236,10 +236,10 @@ func AcceptInvite(ctx context.Context, p *Pool, inviteID, acceptingUserID uuid.U
 		return err
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO organisation_members (organisation_id, user_id, added_at)
+		`INSERT INTO account_members (account_id, user_id, added_at)
 		 VALUES ($1, $2, $3)
-		 ON CONFLICT (organisation_id, user_id) DO NOTHING`,
-		inv.OrganisationID, acceptingUserID, now); err != nil {
+		 ON CONFLICT (account_id, user_id) DO NOTHING`,
+		inv.AccountID, acceptingUserID, now); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
