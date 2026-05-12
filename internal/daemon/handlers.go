@@ -805,9 +805,30 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 	}
 	// Verify the JetStream stream exists before publishing. NATS-core
 	// publish to a subject with no consumer silently succeeds.
+	//
+	// Classify js.Stream() errors into the right user-facing code:
+	//   - jetstream.ErrStreamNotFound → E_PIPE_NOT_FOUND: the pipe
+	//     genuinely doesn't exist on this source. Names the pipe + source
+	//     in the message so the user sees the actionable next step.
+	//   - context.DeadlineExceeded / nats.ErrTimeout / nats.ErrConnectionClosed
+	//     → E_NATS_UNREACHABLE: can't reach the broker to even check.
+	//     The pipe might be perfectly valid (see the wifi-disconnect
+	//     repro in MoltHub agent feedback); attributing the failure to
+	//     pipe invalidity misled agents away from the real cause.
+	//   - any other error → E_INVALID_PIPE catch-all. Truly unexpected.
 	if js, err := jetstream.New(d.NC); err == nil {
 		if _, err := js.Stream(ctx, natsubj.StreamName(orgID, current, pipe)); err != nil {
-			return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+			switch {
+			case errors.Is(err, jetstream.ErrStreamNotFound):
+				return broadcastTarget{}, cliproto.NewPipeNotFound(pipe, current)
+			case errors.Is(err, context.DeadlineExceeded),
+				errors.Is(err, nats.ErrTimeout),
+				errors.Is(err, nats.ErrConnectionClosed),
+				errors.Is(err, nats.ErrNoServers):
+				return broadcastTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+			default:
+				return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+			}
 		}
 	}
 	// Sender is the broadcaster's own current source — *not* the
