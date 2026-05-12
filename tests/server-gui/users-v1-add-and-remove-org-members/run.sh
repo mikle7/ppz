@@ -29,7 +29,7 @@ curl_server "/orgs" -X POST \
   --data-urlencode 'name=wonder' \
   --data-urlencode "owner_user_id=$alice_id" >/dev/null
 wonder_id="$(PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
-  "SELECT id FROM organisations WHERE name = 'wonder'")"
+  "SELECT id FROM accounts WHERE name = 'wonder'")"
 
 echo "--- add bob as member ---"
 curl_server "/orgs/$wonder_id/members" -X POST \
@@ -38,9 +38,9 @@ curl_server "/orgs/$wonder_id/members" -X POST \
 
 echo "--- bob is now a member of wonder ---"
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
-  "SELECT u.username FROM organisation_members m
+  "SELECT u.username FROM account_members m
      JOIN users u ON m.user_id = u.id
-    WHERE m.organisation_id = '$wonder_id'"
+    WHERE m.account_id = '$wonder_id'"
 
 echo "--- removing bob (regular member) succeeds ---"
 curl_server "/orgs/$wonder_id/members/$bob_id/remove" -X POST \
@@ -48,7 +48,7 @@ curl_server "/orgs/$wonder_id/members/$bob_id/remove" -X POST \
 
 echo "--- members table is empty again ---"
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
-  "SELECT COUNT(*)::text FROM organisation_members WHERE organisation_id = '$wonder_id'"
+  "SELECT COUNT(*)::text FROM account_members WHERE account_id = '$wonder_id'"
 
 echo "--- removing alice (owner) is rejected ---"
 curl_server "/orgs/$wonder_id/members/$alice_id/remove" -X POST \
@@ -56,6 +56,6 @@ curl_server "/orgs/$wonder_id/members/$alice_id/remove" -X POST \
 
 echo "--- alice still owns wonder ---"
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
-  "SELECT u.username FROM organisations o
+  "SELECT u.username FROM accounts o
      JOIN users u ON o.owner_user_id = u.id
     WHERE o.name = 'wonder'"

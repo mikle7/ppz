@@ -12,7 +12,7 @@
 # Add an isolated org that no seeded user owns or is a member of —
 # strengthens the assertion that we're filtering, not just renaming.
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -v ON_ERROR_STOP=1 -tAc "
-  INSERT INTO organisations (id, name, owner_user_id)
+  INSERT INTO accounts (id, name, owner_user_id)
   SELECT '99999999-9999-9999-9999-999999999999', 'tenant-leak-canary', u.id
     FROM users u WHERE u.username = 'unauthenticated'
   ON CONFLICT (id) DO NOTHING

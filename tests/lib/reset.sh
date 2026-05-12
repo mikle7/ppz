@@ -41,7 +41,7 @@ DELETE FROM invites;
 DELETE FROM api_keys WHERE label NOT IN ('alpha-primary','alpha-secondary','beta-primary');
 -- Un-revoke seeded keys so each scenario starts with all three usable.
 UPDATE api_keys SET revoked_at = NULL WHERE revoked_at IS NOT NULL;
-DELETE FROM organisations WHERE name NOT IN ('alpha','beta');
+DELETE FROM accounts WHERE name NOT IN ('alpha','beta');
 -- Users v1: drop any non-seeded users (alice/bob etc. created by
 -- tests). The 'unauthenticated' placeholder MUST stay so alpha/beta
 -- retain a valid owner_user_id FK target. foo + bar are seeded
@@ -50,10 +50,10 @@ DELETE FROM organisations WHERE name NOT IN ('alpha','beta');
 DELETE FROM users WHERE username NOT IN ('unauthenticated', 'foo', 'bar');
 -- Reset memberships to the seeded baseline. Auth V2 widened this so
 -- bar is also a member of alpha (used by owner-only-gate tests).
-DELETE FROM organisation_members;
-INSERT INTO organisation_members (organisation_id, user_id)
+DELETE FROM account_members;
+INSERT INTO account_members (account_id, user_id)
   SELECT o.id, u.id
-    FROM organisations o, users u
+    FROM accounts o, users u
    WHERE (o.name = 'alpha' AND u.username = 'foo')
       OR (o.name = 'alpha' AND u.username = 'bar')
       OR (o.name = 'beta'  AND u.username = 'bar')
@@ -61,7 +61,7 @@ ON CONFLICT DO NOTHING;
 -- Reset alpha's owner to foo so owner-only-gate tests have a stable
 -- owner across scenarios (without this, a previous test could
 -- transfer ownership and leave us in an inconsistent state).
-UPDATE organisations
+UPDATE accounts
    SET owner_user_id = (SELECT id FROM users WHERE username = 'foo')
  WHERE name = 'alpha';
 SQL

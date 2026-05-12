@@ -30,7 +30,7 @@ curl_server "/orgs" -X POST \
 
 echo "--- wonder is owned by alice ---"
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
-  "SELECT u.username FROM organisations o
+  "SELECT u.username FROM accounts o
      JOIN users u ON o.owner_user_id = u.id
     WHERE o.name = 'wonder'"
 
@@ -38,6 +38,6 @@ echo "--- POST /orgs with only a name → owner defaults to the authed session u
 curl_server "/orgs" -X POST --data-urlencode 'name=plain' \
   -o /dev/null -w 'http=%{http_code}\n'
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
-  "SELECT u.username FROM organisations o
+  "SELECT u.username FROM accounts o
      JOIN users u ON o.owner_user_id = u.id
     WHERE o.name = 'plain'"
