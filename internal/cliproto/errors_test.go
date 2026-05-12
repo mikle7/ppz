@@ -1,6 +1,9 @@
 package cliproto
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // v0.25.0: a new error code E_INVALID_SUBJECT for subject-rule violations
 // (the `ack:` prefix is reserved for daemon-emitted protocol messages).
@@ -19,5 +22,62 @@ func TestEInvalidSubject_StableSurface(t *testing.T) {
 	e := New(EInvalidSubject)
 	if e == nil || e.Code != EInvalidSubject {
 		t.Fatalf("New(EInvalidSubject) returned %+v", e)
+	}
+}
+
+// Track B (docs/AGENT_HARDENING.md): error-message accuracy. The
+// E_INVALID_PIPE catalog default currently enumerates only the four
+// built-in pipes ({broadcast, inbox, stdin, stdout}) as valid — but
+// custom pipes created via `ppz pipe create` are also valid. MoltHub's
+// Charlie and Bob both hit this and concluded that custom pipes were
+// not supported.
+//
+// Properties asserted (RED today):
+//   - Message MUST NOT contain the false enumerated set "{broadcast,
+//     inbox, stdin, stdout}" — that's the misleading bit.
+//   - Message MUST mention `ppz pipe create` (or equivalent — the
+//     point is to point users at the actionable next step when they
+//     hit this on a custom pipe).
+//
+// The exact wording is not pinned: the implementer is free to choose
+// any phrasing that satisfies both properties.
+func TestMessage_EInvalidPipe_DoesNotMisleadOnCustomPipes(t *testing.T) {
+	msg := Message(EInvalidPipe)
+	if strings.Contains(msg, "{broadcast, inbox, stdin, stdout}") {
+		t.Errorf("Message(EInvalidPipe) still enumerates only built-in pipes:\n  %q\nthis misleads users into thinking custom pipes are invalid (MoltHub feedback, docs/AGENT_HARDENING.md Track B).", msg)
+	}
+	if !strings.Contains(msg, "ppz pipe create") {
+		t.Errorf("Message(EInvalidPipe) should mention 'ppz pipe create' so users hitting this on a custom pipe see the actionable command:\n  %q", msg)
+	}
+}
+
+// Track B (docs/AGENT_HARDENING.md): the E_NATS_UNREACHABLE catalog
+// default currently suggests setting PPZ_NATS_URL when running
+// outside docker — but the most-common cause MoltHub hit was
+// expired credentials, not URL misconfiguration. Alice quoted:
+// "the daemon was running and ppz status showed 'logged in,' but
+// ppz ls threw E_NATS_UNREACHABLE."
+//
+// Properties asserted (RED today):
+//   - Message MUST mention credentials / auth / login as a possible
+//     cause (any of those tokens — implementer's choice). Currently
+//     the message has none of them, so this fails.
+//   - Existing PPZ_NATS_URL guidance is fine to keep, just no longer
+//     the only suggestion. Not asserted here so the implementer can
+//     drop it if they prefer a shorter message.
+//
+// The exact wording is not pinned.
+func TestMessage_ENATSUnreachable_MentionsCredentialCause(t *testing.T) {
+	msg := Message(ENATSUnreachable)
+	credTokens := []string{"credential", "credentials", "login", "logout", "auth", "expired"}
+	hasCredHint := false
+	for _, tok := range credTokens {
+		if strings.Contains(strings.ToLower(msg), tok) {
+			hasCredHint = true
+			break
+		}
+	}
+	if !hasCredHint {
+		t.Errorf("Message(ENATSUnreachable) should mention credentials / login / auth / expired as a possible cause (MoltHub feedback, docs/AGENT_HARDENING.md Track B); got:\n  %q", msg)
 	}
 }

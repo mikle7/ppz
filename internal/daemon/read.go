@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
@@ -82,11 +83,28 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	}
 	stream, err := js.Stream(ctx, streamName)
 	if err != nil {
-		// No stream means the pipe has never been provisioned. For auto-
-		// provisioned pipes (broadcast / stdin / stdout) this would be a
-		// server-side bug; for user-created pipes it usually means a typo
-		// in the pipe name. Either way, return E_INVALID_PIPE.
-		writeReadErr(conn, cliproto.New(cliproto.EInvalidPipe))
+		// Classify the error so the user sees the right cause. Mirror of
+		// the routing logic in handleBroadcast / resolveBroadcastTarget
+		// (handlers.go) — same bug shape, same fix shape:
+		//   - jetstream.ErrStreamNotFound → E_PIPE_NOT_FOUND. The pipe
+		//     genuinely doesn't exist on this source; message names the
+		//     pipe + source so the user sees what's missing.
+		//   - network / timeout / no-servers → E_NATS_UNREACHABLE. The
+		//     pipe might be perfectly valid; attributing the failure to
+		//     pipe invalidity would mislead users into chasing typos
+		//     when the real cause is connectivity.
+		//   - anything else → E_INVALID_PIPE catch-all. Truly unexpected.
+		switch {
+		case errors.Is(err, jetstream.ErrStreamNotFound):
+			writeReadErr(conn, cliproto.NewPipeNotFound(req.Channel, req.Handle))
+		case errors.Is(err, context.DeadlineExceeded),
+			errors.Is(err, nats.ErrTimeout),
+			errors.Is(err, nats.ErrConnectionClosed),
+			errors.Is(err, nats.ErrNoServers):
+			writeReadErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+		default:
+			writeReadErr(conn, cliproto.New(cliproto.EInvalidPipe))
+		}
 		return
 	}
 

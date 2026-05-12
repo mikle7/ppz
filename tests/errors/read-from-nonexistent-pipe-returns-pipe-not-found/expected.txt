@@ -1,0 +1,2 @@
+error_code=E_PIPE_NOT_FOUND
+exit=0
