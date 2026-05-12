@@ -13,23 +13,23 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a broadcast -m "msg-1" >/dev/null
-ppz_a broadcast -m "msg-2" >/dev/null
-ppz_a broadcast -m "msg-3" >/dev/null
+ppz_a send chat.inbox "msg-1" >/dev/null
+ppz_a send chat.inbox "msg-2" >/dev/null
+ppz_a send chat.inbox "msg-3" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-3" >/dev/null
 
 echo "--- first read: drains all 3 unread ---"
-ppz_a read --bare chat.broadcast
+ppz_a read --bare chat.inbox
 
 echo "--- ls after first read: unread=0 ---"
 ppz_a ls | ls_normalize
 
-echo "--- broadcast one more ---"
-ppz_a broadcast -m "msg-4" >/dev/null
+echo "--- send one more ---"
+ppz_a send chat.inbox "msg-4" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-4" >/dev/null
 
 echo "--- second read: only the new message ---"
-ppz_a read --bare chat.broadcast
+ppz_a read --bare chat.inbox
 
 echo "--- ls after second read: unread=0 again ---"
 ppz_a ls | ls_normalize

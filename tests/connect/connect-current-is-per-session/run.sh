@@ -5,7 +5,7 @@
 #
 # Without this, opening a new terminal silently inherits a current that
 # was set hours ago somewhere else — surprising and often stale, and
-# `ppz broadcast` ends up targeting the wrong handle.
+# `ppz send` ends up targeting the wrong handle.
 #
 # Mirrors the per-session cursor model already in place at
 # internal/daemon/cursors.go.

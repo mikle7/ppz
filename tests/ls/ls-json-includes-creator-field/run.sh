@@ -7,7 +7,7 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a broadcast -m "hi" >/dev/null
+ppz_a send chat.inbox "hi" >/dev/null
 wait_for 20 "ppz_a ls | grep -q hi" >/dev/null
 
 # Project (handle, pipe, creator, has_payload_key). `has_payload_key`

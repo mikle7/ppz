@@ -34,7 +34,6 @@ type Source struct {
 
 // Pipes returns the pipe set for a source based on its kind.
 // All sources have:
-//   - broadcast: user-level messages (same as message-kind sources)
 //   - inbox: direct messages intended for this source/agent
 //
 // pty sources also have:
@@ -42,12 +41,18 @@ type Source struct {
 //   - stdout: byte-faithful capture of the PTY master's output (ANSI
 //     escapes intact); both `ppz read` and `ppz terminal view` consume
 //     this pipe.
+//   - stdctrl: control plane (resize events, etc.).
+//
+// `broadcast` was an auto-provisioned pipe pre-launch; it was removed
+// in Phase 1 (locked decision #16) — teams now use explicit room pipes
+// (`ppz pipe create team1.room` with --writers=anyone) for shared
+// channels.
 func (s Source) Pipes() []string {
 	switch s.Kind {
 	case SourceKindPTY:
-		return []string{"broadcast", "stdin", "stdout", "stdctrl", "inbox"}
+		return []string{"stdin", "stdout", "stdctrl", "inbox"}
 	default:
-		return []string{"broadcast", "inbox"}
+		return []string{"inbox"}
 	}
 }
 

@@ -13,7 +13,7 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 # Bare `source create foo` sets daemon current[session]=foo as a side
 # effect (today's behaviour, kept in the refactor).
 ppz_a source create foo >/dev/null
-# Also create bar so broadcast targeting it succeeds.
+# Also create bar so resolving to it via env succeeds.
 ppz_a source create bar >/dev/null
 # source create bar made bar the daemon current — switch back to foo so
 # the daemon-side state we're testing is foo, not bar.
@@ -30,15 +30,16 @@ PPZ_CURRENT_HANDLE=bar ppz_a status \
   | grep -E '^(current source:|warning:)' \
   | sed -E 's|/[^ ,)]*/current\.json|PPZ_HOME/current.json|'
 
-echo "--- env set: broadcast targets bar, not foo ---"
-PPZ_CURRENT_HANDLE=bar ppz_a broadcast -m "to-bar" >/dev/null
+echo "--- env set: bare `read inbox` resolves to bar.inbox ---"
+# Pre-populate distinct messages on each source's inbox so the
+# bare-alias resolution is visible in the read output.
+ppz_a send foo.inbox "to-foo" >/dev/null
+ppz_a send bar.inbox "to-bar" >/dev/null
 wait_for 20 "ppz_a ls | grep -q to-bar" >/dev/null
-ppz_a ls | grep '^bar\.broadcast' | ls_normalize
+PPZ_CURRENT_HANDLE=bar ppz_a read --bare inbox
 
 echo "--- env unset again: falls back to daemon's foo ---"
 ppz_a status | grep '^current source:'
 
-echo "--- env unset: broadcast targets foo ---"
-ppz_a broadcast -m "to-foo" >/dev/null
-wait_for 20 "ppz_a ls | grep -q to-foo" >/dev/null
-ppz_a ls | grep '^foo\.broadcast' | ls_normalize
+echo "--- env unset: bare `read inbox` resolves to foo.inbox ---"
+ppz_a read --bare inbox

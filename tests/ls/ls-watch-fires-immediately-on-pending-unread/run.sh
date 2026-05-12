@@ -8,7 +8,7 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a broadcast -m "preexisting" >/dev/null
+ppz_a send chat.inbox "preexisting" >/dev/null
 wait_for 20 "ppz_a ls 2>/dev/null | grep -q preexisting" >/dev/null
 
 # Watch should return immediately because chat has unread.

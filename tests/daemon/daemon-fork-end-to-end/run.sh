@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test for the dev-flow path. From a clean PPZ_HOME with NO pre-existing
 # daemon, `ppz daemon start` must fork a working child; the daemon must reach NATS
-# without any env-var coaching; and login -> create -> broadcast -> ls must
+# without any env-var coaching; and login -> create -> send -> ls must
 # round-trip a payload.
 #
 # This complements the daemon/daemon-already-running scenario (which tests the
@@ -32,8 +32,8 @@ PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz daemon start
 # host clients couldn't resolve).
 PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 
-# Step 3: create -> broadcast -> ls.
+# Step 3: create -> send -> ls.
 PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz source create fresh-flow >/dev/null
-PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz broadcast "it just works"
+PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz send fresh-flow.inbox "it just works"
 wait_for 20 "PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz ls | grep -q 'it just works'" >/dev/null
 PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz ls | ls_normalize

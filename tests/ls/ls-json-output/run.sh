@@ -10,7 +10,7 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
 LONG="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-ppz_a broadcast -m "$LONG" >/dev/null
+ppz_a send chat.inbox "$LONG" >/dev/null
 wait_for 20 "ppz_a ls | grep -q aaaaaaaa" >/dev/null
 
 # Validate each line is well-formed JSON, project a stable subset (drop

@@ -16,4 +16,5 @@ ppz_a ls 2>&1 | grep '^error:' || true
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 
 echo "--- E_NO_CURRENT_SOURCE: should reference 'ppz source create' / 'ppz source switch' ---"
-ppz_a broadcast -m "hi" 2>&1 | grep '^error:' || true
+# `ppz read inbox` (bare alias for `<current>.inbox`) requires a current source.
+ppz_a read inbox 2>&1 | grep '^error:' || true

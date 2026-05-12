@@ -1,4 +1,0 @@
-sent id=UUID subject=ORG_ALPHA.persists.broadcast bytes=13
-persists.broadcast 1 1 RELATIVE after restart foo
-persists.inbox 0 0 - - foo
-exit=0

@@ -2,7 +2,7 @@
 # RED: ppz read on a stream with N retained messages must NOT scale
 # linearly with N under WAN latency.
 #
-# Setup: 200 numbered messages on wantest.broadcast, published from
+# Setup: 200 numbered messages on wantest.inbox, published from
 # daemon-b (no latency overlay). Read from daemon-a (200ms egress
 # delay to ppz-server). The current historical-drain loop in
 # handleRead does one stream.GetMsg(seq) per message, so total
@@ -22,31 +22,32 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 
-# Populate from daemon-b (no latency). Single ppz broadcast call
-# with line-streaming reads stdin and publishes each line as one
-# message — much faster than 200 separate CLI invocations.
+# Populate from daemon-b (no latency). One `ppz send` invocation per
+# message — `send` takes the payload as a CLI arg, not stdin.
 ppz_b source create wantest >/dev/null 2>&1 || true
 ppz_b source switch wantest >/dev/null
 # busybox seq has no -f; use awk for the formatted output.
-awk 'BEGIN{for(i=1;i<=200;i++)printf("msg-%03d\n",i)}' | ppz_b broadcast >/dev/null
+for i in $(awk 'BEGIN{for(i=1;i<=200;i++)printf("%03d\n",i)}'); do
+  ppz_b send wantest.inbox "msg-$i" >/dev/null
+done
 
 # Wait until all 200 messages are visible to daemon-b's view of the
 # stream. Using ls's BUFFERED column — when it hits 200 we know the
 # server has retained them.
-wait_for 100 "ppz_b ls 2>/dev/null | awk '/^wantest.broadcast/ { exit (\$3 == 200) ? 0 : 1 }'"
+wait_for 100 "ppz_b ls 2>/dev/null | awk '/^wantest.inbox/ { exit (\$3 == 200) ? 0 : 1 }'"
 
 OUT=/tmp/wan-read-output.txt
 
 # Time the read on daemon-a (under WAN latency). Default mode prints
 # one message per line, which is what we want for the count / order
 # assertions below. (--raw concatenates the bytes verbatim, which
-# would squish all 200 messages into a single line because broadcast
-# strips the trailing \n on each scanned input line.)
+# would squish all 200 messages into a single line because send
+# strips the trailing \n on each payload.)
 #
 # Use bash's EPOCHREALTIME for sub-second precision — busybox `date`
 # doesn't expand %N. Truncate to integer seconds for the assertion.
 start_s="$EPOCHREALTIME"
-ppz_a reread --bare wantest.broadcast >"$OUT" 2>/dev/null
+ppz_a reread --bare wantest.inbox >"$OUT" 2>/dev/null
 end_s="$EPOCHREALTIME"
 elapsed_s=$(awk -v a="$end_s" -v b="$start_s" 'BEGIN{printf "%.0f", a-b}')
 

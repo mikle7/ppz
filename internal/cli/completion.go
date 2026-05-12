@@ -71,7 +71,6 @@ func cmdCompletion(args []string) error {
 // alphabetical so it scans easily; "completion" / "__complete" are
 // intentionally omitted (operator-internal, not for everyday use).
 var topLevelVerbs = []string{
-	"broadcast",
 	"command",
 	"daemon",
 	"login",
@@ -98,10 +97,9 @@ var subverbs = map[string][]string{
 // Tab on the target slot completes against everything the daemon's
 // IPCList knows about.
 var targetTakingVerbs = map[string]bool{
-	"read":      true,
-	"reread":    true,
-	"send":      true,
-	"broadcast": true,
+	"read":   true,
+	"reread": true,
+	"send":   true,
 }
 
 // Terminal subverbs whose first positional is a handle (no `.pipe`).

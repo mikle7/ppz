@@ -8,8 +8,17 @@ const (
 	IPCLogin       = "Login"
 	IPCCreate      = "Create"
 	IPCSwitch      = "Switch"
+	// IPCBroadcast / IPCBroadcastBatch are the publish-IPC verbs. The
+	// `ppz broadcast` CLI verb was removed in Phase 1 (locked
+	// decision #16); `ppz send` (and `ppz command`, terminal stdin
+	// forwarding, etc.) keep using these names internally because
+	// renaming to IPCSend/IPCSendBatch would cascade through
+	// BroadcastRequest / handleBroadcast / resolveBroadcastTarget
+	// etc. with no behavioural change. Wire strings retained so
+	// older daemon binaries don't break during mid-rollout testing.
 	IPCBroadcast      = "Broadcast"
 	IPCBroadcastBatch = "BroadcastBatch"
+
 	IPCList        = "List"
 	IPCListWatch   = "ListWatch"
 	IPCSubscribe   = "Subscribe"

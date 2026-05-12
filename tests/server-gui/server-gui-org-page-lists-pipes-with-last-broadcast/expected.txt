@@ -1,3 +1,0 @@
-chat:broadcast:RELATIVE:hello gui
-chat:inbox::
-exit=0

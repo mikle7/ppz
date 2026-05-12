@@ -1,6 +1,4 @@
 PIPE UNREAD BUFFERED LAST PAYLOAD CREATOR
-chat.broadcast 1 1 RELATIVE hello world foo
-chat.inbox 0 0 - - foo
-verbose.broadcast 1 1 RELATIVE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… foo
-verbose.inbox 0 0 - - foo
+chat.inbox 1 1 RELATIVE hello world foo
+verbose.inbox 1 1 RELATIVE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… foo
 exit=0

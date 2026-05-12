@@ -9,11 +9,11 @@ auth_as_foo
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a broadcast -m "msg-1" >/dev/null
-ppz_a broadcast -m "msg-2" >/dev/null
-ppz_a broadcast -m "msg-3" >/dev/null
+ppz_a send chat.inbox "msg-1" >/dev/null
+ppz_a send chat.inbox "msg-2" >/dev/null
+ppz_a send chat.inbox "msg-3" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-3" >/dev/null
 
-curl_server "/orgs/alpha/sources/chat/pipes/broadcast" \
+curl_server "/orgs/alpha/sources/chat/pipes/inbox" \
   | grep -oE 'data-message="[^"]+"' \
   | sed -E 's/data-message="([^"]+)"/\1/'

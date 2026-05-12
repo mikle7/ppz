@@ -11,9 +11,9 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create agent-one >/dev/null
-ppz_a broadcast -m "agent message" >/dev/null
+ppz_a send agent-one.inbox "agent message" >/dev/null
 ppz_a source create other >/dev/null
-ppz_a broadcast -m "other message" >/dev/null
+ppz_a send other.inbox "other message" >/dev/null
 wait_for 20 "ppz_a ls 2>/dev/null | grep -q 'other message'" >/dev/null
 
 # Both sources have unread. Watch with 'agent-*' should return immediately

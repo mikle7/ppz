@@ -1,3 +1,0 @@
-from-inside
----other---
-exit=0

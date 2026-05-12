@@ -16,7 +16,7 @@ import (
 //	ppz daemon {start|stop|login|logout}
 //	ppz source {create|destroy|switch}
 //	ppz terminal {wrap|watch|peek}     (terminal verbs are reshaped in Phase D)
-//	ppz {status|ls|broadcast|read|send}
+//	ppz {status|ls|read|send}
 //
 // Old top-level verbs (`ppz create`, `ppz switch`, `ppz kill`, `ppz login`)
 // are removed without aliases — fresh MVP, no users to migrate.
@@ -49,8 +49,6 @@ func Run(args []string) error {
 		return cmdVersion(rest)
 	case "upgrade":
 		return cmdUpgrade(rest)
-	case "broadcast":
-		return cmdBroadcast(rest)
 	case "ls":
 		return cmdLs(rest)
 	case "read":
@@ -87,7 +85,7 @@ Messaging (the verbs you use most):
   ppz read TGT [--tail --json --tty --raw --bare]
                                    read NEW messages from <handle>.<pipe>;
                                    'ppz read inbox' reads <current>.inbox.
-                                   Default for inbox / broadcast pipes is the
+                                   Default for inbox pipes is the
                                    v0.23 tabular format —
                                      HH:MM:SS  <sender|->  <body>
                                    where <body> is "[subject] payload" for
@@ -111,8 +109,6 @@ Messaging (the verbs you use most):
                                                       inbox when their cursor
                                                       advances (best-effort,
                                                       non-blocking — see Acks).
-  ppz broadcast [-m TEXT]          publish to <current>.broadcast
-                                   (stdin form streams one message per line)
   ppz reread TGT [-l N --skip N --since DUR --json --tty --raw --bare]
                                    forensic / replay: every retained message;
                                    ignores and never advances the cursor.

@@ -330,14 +330,6 @@ func (p *AccountPool) openAccount(org db.Account) (*OrgAccount, error) {
 		cleanup:    func() { nc.Close() },
 	}
 
-	// Per-account broadcast subscriber — mirrors broadcasts on this
-	// account's *.*.broadcast subjects into the DB so the GUI can
-	// render last_broadcast_* columns. Each account has its own
-	// subject namespace (Phase 3.5), so each needs its own sub.
-	if err := p.server.subscribeBroadcasts(oa); err != nil {
-		nc.Close()
-		return nil, fmt.Errorf("broadcast subscriber for %s: %w", org.Name, err)
-	}
 	return oa, nil
 }
 

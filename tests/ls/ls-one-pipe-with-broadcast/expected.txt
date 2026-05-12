@@ -1,3 +1,2 @@
-chat.broadcast 1 1 RELATIVE first message foo
-chat.inbox 0 0 - - foo
+chat.inbox 1 1 RELATIVE first message foo
 exit=0

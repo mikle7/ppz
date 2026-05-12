@@ -1,5 +1,3 @@
-chat:broadcast:RELATIVE:hello table
-chat:inbox::
-/orgs/alpha/sources/chat/pipes/broadcast
+chat:inbox:RELATIVE:hello table
 /orgs/alpha/sources/chat/pipes/inbox
 exit=0
