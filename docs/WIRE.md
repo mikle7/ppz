@@ -11,25 +11,31 @@ UUID v7 unless noted. All JSON request/response bodies use
 
 ## 0. Vocabulary
 
+- **account** — the tenancy boundary. One ppz-server deployment may host
+  several. Pre-launch this was called "organisation"; the rename is part of
+  the Phase 1 surface strip (v0.30.0).
 - **source** — the top-level addressable entity (formerly "pipe"). Each source
-  has a unique `handle` within an organisation and a `kind` (`message` or
-  `pty`).
-- **pipe** — a named sub-bucket on a source where messages flow (formerly
-  "channel"). A `message` source has one pipe (`broadcast`); a `pty` source
-  has three (`broadcast`, `stdin`, `stdout`).
+  has a unique `handle` within an account and a `kind` (`message` or `pty`).
+- **handle** — the human-facing identifier of a source. Also the name for the
+  daemon's per-session "current handle" state.
+- **pipe** — a named sub-bucket on a source where messages flow. A `message`
+  source has one pipe (`inbox`); a `pty` source has four (`inbox`, `stdin`,
+  `stdout`, `stdctrl`). The `broadcast` auto-pipe was removed in v0.30.0
+  (see CHANGELOG); custom pipes are created explicitly via `ppz pipe create`.
 
 A target on the wire is `<source-handle>.<pipe-name>`.
 
 ## 1. Subject grammar (NATS)
 
 ```
-<org_id>.<handle>.<pipe>
+<account_id>.<handle>.<pipe>
 ```
 
-- `org_id` — UUID of the organisation (lowercase, hyphenated form).
+- `account_id` — UUID of the account (lowercase, hyphenated form).
 - `handle` — source handle, regex `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, max 32.
-- `pipe` — pipe name. Today: `broadcast`, `stdin`, `stdout`. Reserved: `inbox`,
-  `system`, `db` (rejected if user attempts to create).
+- `pipe` — pipe name. Built-in: `inbox`, `stdin` (pty only), `stdout` (pty
+  only), `stdctrl` (pty only). Reserved: `system`, `db` (rejected if user
+  attempts to create).
 
 Reserved source handles (rejected at create): `system`, `db`.
 
@@ -276,22 +282,15 @@ churn `ppz status` output.
 logged in url=<URL> key=KEYPREFIX org=<org_id>
 ```
 
-### `ppz create HANDLE` — two lines
+### `ppz terminal create HANDLE` — one line
 ```
-created handle=<handle> subject=<org_id>.<handle>.broadcast
-current handle=<handle>
-```
-
-### `ppz switch HANDLE`
-```
-current handle=<handle>
+created handle=<handle> subject=<account_id>.<handle>.inbox
 ```
 
-### `ppz broadcast` (`-m TEXT`, positional, or stdin)
+### `ppz set handle HANDLE`
 ```
-sent id=UUID subject=<org_id>.<handle>.<pipe> bytes=<n>
+handle=<handle>
 ```
-Default pipe is `broadcast`. Stdin form strips a single trailing newline.
 
 ### `ppz send HANDLE[.PIPE] "PAYLOAD" [--subject S] [--in-reply-to ID] [--request-ack]`
 
