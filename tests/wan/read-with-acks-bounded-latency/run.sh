@@ -41,7 +41,7 @@ ppz_b terminal create beta-side  >/dev/null
 
 # Publish N --request-ack messages from daemon-b to alpha-side.inbox.
 # Sequential because --request-ack only applies to single sends, not
-# the streaming broadcast batch path. Each call is sub-ms on daemon-b's
+# any streaming batch path. Each call is sub-ms on daemon-b's
 # NATS path (no latency); the wall-time is dominated by CLI process
 # spawn overhead (~50ms each → ~2.5s total for N=50).
 N=50

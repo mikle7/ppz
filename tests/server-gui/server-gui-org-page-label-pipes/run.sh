@@ -8,7 +8,7 @@
 auth_as_foo
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a terminal create foo >/dev/null
+ppz_a source create foo >/dev/null
 
 # Bare /orgs/<id> redirects to the pipes tab — exactly where this
 # table lives — so curl_server's -L follows and lands us here.

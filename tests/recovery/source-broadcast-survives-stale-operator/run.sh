@@ -19,11 +19,11 @@
 #      and triggers provisionAccount (mint fresh account JWT signed
 #      by current operator, push to resolver), then retries openAccount.
 #   2. provisionAccount, after pushing, walks db.ListSourcesForOrg
-#      and ensures each source's auto-streams (broadcast/stdin/stdout)
+#      and ensures each source's auto-streams (inbox/stdin/stdout/stdctrl)
 #      exist in the new account namespace. Existing → no-op. Missing
 #      → create.
 #
-# Test passes when the second broadcast still returns "sent" against
+# Test passes when the second send still returns "sent" against
 # the same handle the user originally created.
 
 HANDLE="recovery-broadcast"
@@ -31,7 +31,7 @@ KEY=$(key_alpha)
 
 # 1. Setup: log in alpha, create a source, baseline send must work.
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$KEY" >/dev/null
-ppz_a terminal create "$HANDLE" >/dev/null 2>&1 || true
+ppz_a source create "$HANDLE" >/dev/null 2>&1 || true
 ppz_a set handle "$HANDLE" >/dev/null
 out1=$(ppz_a send "$HANDLE.inbox" "before" 2>&1)
 echo "before=$(echo "$out1" | grep -oE '^sent\b|^error: E_[A-Z_]+' | head -1)"

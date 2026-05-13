@@ -5,9 +5,9 @@
 # watermark or use --since timing heuristics.
 #
 # Flow:
-#   1. Broadcast 3 messages, ppz read drains all 3 (cursor was 0).
+#   1. Send 3 messages, ppz read drains all 3 (cursor was 0).
 #   2. ls now reports unread=0.
-#   3. Broadcast 1 more, ppz read drains only the new one.
+#   3. Send 1 more, ppz read drains only the new one.
 #   4. ls reports unread=0 again.
 . /tests/lib/common.sh
 

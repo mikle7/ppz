@@ -12,7 +12,7 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-PPZ_SESSION=tab-a ppz_a terminal create foo >/dev/null
+PPZ_SESSION=tab-a ppz_a source create foo >/dev/null
 
 echo "--- tab-a status (should show foo) ---"
 PPZ_SESSION=tab-a ppz_a status | grep '^current source:'

@@ -21,7 +21,7 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_beta)" >/dev/null
 
-ppz_b terminal create canary >/dev/null
+ppz_b source create canary >/dev/null
 ppz_b send canary.inbox "beta-data" >/dev/null
 wait_for 20 "ppz_b ls | grep -q '^canary.inbox'" >/dev/null
 BETA_ORG=$(jq -r '.org_id' "${PPZ_DAEMON_B_HOME:-/tmp/b}/credentials")

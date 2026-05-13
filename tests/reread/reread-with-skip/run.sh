@@ -5,7 +5,7 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a terminal create chat >/dev/null
+ppz_a source create chat >/dev/null
 for i in 1 2 3 4 5; do
   ppz_a send chat.inbox "msg-$i" >/dev/null
 done

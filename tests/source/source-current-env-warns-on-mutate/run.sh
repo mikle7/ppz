@@ -5,7 +5,7 @@
 # won't take effect until the user unsets it.
 #
 # Without the warning, "I just ran `ppz source switch foo` but my
-# broadcasts are still going to bar" is a confusing afternoon.
+# sends are still going to bar" is a confusing afternoon.
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null

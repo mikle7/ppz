@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# When a server-touching call (ls / broadcast / read / ...) returns
+# When a server-touching call (ls / send / read / ...) returns
 # E_INVALID_API_KEY — typically because the key was rotated or revoked
 # server-side after login — the daemon caches that observation and
 # `ppz status` reports the cached "authentication error" state.

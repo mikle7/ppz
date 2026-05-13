@@ -24,7 +24,7 @@ ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 
 # Populate from daemon-b (no latency). One `ppz send` invocation per
 # message — `send` takes the payload as a CLI arg, not stdin.
-ppz_b terminal create wantest >/dev/null 2>&1 || true
+ppz_b source create wantest >/dev/null 2>&1 || true
 ppz_b set handle wantest >/dev/null
 # busybox seq has no -f; use awk for the formatted output.
 for i in $(awk 'BEGIN{for(i=1;i<=200;i++)printf("%03d\n",i)}'); do
