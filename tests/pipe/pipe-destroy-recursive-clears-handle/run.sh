@@ -23,4 +23,7 @@ ppz_a ls | ls_normalize | awk '$1 ~ /^cindy\./' | sort
 ppz_a pipe destroy --recursive cindy
 
 echo "--- after destroy ---"
-ppz_a ls | ls_normalize | awk '$1 ~ /^cindy\./' | wc -l | tr -d ' '
+# Disable pipefail inside the subshell so grep -v in ls_normalize
+# returning 1 (empty input after destroy → no "non-matching" lines)
+# doesn't poison the pipeline exit code.
+(set +o pipefail; ppz_a ls | ls_normalize | awk '$1 ~ /^cindy\./' | wc -l | tr -d ' ')
