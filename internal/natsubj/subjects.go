@@ -118,9 +118,37 @@ func ValidateUserPipeName(name string) error {
 // Removed in Phase B.
 func ValidateChannel(c string) error { return ValidatePipe(c) }
 
-// Subject builds <org>.<handle>.<pipe>.
+// Subject builds <account>.<handle>.<pipe>. Pre-Phase-1.5 three-role
+// builder; equivalent to BuildSubject(accountID, "", handle, pipe).
+// Retained for callers that haven't been threaded through manifold yet.
 func Subject(accountID uuid.UUID, handle, pipe string) string {
 	return fmt.Sprintf("%s.%s.%s", accountID.String(), handle, pipe)
+}
+
+// BuildSubject emits the four-role subject form per locked decision #18:
+//
+//	<account>.<manifold?>.<source?>.<pipe>
+//
+// where manifold is 0+ dot-separated segments ('' = root) and source
+// ("collar") is 0 or 1 segment ('' = uncollared). Wire-level the
+// manifold-only and source-only shapes are indistinguishable
+// (acct.X.pipe could be either) — that's by design; disambiguation
+// happens by DB row at create time. The builder just emits the
+// canonical dotted form.
+func BuildSubject(accountID uuid.UUID, manifold, source, pipe string) string {
+	var b strings.Builder
+	b.WriteString(accountID.String())
+	if manifold != "" {
+		b.WriteByte('.')
+		b.WriteString(manifold)
+	}
+	if source != "" {
+		b.WriteByte('.')
+		b.WriteString(source)
+	}
+	b.WriteByte('.')
+	b.WriteString(pipe)
+	return b.String()
 }
 
 // StreamName produces the JetStream stream name per WIRE.md §2:

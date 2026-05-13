@@ -403,14 +403,25 @@ type ListSourcesReply struct {
 }
 
 // PipeCreateRequest is the input to `ppz pipe create <name>` — and the body
-// of POST /api/v1/sources/{handle}/pipes. Retention overrides are pointers
-// so "absent" (= use default) is distinguishable from "explicitly zero".
+// of POST /api/v1/sources/{handle}/pipes and POST /api/v1/pipes (Phase 1.5
+// sourceless form). Retention overrides are pointers so "absent" (= use
+// default) is distinguishable from "explicitly zero".
+//
+// Phase 1.5 fields per locked decision #18 four-role grammar:
+//   - Manifold:     hierarchical-grouping segment string ('' = root)
+//   - SourceHandle: actor identity name; nil = uncollared (sourceless)
+//
+// Handle is retained as a backward-compat alias for SourceHandle until
+// Cycle B finishes threading the new fields through the daemon and CLI;
+// Cycle E's docs commit removes it.
 type PipeCreateRequest struct {
-	Handle     string `json:"handle"`
-	Name       string `json:"name"`
-	TTLSeconds *int   `json:"ttl_seconds,omitempty"`
-	MaxMsgs    *int   `json:"max_msgs,omitempty"`
-	MaxBytes   *int64 `json:"max_bytes,omitempty"`
+	Handle       string  `json:"handle"`
+	Manifold     string  `json:"manifold,omitempty"`
+	SourceHandle *string `json:"source_handle,omitempty"`
+	Name         string  `json:"name"`
+	TTLSeconds   *int    `json:"ttl_seconds,omitempty"`
+	MaxMsgs      *int    `json:"max_msgs,omitempty"`
+	MaxBytes     *int64  `json:"max_bytes,omitempty"`
 }
 
 // PipeCreateReply mirrors the server's resolved retention (after defaults
