@@ -7,46 +7,44 @@ import (
 	"testing"
 )
 
-// RED tests for the pre-launch removal of `ppz source`. See:
+// Tests for the Phase 1 source-verb reshape. See:
 //   - docs/PHASE-1-IMPLEMENTATION-PLAN.md (private repo)
 //   - Locked decisions #18, #19, #20, #21 in
 //     OSS-PIPESCLOUD-ARCHITECTURE-SPLIT.md
 //
-// The source concept is being dropped entirely — every pipe becomes a
-// standalone addressable path, the `sources` table goes, and the
-// daemon's "current source" state becomes "current handle". The
-// `ppz source` CLI verb is replaced by:
+// Phase 1 reshaped `ppz source` from a four-subverb family (create /
+// switch / clear / destroy) to a *single* surviving subverb:
 //
-//   ppz source create HANDLE   → ppz terminal create HANDLE / ppz agent create HANDLE
+//   ppz source create HANDLE   — claim a bare actor identity (a
+//                                 message-kind source, with inbox
+//                                 auto-pipe). Distinct from
+//                                 `ppz terminal create` (pty pipe
+//                                 set) and `ppz agent create` (agent
+//                                 pipe set + harness).
+//
+// The other three subverbs were replaced:
+//
 //   ppz source switch HANDLE   → ppz set handle HANDLE
 //   ppz source clear           → ppz unset handle
 //   ppz source destroy HANDLE  → ppz pipe destroy --recursive HANDLE
-//
-// These tests pin the post-cycle-3 surface. They fail today (the
-// source verb still dispatches; set/unset/get verbs don't exist) and
-// pass once commits 7-8 land the implementation.
 
-// TestTopLevelVerbs_ExcludesSource asserts the completion engine no
-// longer advertises `source`.
-func TestTopLevelVerbs_ExcludesSource(t *testing.T) {
-	for _, v := range topLevelVerbs {
-		if v == "source" {
-			t.Errorf("topLevelVerbs still contains %q — pre-launch removal pending", v)
-		}
+// TestSubverbs_SourceHasOnlyCreate asserts the completion engine's
+// subverbs map for `source` contains only "create" — switch / clear /
+// destroy are intentionally gone.
+func TestSubverbs_SourceHasOnlyCreate(t *testing.T) {
+	subs, ok := subverbs["source"]
+	if !ok {
+		t.Fatalf("subverbs has no key %q — source create must remain reachable", "source")
+	}
+	if len(subs) != 1 || subs[0] != "create" {
+		t.Errorf("subverbs[%q] = %v, want [\"create\"]", "source", subs)
 	}
 }
 
-// TestSubverbs_ExcludesSource asserts the completion subverb map has
-// no `source` key.
-func TestSubverbs_ExcludesSource(t *testing.T) {
-	if _, ok := subverbs["source"]; ok {
-		t.Errorf("subverbs still has key %q — pre-launch removal pending", "source")
-	}
-}
-
-// TestUsage_OmitsSourceVerbs asserts the top-level usage text does
-// not mention `ppz source <verb>` invocations.
-func TestUsage_OmitsSourceVerbs(t *testing.T) {
+// TestUsage_MentionsSourceCreate asserts the top-level usage text
+// still advertises `ppz source create HANDLE` as the bare-actor verb,
+// and does NOT advertise the retired switch / clear / destroy subverbs.
+func TestUsage_MentionsSourceCreate(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
@@ -57,14 +55,16 @@ func TestUsage_OmitsSourceVerbs(t *testing.T) {
 	_ = r.Close()
 
 	text := string(out)
+	if !strings.Contains(text, "ppz source create") {
+		t.Errorf("usage() missing %q — source create is the bare-actor entry point", "ppz source create")
+	}
 	for _, banned := range []string{
-		"ppz source create",
 		"ppz source switch",
 		"ppz source clear",
 		"ppz source destroy",
 	} {
 		if strings.Contains(text, banned) {
-			t.Errorf("usage() still mentions %q — pre-launch removal pending", banned)
+			t.Errorf("usage() still mentions %q — that subverb was removed in Phase 1", banned)
 		}
 	}
 }
