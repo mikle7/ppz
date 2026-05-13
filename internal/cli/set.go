@@ -90,7 +90,7 @@ func setHandle(handle string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "handle=%s\n", reply.Handle)
-	warnIfHandleEnvOverride("set")
+	warnIfHandleEnvOverride("updated")
 	return nil
 }
 
@@ -104,7 +104,7 @@ func unsetHandle() error {
 		return err
 	}
 	fmt.Fprintln(os.Stdout, "unset")
-	warnIfHandleEnvOverride("unset")
+	warnIfHandleEnvOverride("cleared")
 	return nil
 }
 
@@ -131,7 +131,7 @@ func getHandle() error {
 func warnIfHandleEnvOverride(action string) {
 	if env := os.Getenv("PPZ_CURRENT_HANDLE"); env != "" {
 		fmt.Fprintf(os.Stderr,
-			"warning: PPZ_CURRENT_HANDLE=%s is set; daemon handle was %s but env still wins\n",
+			"warning: PPZ_CURRENT_HANDLE=%s is set; daemon current was %s but env still wins\n",
 			env, action)
 	}
 }
