@@ -1,0 +1,5 @@
+--- current before destroy ---
+current source: apple
+--- current after destroy ---
+current source: -
+exit=0

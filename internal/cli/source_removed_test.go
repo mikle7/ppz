@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -12,8 +13,9 @@ import (
 //   - Locked decisions #18, #19, #20, #21 in
 //     OSS-PIPESCLOUD-ARCHITECTURE-SPLIT.md
 //
-// Phase 1 reshaped `ppz source` from a four-subverb family (create /
-// switch / clear / destroy) to a *single* surviving subverb:
+// Phase 1 reshaped `ppz source` from a four-subverb family. Two
+// subverbs survive (replacements for the others weren't expressive
+// enough — glob destroy in particular):
 //
 //   ppz source create HANDLE   — claim a bare actor identity (a
 //                                 message-kind source, with inbox
@@ -21,30 +23,44 @@ import (
 //                                 `ppz terminal create` (pty pipe
 //                                 set) and `ppz agent create` (agent
 //                                 pipe set + harness).
+//   ppz source destroy PATTERN — glob-destroy sources / pipes. The
+//                                 expressive bits (glob across
+//                                 handles, pipe-pattern that crosses
+//                                 source boundaries) don't have a
+//                                 clean replacement; the verb stays.
 //
-// The other three subverbs were replaced:
+// The other two subverbs were replaced cleanly:
 //
 //   ppz source switch HANDLE   → ppz set handle HANDLE
 //   ppz source clear           → ppz unset handle
-//   ppz source destroy HANDLE  → ppz pipe destroy --recursive HANDLE
 
-// TestSubverbs_SourceHasOnlyCreate asserts the completion engine's
-// subverbs map for `source` contains only "create" — switch / clear /
-// destroy are intentionally gone.
-func TestSubverbs_SourceHasOnlyCreate(t *testing.T) {
+// TestSubverbs_SourceHasCreateAndDestroy asserts the completion
+// engine's subverbs map for `source` contains exactly "create" and
+// "destroy" — switch / clear are intentionally gone (replaced by set
+// handle / unset handle).
+func TestSubverbs_SourceHasCreateAndDestroy(t *testing.T) {
 	subs, ok := subverbs["source"]
 	if !ok {
-		t.Fatalf("subverbs has no key %q — source create must remain reachable", "source")
+		t.Fatalf("subverbs has no key %q — source create/destroy must remain reachable", "source")
 	}
-	if len(subs) != 1 || subs[0] != "create" {
-		t.Errorf("subverbs[%q] = %v, want [\"create\"]", "source", subs)
+	got := append([]string{}, subs...)
+	sort.Strings(got)
+	want := []string{"create", "destroy"}
+	if len(got) != len(want) {
+		t.Fatalf("subverbs[%q] = %v, want %v", "source", subs, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("subverbs[%q] = %v, want %v", "source", subs, want)
+		}
 	}
 }
 
-// TestUsage_MentionsSourceCreate asserts the top-level usage text
-// still advertises `ppz source create HANDLE` as the bare-actor verb,
-// and does NOT advertise the retired switch / clear / destroy subverbs.
-func TestUsage_MentionsSourceCreate(t *testing.T) {
+// TestUsage_MentionsSourceCreateAndDestroy asserts the top-level
+// usage text advertises `ppz source create` and `ppz source destroy`,
+// and does NOT advertise the retired switch / clear subverbs (their
+// replacements live under `ppz set` / `ppz unset`).
+func TestUsage_MentionsSourceCreateAndDestroy(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
@@ -55,13 +71,17 @@ func TestUsage_MentionsSourceCreate(t *testing.T) {
 	_ = r.Close()
 
 	text := string(out)
-	if !strings.Contains(text, "ppz source create") {
-		t.Errorf("usage() missing %q — source create is the bare-actor entry point", "ppz source create")
+	for _, want := range []string{
+		"ppz source create",
+		"ppz source destroy",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("usage() missing %q", want)
+		}
 	}
 	for _, banned := range []string{
 		"ppz source switch",
 		"ppz source clear",
-		"ppz source destroy",
 	} {
 		if strings.Contains(text, banned) {
 			t.Errorf("usage() still mentions %q — that subverb was removed in Phase 1", banned)

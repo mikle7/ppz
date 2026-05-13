@@ -1,0 +1,13 @@
+--- env unset: daemon's current wins ---
+current source: foo
+--- env set: env wins, annotated ---
+current source: bar (env PPZ_CURRENT_HANDLE)
+current source: foo (pid=PID, PPZ_HOME/current.json)
+warning: current source is set twice, env takes precedence
+--- env set: bare `read inbox` resolves to bar.inbox ---
+to-bar
+--- env unset again: falls back to daemon's foo ---
+current source: foo
+--- env unset: bare `read inbox` resolves to foo.inbox ---
+to-foo
+exit=0
