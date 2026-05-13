@@ -11,14 +11,14 @@ import (
 )
 
 // buildBroadcastEnvelope is the pure envelope-assembly step inside
-// handleBroadcast. Kept separate so unit tests can verify field plumbing
+// handleSend. Kept separate so unit tests can verify field plumbing
 // (sender, subject, in_reply_to, ack_requested) without standing up NATS
 // or the daemon's IPC plumbing.
 //
 // `sender` is the broadcaster's *own* current source — distinct from the
 // request's Handle, which is the destination. Empty string is permitted
 // (headless publish).
-func buildBroadcastEnvelope(req cliproto.BroadcastRequest, sender string, now time.Time) envelope.Message {
+func buildBroadcastEnvelope(req cliproto.SendRequest, sender string, now time.Time) envelope.Message {
 	env := envelope.New(sender, req.MsgSubject, req.Payload, now)
 	env.InReplyTo = req.InReplyTo
 	env.AckRequested = req.AckRequested
@@ -28,13 +28,13 @@ func buildBroadcastEnvelope(req cliproto.BroadcastRequest, sender string, now ti
 // publishEnvelope is the in-process helper for daemon-internal envelope
 // emission. Two callers:
 //
-//   - handleBroadcast (after assembling the envelope from a CLI request)
+//   - handleSend (after assembling the envelope from a CLI request)
 //   - the read-path ack auto-emitter (which builds an `ack:read` envelope
-//     directly and bypasses handleBroadcast on purpose, since the IPC-
+//     directly and bypasses handleSend on purpose, since the IPC-
 //     boundary `ack:` rejection rule has no exception path).
 //
 // No validation here — the rule is "validate at the IPC trust boundary
-// (handleBroadcast), trust the daemon-internal callers". Returns nil on
+// (handleSend), trust the daemon-internal callers". Returns nil on
 // successful publish + flush.
 func (d *Daemon) publishEnvelope(accountID uuid.UUID, dest, pipe string, env envelope.Message) error {
 	data, err := env.Marshal()

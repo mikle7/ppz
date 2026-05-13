@@ -95,9 +95,9 @@ func cmdSend(args []string) error {
 		}
 	}
 
-	var reply cliproto.BroadcastReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCBroadcast,
-		cliproto.BroadcastRequest{
+	var reply cliproto.SendReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCSend,
+		cliproto.SendRequest{
 			Handle:       handle,
 			Channel:      channel,
 			Payload:      payload,
@@ -128,7 +128,7 @@ func cmdSend(args []string) error {
 // The `id` shown is the last 8 hex chars of the UUID for visual brevity;
 // the full UUID stays in the message envelope (and in --json output if a
 // future verb adds one).
-func printSendSuccess(w io.Writer, r cliproto.BroadcastReply, target string, ackRequested bool) {
+func printSendSuccess(w io.Writer, r cliproto.SendReply, target string, ackRequested bool) {
 	id8 := lastHex8(r.ID)
 	if ackRequested {
 		fmt.Fprintf(w, "sent id=%s to=%s bytes=%d ack=requested\n", id8, target, r.Bytes)

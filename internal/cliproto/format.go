@@ -234,7 +234,7 @@ func PrintSwitch(w io.Writer, r SwitchReply) {
 	fmt.Fprintf(w, "current handle=%s\n", r.Handle)
 }
 
-func PrintBroadcast(w io.Writer, r BroadcastReply) {
+func PrintBroadcast(w io.Writer, r SendReply) {
 	fmt.Fprintf(w, "sent id=%s subject=%s bytes=%d\n", r.ID, r.Subject, r.Bytes)
 }
 
@@ -248,18 +248,39 @@ func PrintDisconnect(w io.Writer) {
 
 // PrintPipeCreate prints the pinned line:
 //
-//	created pipe=<H>.<N> retention=ttl=<dur>,msgs=<n>,bytes=<b>
+//	created pipe=<PATH> retention=ttl=<dur>,msgs=<n>,bytes=<b>
+//
+// PATH is the four-role path with empty slots omitted (Phase 1.5):
+//   - Collared root:        cindy.archive
+//   - Collared with manifold: team1.cindy.archive
+//   - Uncollared root:      room
+//   - Uncollared manifold:  team1.room
 //
 // `dur` is rendered via time.Duration's String() so 24h/168h round-trip
 // without manual zero-pad. `bytes` is the raw integer.
 func PrintPipeCreate(w io.Writer, r PipeCreateReply) {
 	dur := time.Duration(r.TTLSeconds) * time.Second
-	fmt.Fprintf(w, "created pipe=%s.%s retention=ttl=%s,msgs=%d,bytes=%d\n",
-		r.Handle, r.Name, dur.String(), r.MaxMsgs, r.MaxBytes)
+	fmt.Fprintf(w, "created pipe=%s retention=ttl=%s,msgs=%d,bytes=%d\n",
+		FormatPipePath(r.Manifold, r.Handle, r.Name), dur.String(), r.MaxMsgs, r.MaxBytes)
+}
+
+// FormatPipePath renders the four-role pipe path for user display, with
+// empty slots omitted. Used by PrintPipeCreate, PrintPipeDestroy, and the
+// `to=` field of send output.
+func FormatPipePath(manifold, source, name string) string {
+	parts := make([]string, 0, 3)
+	if manifold != "" {
+		parts = append(parts, manifold)
+	}
+	if source != "" {
+		parts = append(parts, source)
+	}
+	parts = append(parts, name)
+	return strings.Join(parts, ".")
 }
 
 func PrintPipeDestroy(w io.Writer, r PipeDestroyReply) {
-	fmt.Fprintf(w, "destroyed pipe=%s.%s\n", r.Handle, r.Name)
+	fmt.Fprintf(w, "destroyed pipe=%s\n", FormatPipePath("", r.Handle, r.Name))
 }
 
 func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {

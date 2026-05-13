@@ -44,11 +44,11 @@ func TestReadMessage_HasReplyAndAckFieldsMatchingEnvelope(t *testing.T) {
 	}
 }
 
-// v0.25.0: BroadcastRequest carries the new send-side flags through IPC.
+// v0.25.0: SendRequest carries the new send-side flags through IPC.
 // Per spec §3, the JSON tags align with the envelope (in_reply_to /
 // ack_requested) — *not* with the older MsgSubject precedent.
-func TestBroadcastRequest_HasReplyAndAckFields(t *testing.T) {
-	br := BroadcastRequest{
+func TestSendRequest_HasReplyAndAckFields(t *testing.T) {
+	br := SendRequest{
 		Handle:       "foo",
 		Channel:      "inbox",
 		Payload:      "hi",
@@ -62,13 +62,13 @@ func TestBroadcastRequest_HasReplyAndAckFields(t *testing.T) {
 	}
 	s := string(b)
 	if !strings.Contains(s, `"in_reply_to":"11111111-2222-3333-4444-555566667777"`) {
-		t.Fatalf("in_reply_to missing from BroadcastRequest wire: %s", s)
+		t.Fatalf("in_reply_to missing from SendRequest wire: %s", s)
 	}
 	if !strings.Contains(s, `"ack_requested":true`) {
-		t.Fatalf("ack_requested missing from BroadcastRequest wire: %s", s)
+		t.Fatalf("ack_requested missing from SendRequest wire: %s", s)
 	}
 	// Round-trip preserves both.
-	var got BroadcastRequest
+	var got SendRequest
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}

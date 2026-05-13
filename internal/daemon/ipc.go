@@ -69,10 +69,10 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.ipcCreate(ctx, conn, req.Params)
 	case cliproto.IPCSwitch:
 		d.ipcSwitch(ctx, conn, req.Params)
-	case cliproto.IPCBroadcast:
-		d.ipcBroadcast(ctx, conn, req.Params)
-	case cliproto.IPCBroadcastBatch:
-		d.handleBroadcastBatch(ctx, conn, req.Params)
+	case cliproto.IPCSend:
+		d.ipcSend(ctx, conn, req.Params)
+	case cliproto.IPCSendBatch:
+		d.handleSendBatch(ctx, conn, req.Params)
 	case cliproto.IPCList:
 		d.ipcList(ctx, conn, req.Params)
 	case cliproto.IPCListWatch:
@@ -169,8 +169,8 @@ func (d *Daemon) ipcCreate(ctx context.Context, conn net.Conn, params json.RawMe
 func (d *Daemon) ipcSwitch(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	d.handleSwitch(ctx, conn, params)
 }
-func (d *Daemon) ipcBroadcast(ctx context.Context, conn net.Conn, params json.RawMessage) {
-	d.handleBroadcast(ctx, conn, params)
+func (d *Daemon) ipcSend(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleSend(ctx, conn, params)
 }
 func (d *Daemon) ipcList(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	d.handleList(ctx, conn, params)

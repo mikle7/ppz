@@ -84,7 +84,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	stream, err := js.Stream(ctx, streamName)
 	if err != nil {
 		// Classify the error so the user sees the right cause. Mirror of
-		// the routing logic in handleBroadcast / resolveBroadcastTarget
+		// the routing logic in handleSend / resolveSendTarget
 		// (handlers.go) — same bug shape, same fix shape:
 		//   - jetstream.ErrStreamNotFound → E_PIPE_NOT_FOUND. The pipe
 		//     genuinely doesn't exist on this source; message names the

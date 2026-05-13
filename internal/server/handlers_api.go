@@ -461,6 +461,7 @@ func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request
 
 	writeJSON(w, http.StatusCreated, cliproto.PipeCreateReply{
 		Handle:     "",
+		Manifold:   req.Manifold,
 		Name:       pipe.Name,
 		StreamName: natsubj.BuildStreamName(key.AccountID, req.Manifold, "", pipe.Name),
 		TTLSeconds: int(maxAge / time.Second),

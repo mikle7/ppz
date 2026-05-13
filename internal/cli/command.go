@@ -69,9 +69,9 @@ func cmdCommand(args []string) error {
 	}
 
 	send := func(payload string) error {
-		var reply cliproto.BroadcastReply
-		if err := daemon.Call(ipcSocket(), cliproto.IPCBroadcast,
-			cliproto.BroadcastRequest{
+		var reply cliproto.SendReply
+		if err := daemon.Call(ipcSocket(), cliproto.IPCSend,
+			cliproto.SendRequest{
 				Handle:  handle,
 				Channel: "stdin",
 				Payload: payload,

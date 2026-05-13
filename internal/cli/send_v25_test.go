@@ -34,12 +34,12 @@ func TestCmdSend_RejectsAckSubjectAtCLI(t *testing.T) {
 		t.Fatalf("error code = %s, want E_INVALID_SUBJECT", cerr.Code)
 	}
 	if n := len(*requests); n > 0 {
-		t.Fatalf("CLI should reject before any IPCBroadcast call; got %d requests", n)
+		t.Fatalf("CLI should reject before any IPCSend call; got %d requests", n)
 	}
 }
 
 // --request-ack with no current source: rejected at the CLI before
-// BroadcastRequest is sent. The CLI gets the current source from
+// SendRequest is sent. The CLI gets the current source from
 // IPCStatus — when that returns "" the CLI exits with ENoCurrentSource.
 func TestCmdSend_RequestAckRequiresCurrentSource(t *testing.T) {
 	requests, _ := setupV25SendDaemon(t, "")
@@ -59,7 +59,7 @@ func TestCmdSend_RequestAckRequiresCurrentSource(t *testing.T) {
 	}
 }
 
-// Non-flag normal send: BroadcastRequest is unchanged, success line goes
+// Non-flag normal send: SendRequest is unchanged, success line goes
 // to STDERR (not stdout).
 func TestCmdSend_SuccessLineWritesToStderr(t *testing.T) {
 	_, _ = setupV25SendDaemon(t, "alpha")
@@ -81,7 +81,7 @@ func TestCmdSend_SuccessLineWritesToStderr(t *testing.T) {
 }
 
 // --request-ack adds the `ack=requested` token to the stderr success line
-// AND propagates AckRequested through the BroadcastRequest.
+// AND propagates AckRequested through the SendRequest.
 func TestCmdSend_RequestAckSetsTokenAndField(t *testing.T) {
 	requests, _ := setupV25SendDaemon(t, "alpha")
 
@@ -96,7 +96,7 @@ func TestCmdSend_RequestAckSetsTokenAndField(t *testing.T) {
 		t.Fatalf("stdout should remain empty under v0.25.0 send: %q", stdout.String())
 	}
 	// IPCStatus is called for the preflight, so requests of method
-	// IPCBroadcast must be the second-to-last call. Walk and find it.
+	// IPCSend must be the second-to-last call. Walk and find it.
 	found := false
 	for _, r := range *requests {
 		if r.AckRequested {
@@ -105,11 +105,11 @@ func TestCmdSend_RequestAckSetsTokenAndField(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("no BroadcastRequest with AckRequested=true reached the daemon; got %+v", *requests)
+		t.Fatalf("no SendRequest with AckRequested=true reached the daemon; got %+v", *requests)
 	}
 }
 
-// --subject (legal) and --in-reply-to plumb through to BroadcastRequest.
+// --subject (legal) and --in-reply-to plumb through to SendRequest.
 func TestCmdSend_SubjectAndInReplyTo(t *testing.T) {
 	requests, _ := setupV25SendDaemon(t, "alpha")
 
@@ -121,7 +121,7 @@ func TestCmdSend_SubjectAndInReplyTo(t *testing.T) {
 	if len(*requests) == 0 {
 		t.Fatalf("no broadcast request reached the daemon")
 	}
-	var got *cliproto.BroadcastRequest
+	var got *cliproto.SendRequest
 	for i := range *requests {
 		r := (*requests)[i]
 		if r.MsgSubject != "" || r.InReplyTo != "" {
@@ -130,7 +130,7 @@ func TestCmdSend_SubjectAndInReplyTo(t *testing.T) {
 		}
 	}
 	if got == nil {
-		t.Fatalf("no BroadcastRequest carried subject / in_reply_to: %+v", *requests)
+		t.Fatalf("no SendRequest carried subject / in_reply_to: %+v", *requests)
 	}
 	if got.MsgSubject != "status update" {
 		t.Fatalf("MsgSubject = %q, want status update", got.MsgSubject)
@@ -161,11 +161,11 @@ func asCliErr(t *testing.T, err error) *cliproto.Error {
 }
 
 // setupV25SendDaemon spins a fake daemon socket that responds to both
-// IPCStatus (returns the configured `current` source) and IPCBroadcast
+// IPCStatus (returns the configured `current` source) and IPCSend
 // (records the request and replies with a deterministic ID). Returns a
-// pointer to the recorded BroadcastRequests so each test can assert on
+// pointer to the recorded SendRequests so each test can assert on
 // what the CLI sent.
-func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.BroadcastRequest, *[]string) {
+func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.SendRequest, *[]string) {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "ppz-send-v25-")
 	if err != nil {
@@ -183,7 +183,7 @@ func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.BroadcastRequ
 
 	var (
 		mu                sync.Mutex
-		broadcastRequests []cliproto.BroadcastRequest
+		broadcastRequests []cliproto.SendRequest
 		methodLog         []string
 	)
 	done := make(chan struct{})
@@ -216,14 +216,14 @@ func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.BroadcastRequ
 				_ = json.NewEncoder(conn).Encode(map[string]any{
 					"result": cliproto.StatusReply{DaemonPID: 1234, LoggedIn: true, Current: current},
 				})
-			case cliproto.IPCBroadcast:
-				var br cliproto.BroadcastRequest
+			case cliproto.IPCSend:
+				var br cliproto.SendRequest
 				_ = json.Unmarshal(req.Params, &br)
 				mu.Lock()
 				broadcastRequests = append(broadcastRequests, br)
 				mu.Unlock()
 				_ = json.NewEncoder(conn).Encode(map[string]any{
-					"result": cliproto.BroadcastReply{
+					"result": cliproto.SendReply{
 						ID:      "deadbeefcafebabedeadbeefcafebabe",
 						Subject: "org.foo.inbox",
 						Bytes:   len(br.Payload),

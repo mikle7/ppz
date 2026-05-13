@@ -136,7 +136,7 @@ func TestCmdCommand_FlagAfterPositionalArgsErrors(t *testing.T) {
 	}
 }
 
-func setupCommandDaemon(t *testing.T) *[]cliproto.BroadcastRequest {
+func setupCommandDaemon(t *testing.T) *[]cliproto.SendRequest {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "ppz-command-")
 	if err != nil {
@@ -148,7 +148,7 @@ func setupCommandDaemon(t *testing.T) *[]cliproto.BroadcastRequest {
 	return serveSendAliasDaemon(t, sock)
 }
 
-func assertStdinRequest(t *testing.T, req cliproto.BroadcastRequest, handle, payload string) {
+func assertStdinRequest(t *testing.T, req cliproto.SendRequest, handle, payload string) {
 	t.Helper()
 	if req.Handle != handle || req.Channel != "stdin" || req.Payload != payload {
 		t.Errorf("request: handle=%q channel=%q payload=%q, want handle=%q channel=stdin payload=%q",

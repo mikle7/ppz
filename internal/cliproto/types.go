@@ -8,16 +8,13 @@ const (
 	IPCLogin       = "Login"
 	IPCCreate      = "Create"
 	IPCSwitch      = "Switch"
-	// IPCBroadcast / IPCBroadcastBatch are the publish-IPC verbs. The
-	// `ppz broadcast` CLI verb was removed in Phase 1 (locked
-	// decision #16); `ppz send` (and `ppz command`, terminal stdin
-	// forwarding, etc.) keep using these names internally because
-	// renaming to IPCSend/IPCSendBatch would cascade through
-	// BroadcastRequest / handleBroadcast / resolveBroadcastTarget
-	// etc. with no behavioural change. Wire strings retained so
-	// older daemon binaries don't break during mid-rollout testing.
-	IPCBroadcast      = "Broadcast"
-	IPCBroadcastBatch = "BroadcastBatch"
+	// IPCSend / IPCSendBatch — the publish-IPC verbs used by
+	// `ppz send`, `ppz command`, terminal stdin forwarding, etc.
+	// Renamed from IPCBroadcast/IPCBroadcastBatch in Phase 1.5 to
+	// match the surviving user-facing verb (`ppz broadcast` itself
+	// was removed in Phase 1 — locked decision #16).
+	IPCSend      = "Send"
+	IPCSendBatch = "SendBatch"
 
 	IPCList        = "List"
 	IPCListWatch   = "ListWatch"
@@ -234,7 +231,7 @@ type DisconnectRequest struct {
 // being cleared on the daemon side. Returns no fields.
 type DisconnectReply struct{}
 
-type BroadcastRequest struct {
+type SendRequest struct {
 	// Optional explicit target. If both empty, daemon publishes to its
 	// current source on .broadcast. If Handle is set, publishes to
 	// <Handle>.<Channel|"broadcast">. Used by `ppz send` and by
@@ -249,7 +246,7 @@ type BroadcastRequest struct {
 	// MsgSubject is an optional envelope-level subject (header-line). Free-
 	// form for users (set via `ppz send --subject`); subjects starting with
 	// `ack:` are reserved for daemon-internal protocol messages (ack
-	// emission) and rejected at the IPC trust boundary in handleBroadcast.
+	// emission) and rejected at the IPC trust boundary in handleSend.
 	MsgSubject string `json:"msg_subject,omitempty"`
 	// InReplyTo / AckRequested mirror the new envelope fields (v0.25.0).
 	// JSON tags align with the envelope (`in_reply_to`, `ack_requested`)
@@ -260,34 +257,43 @@ type BroadcastRequest struct {
 	// Session keys the per-session current-source fallback when neither
 	// Handle nor PPZ_CURRENT_HANDLE is set.
 	Session string `json:"session,omitempty"`
+
+	// Phase 1.5: BareTarget carries the raw target string when the user
+	// typed `ppz send LEAF` without a dot. The CLI mangles the bare form
+	// to {Handle: LEAF, Channel: "inbox"} for backward compat with the
+	// collared recipient.inbox shorthand; BareTarget lets the daemon
+	// recognise the original bare form and fall back to uncollared pipe
+	// resolution if the source handle lookup misses. Empty when the user
+	// typed an explicit `<H>.<P>` form.
+	BareTarget string `json:"bare_target,omitempty"`
 }
 
-type BroadcastReply struct {
+type SendReply struct {
 	ID      string `json:"id"`
 	Subject string `json:"subject"`
 	Bytes   int    `json:"bytes"`
 }
 
-// BroadcastBatchRequest publishes N payloads in one IPC round-trip.
+// SendBatchRequest publishes N payloads in one IPC round-trip.
 // Used by streaming producers (terminal share's stdout drain,
 // `ppz broadcast` line-streaming) where the per-call NATS round-
 // trip cost dominates throughput under WAN. Validation runs once
 // for the whole batch; the daemon issues N async nc.Publish calls
 // followed by ONE nc.Flush, then replies with N ids — preserving
 // the same "bytes confirmed at server" contract as the single
-// IPCBroadcast call, just amortised across the batch.
-type BroadcastBatchRequest struct {
+// IPCSend call, just amortised across the batch.
+type SendBatchRequest struct {
 	Handle   string   `json:"handle,omitempty"`
 	Channel  string   `json:"channel,omitempty"`
 	Payloads []string `json:"payloads"`
 	Session  string   `json:"session,omitempty"`
 }
 
-// BroadcastBatchReply mirrors BroadcastReply but as parallel arrays,
+// SendBatchReply mirrors SendReply but as parallel arrays,
 // one entry per published payload. IDs[i] / Bytes[i] correspond to
 // Payloads[i] in the request. Subject is shared across the batch
 // (all messages land on the same handle.pipe).
-type BroadcastBatchReply struct {
+type SendBatchReply struct {
 	IDs     []string `json:"ids"`
 	Subject string   `json:"subject"`
 	Bytes   []int    `json:"bytes"`
@@ -459,6 +465,7 @@ type PipeCreateRequest struct {
 // are filled in) so the CLI prints exactly what was provisioned.
 type PipeCreateReply struct {
 	Handle     string `json:"handle"`
+	Manifold   string `json:"manifold,omitempty"` // Phase 1.5
 	Name       string `json:"name"`
 	StreamName string `json:"stream_name"`
 	TTLSeconds int    `json:"ttl_seconds"`

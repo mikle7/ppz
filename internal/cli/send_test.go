@@ -65,19 +65,19 @@ func TestCmdSend_ForwardsSessionID(t *testing.T) {
 	}
 	got := (*requests)[0]
 	if got.Session != "tty-send-session-test" {
-		t.Fatalf("BroadcastRequest.Session = %q, want %q (without it the daemon stamps sender=\"\")",
+		t.Fatalf("SendRequest.Session = %q, want %q (without it the daemon stamps sender=\"\")",
 			got.Session, "tty-send-session-test")
 	}
 }
 
-func serveSendAliasDaemon(t *testing.T, sock string) *[]cliproto.BroadcastRequest {
+func serveSendAliasDaemon(t *testing.T, sock string) *[]cliproto.SendRequest {
 	t.Helper()
 	_ = os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen fake daemon: %v", err)
 	}
-	var broadcastRequests []cliproto.BroadcastRequest
+	var broadcastRequests []cliproto.SendRequest
 	done := make(chan struct{})
 	t.Cleanup(func() { <-done })
 	t.Cleanup(func() {
@@ -100,12 +100,12 @@ func serveSendAliasDaemon(t *testing.T, sock string) *[]cliproto.BroadcastReques
 				_ = conn.Close()
 				continue
 			}
-			if req.Method == cliproto.IPCBroadcast {
-				var br cliproto.BroadcastRequest
+			if req.Method == cliproto.IPCSend {
+				var br cliproto.SendRequest
 				_ = json.Unmarshal(req.Params, &br)
 				broadcastRequests = append(broadcastRequests, br)
 				_ = json.NewEncoder(conn).Encode(map[string]any{
-					"result": cliproto.BroadcastReply{
+					"result": cliproto.SendReply{
 						ID:      "test-id",
 						Subject: "org.foo.inbox",
 						Bytes:   len(br.Payload),

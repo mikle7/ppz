@@ -714,8 +714,8 @@ func (d *Daemon) handleUnsetNamespace(ctx context.Context, conn net.Conn, params
 	writeIPC(conn, cliproto.UnsetNamespaceReply{})
 }
 
-func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json.RawMessage) {
-	var req cliproto.BroadcastRequest
+func (d *Daemon) handleSend(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.SendRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
@@ -724,13 +724,13 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 	// reserved for daemon-emitted protocol messages. CLI argument
 	// validation is belt; this is suspenders — any IPC client (custom
 	// scripts, third-party tools, harness adapters) hits this same path.
-	// Daemon-internal ack auto-emission (§4) bypasses handleBroadcast and
+	// Daemon-internal ack auto-emission (§4) bypasses handleSend and
 	// publishes envelopes directly, so this rule has no exception.
 	if strings.HasPrefix(req.MsgSubject, "ack:") {
 		writeIPCErr(conn, cliproto.New(cliproto.EInvalidSubject))
 		return
 	}
-	target, e := d.resolveBroadcastTarget(ctx, req.Handle, req.Channel, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.Session)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -755,27 +755,27 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 	}
 	// Bytes counts the user-visible payload, not the encoded envelope —
 	// matches WIRE.md §8 ppz broadcast and the broadcast-from-* fixtures.
-	writeIPC(conn, cliproto.BroadcastReply{ID: env.ID, Subject: target.subject, Bytes: len(req.Payload)})
+	writeIPC(conn, cliproto.SendReply{ID: env.ID, Subject: target.subject, Bytes: len(req.Payload)})
 }
 
-// handleBroadcastBatch publishes N payloads in one IPC round-trip.
+// handleSendBatch publishes N payloads in one IPC round-trip.
 // Validation runs once for the whole batch; the daemon then issues N
 // async nc.Publish calls followed by a SINGLE nc.Flush. Same "bytes
-// confirmed at server" contract as handleBroadcast — just amortised
+// confirmed at server" contract as handleSend — just amortised
 // across the batch. Used by streaming producers (terminal share's
 // stdout drain, `ppz broadcast` line-streaming) where the per-call
 // flush cost dominates throughput under WAN latency.
-func (d *Daemon) handleBroadcastBatch(ctx context.Context, conn net.Conn, params json.RawMessage) {
-	var req cliproto.BroadcastBatchRequest
+func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.SendBatchRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
 	}
 	if len(req.Payloads) == 0 {
-		writeIPC(conn, cliproto.BroadcastBatchReply{})
+		writeIPC(conn, cliproto.SendBatchReply{})
 		return
 	}
-	target, e := d.resolveBroadcastTarget(ctx, req.Handle, req.Channel, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.Session)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -805,25 +805,25 @@ func (d *Daemon) handleBroadcastBatch(ctx context.Context, conn net.Conn, params
 		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
 	}
-	writeIPC(conn, cliproto.BroadcastBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
+	writeIPC(conn, cliproto.SendBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
 }
 
-// broadcastTarget bundles the resolved facts a publish needs: the
+// sendTarget bundles the resolved facts a publish needs: the
 // destination subject + the sender id we stamp into the envelope.
-type broadcastTarget struct {
+type sendTarget struct {
 	subject string
 	sender  string
 }
 
-// resolveBroadcastTarget runs the shared pre-flight for a broadcast:
+// resolveSendTarget runs the shared pre-flight for a broadcast:
 // login check, target resolution (request handle, env, session
 // current), pipe-name validation, server-side source existence (with
 // stale-current cleanup), JetStream stream existence, and ensureNATS.
 // Returns the destination subject + sender id on success. Used by
-// both handleBroadcast (single) and handleBroadcastBatch (N).
-func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChannel, session string) (broadcastTarget, *cliproto.Error) {
+// both handleSend (single) and handleSendBatch (N).
+func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, session string) (sendTarget, *cliproto.Error) {
 	if _, ok := d.State.Credentials(); !ok {
-		return broadcastTarget{}, cliproto.New(cliproto.ENotLoggedIn)
+		return sendTarget{}, cliproto.New(cliproto.ENotLoggedIn)
 	}
 	// Resolve target. Explicit handle from the request wins (used by
 	// `ppz send` and by `ppz broadcast` when PPZ_CURRENT_HANDLE is
@@ -836,14 +836,14 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 		current = d.State.Current(session)
 	}
 	if current == "" {
-		return broadcastTarget{}, cliproto.New(cliproto.ENoCurrentSource)
+		return sendTarget{}, cliproto.New(cliproto.ENoCurrentSource)
 	}
 	pipe := reqChannel
 	if pipe == "" {
 		pipe = "broadcast"
 	}
 	if err := natsubj.ValidatePipe(pipe); err != nil {
-		return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+		return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
 	}
 	// Verify the handle is a real source in this org. NATS publish
 	// silently succeeds against any subject, so without this check a
@@ -860,7 +860,7 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 	if needRefresh {
 		var lr cliproto.ListSourcesReply
 		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
-			return broadcastTarget{}, e
+			return sendTarget{}, e
 		}
 		handles := make([]string, 0, len(lr.Sources))
 		for _, s := range lr.Sources {
@@ -870,18 +870,18 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 		if !d.State.KnowsPipe(current) {
 			if fromCurrent {
 				_ = d.State.ClearCurrent(session)
-				return broadcastTarget{}, cliproto.New(cliproto.ENoCurrentSource)
+				return sendTarget{}, cliproto.New(cliproto.ENoCurrentSource)
 			}
-			return broadcastTarget{}, cliproto.NewSourceNotFound(current)
+			return sendTarget{}, cliproto.NewSourceNotFound(current)
 		}
 	}
 	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
-		return broadcastTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"}
+		return sendTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"}
 	}
 	if d.NC == nil || !d.NC.IsConnected() {
 		if err := d.ensureNATS(ctx); err != nil {
-			return broadcastTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+			return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
 		}
 	}
 	// Verify the JetStream stream exists before publishing. NATS-core
@@ -901,14 +901,14 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 		if _, err := js.Stream(ctx, natsubj.StreamName(accountID, current, pipe)); err != nil {
 			switch {
 			case errors.Is(err, jetstream.ErrStreamNotFound):
-				return broadcastTarget{}, cliproto.NewPipeNotFound(pipe, current)
+				return sendTarget{}, cliproto.NewPipeNotFound(pipe, current)
 			case errors.Is(err, context.DeadlineExceeded),
 				errors.Is(err, nats.ErrTimeout),
 				errors.Is(err, nats.ErrConnectionClosed),
 				errors.Is(err, nats.ErrNoServers):
-				return broadcastTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+				return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
 			default:
-				return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+				return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
 			}
 		}
 	}
@@ -916,7 +916,7 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 	// destination. Different when the request pins an explicit dest
 	// (`ppz send foo`, or PPZ_CURRENT_HANDLE inside `ppz terminal`).
 	// Empty when this session has never connected.
-	return broadcastTarget{
+	return sendTarget{
 		subject: natsubj.Subject(accountID, current, pipe),
 		sender:  d.State.Current(session),
 	}, nil
