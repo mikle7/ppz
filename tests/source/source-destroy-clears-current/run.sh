@@ -5,7 +5,7 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create apple >/dev/null
-ppz_a source switch apple >/dev/null
+ppz_a set handle apple >/dev/null
 
 echo "--- current before destroy ---"
 ppz_a status | grep '^current source:'

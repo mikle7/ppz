@@ -1,5 +1,3 @@
-{"handle":"chat-bar","pipe":"broadcast","creator":"bar"}
 {"handle":"chat-bar","pipe":"inbox","creator":"bar"}
-{"handle":"chat-foo","pipe":"broadcast","creator":"foo"}
 {"handle":"chat-foo","pipe":"inbox","creator":"foo"}
 exit=0

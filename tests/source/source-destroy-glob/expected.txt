@@ -1,13 +1,9 @@
 --- before destroy ---
-agent-one.broadcast 0 0 - - foo
 agent-one.inbox 0 0 - - foo
-agent-two.broadcast 0 0 - - foo
 agent-two.inbox 0 0 - - foo
-other.broadcast 0 0 - - foo
 other.inbox 0 0 - - foo
 destroyed source=agent-one
 destroyed source=agent-two
 --- after destroy ---
-other.broadcast 0 0 - - foo
 other.inbox 0 0 - - foo
 exit=0

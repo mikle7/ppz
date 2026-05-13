@@ -1,7 +1,0 @@
---- env set, source create new: daemon current updated, stderr warns ---
-warning: PPZ_CURRENT_HANDLE=foo is set; daemon current was updated but env still wins
---- env set, source switch foo: daemon current updated, stderr warns ---
-warning: PPZ_CURRENT_HANDLE=foo is set; daemon current was updated but env still wins
---- env set, source clear: daemon current cleared, stderr warns ---
-warning: PPZ_CURRENT_HANDLE=foo is set; daemon current was cleared but env still wins
-exit=0

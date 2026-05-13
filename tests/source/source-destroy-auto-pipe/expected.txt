@@ -1,3 +1,2 @@
-destroyed pipe=apple.broadcast
 destroyed pipe=apple.inbox
 exit=0
