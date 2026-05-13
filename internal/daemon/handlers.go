@@ -501,8 +501,12 @@ func (d *Daemon) handleConnect(ctx context.Context, conn net.Conn, params json.R
 }
 
 // handlePipeCreate proxies `ppz pipe create` to the server. Daemon-side
-// validation: handle must be known + name must pass ValidateUserPipeName.
-// Server validates again and provisions the JetStream stream.
+// validation; server validates again and provisions the JetStream stream.
+//
+// Phase 1.5 routing: when req.Handle is empty AND req.SourceHandle is nil
+// (or empty), this is the uncollared shape — route to the sourceless
+// endpoint POST /api/v1/pipes. Otherwise it's collared — route to the
+// existing POST /api/v1/sources/{handle}/pipes shortcut.
 func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	var req cliproto.PipeCreateRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -513,14 +517,7 @@ func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params jso
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
-	if err := natsubj.ValidateHandle(req.Handle); err != nil {
-		writeIPCErr(conn, cliproto.New(cliproto.EInvalidHandle))
-		return
-	}
 	if err := natsubj.ValidateUserPipeName(req.Name); err != nil {
-		// ValidateUserPipeName returns "invalid pipe name" (regex) or
-		// "name is reserved" — keep the distinction so the user can see
-		// which constraint they hit.
 		if err.Error() == "name is reserved" {
 			writeIPCErr(conn, cliproto.NewInvalidPipeReserved(req.Name))
 		} else {
@@ -528,10 +525,35 @@ func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params jso
 		}
 		return
 	}
+
+	// Decide collared vs uncollared from the request shape.
+	collared := req.Handle != "" || (req.SourceHandle != nil && *req.SourceHandle != "")
+
 	var reply cliproto.PipeCreateReply
-	if e := d.callServer(ctx, "POST", "/api/v1/sources/"+req.Handle+"/pipes", req, &reply); e != nil {
-		writeIPCErr(conn, e)
-		return
+	if collared {
+		// Resolve the handle from either field, prefer SourceHandle (new
+		// Phase 1.5 field) over Handle (legacy field).
+		handle := req.Handle
+		if req.SourceHandle != nil && *req.SourceHandle != "" {
+			handle = *req.SourceHandle
+		}
+		if err := natsubj.ValidateHandle(handle); err != nil {
+			writeIPCErr(conn, cliproto.New(cliproto.EInvalidHandle))
+			return
+		}
+		// Normalise so the server sees the handle in the request body's
+		// legacy Handle field (the collared endpoint reads from there).
+		req.Handle = handle
+		if e := d.callServer(ctx, "POST", "/api/v1/sources/"+handle+"/pipes", req, &reply); e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
+	} else {
+		// Uncollared — Phase 1.5 sourceless pipe.
+		if e := d.callServer(ctx, "POST", "/api/v1/pipes", req, &reply); e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
 	}
 	writeIPC(conn, reply)
 }

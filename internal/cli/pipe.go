@@ -58,14 +58,15 @@ func cmdPipeCreate(args []string) error {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
 	if handle == "" {
-		// Bare names use the effective current source. PPZ_CURRENT_HANDLE
-		// wins inside terminal-share children; otherwise fall back to the
-		// daemon/session current.
+		// Phase 1.5: bare name with no explicit handle. Try the effective
+		// current handle from daemon state; if there isn't one, fall
+		// through with handle="" — the daemon then routes to the
+		// sourceless endpoint (uncollared pipe at the root manifold).
+		// Pre-Phase-1.5 this errored as "no current source set".
 		resolved, err := effectiveCurrentHandle()
-		if err != nil {
-			return err
+		if err == nil {
+			handle = resolved
 		}
-		handle = resolved
 	}
 
 	req := cliproto.PipeCreateRequest{Handle: handle, Name: name}

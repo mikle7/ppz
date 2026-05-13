@@ -383,14 +383,90 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 
 // handleCreatePipeFullPath: POST /api/v1/pipes
 //
-// The Phase 1.5 full-path-aware pipe creation endpoint. Body shape is
-// cliproto.PipeCreateRequest with explicit Manifold + SourceHandle
-// fields. SourceHandle = nil signals an uncollared (sourceless)
-// pipe. The handler logic is plumbed in a follow-up RED→GREEN pair
-// within Cycle B; this stub satisfies the route-mounting RED so that
-// requireAPIKey gates auth as expected.
+// The Phase 1.5 sourceless (uncollared) pipe creation endpoint. Body is
+// cliproto.PipeCreateRequest with SourceHandle == nil and Handle == "".
+// Collared pipes still flow through POST /api/v1/sources/{handle}/pipes
+// — clients send a collared request there, an uncollared request here.
+//
+// Splits responsibility cleanly:
+//   - Collared shortcut: existing endpoint, source row already known
+//   - Uncollared (this): manifold + name, no source row
 func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request, key db.APIKey) {
-	writeErr(w, &cliproto.Error{Code: "E_NOT_IMPLEMENTED", Message: "Phase 1.5: uncollared pipe handler stub — implementation lands in a follow-up commit"})
+	var req cliproto.PipeCreateRequest
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, cliproto.New(cliproto.EInvalidPipe))
+		return
+	}
+	if req.Handle != "" || (req.SourceHandle != nil && *req.SourceHandle != "") {
+		writeErr(w, &cliproto.Error{Code: "E_INVALID", Message: "collared pipes go to POST /api/v1/sources/{handle}/pipes"})
+		return
+	}
+	if req.Manifold != "" {
+		for _, seg := range strings.Split(req.Manifold, ".") {
+			if err := natsubj.ValidateHandle(seg); err != nil {
+				writeErr(w, &cliproto.Error{Code: "E_INVALID_MANIFOLD", Message: "manifold segment invalid: " + seg})
+				return
+			}
+		}
+	}
+	if err := natsubj.ValidateUserPipeName(req.Name); err != nil {
+		if err.Error() == "name is reserved" {
+			writeErr(w, cliproto.NewInvalidPipeReserved(req.Name))
+		} else {
+			writeErr(w, cliproto.NewInvalidPipeName(req.Name))
+		}
+		return
+	}
+
+	ctx, cancel := withTimeout(r)
+	defer cancel()
+
+	pipe, err := db.InsertPipe(ctx, s.Pool, key.AccountID, req.Manifold, nil, key.CreatedByUserID, req.Name,
+		req.TTLSeconds, req.MaxMsgs, req.MaxBytes)
+	if err != nil {
+		if errors.Is(err, db.ErrPipeNameTaken) {
+			target := req.Name
+			if req.Manifold != "" {
+				target = req.Manifold + "." + req.Name
+			}
+			writeErr(w, cliproto.NewPipeTaken(req.Name, target))
+			return
+		}
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+
+	maxAge := defaultStreamMaxAge
+	if pipe.TTLSeconds != nil {
+		maxAge = time.Duration(*pipe.TTLSeconds) * time.Second
+	}
+	maxMsgs := defaultStreamMaxMsgs
+	if pipe.MaxMsgs != nil {
+		maxMsgs = *pipe.MaxMsgs
+	}
+	maxBytes := int64(defaultStreamMaxBytes)
+	if pipe.MaxBytes != nil {
+		maxBytes = *pipe.MaxBytes
+	}
+
+	js, err := s.JSFor(ctx, key.AccountID)
+	if err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "account: " + err.Error()})
+		return
+	}
+	if err := ensurePipeStreamPhase15(ctx, js, key.AccountID, req.Manifold, "", pipe.Name, maxAge, maxMsgs, maxBytes); err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, cliproto.PipeCreateReply{
+		Handle:     "",
+		Name:       pipe.Name,
+		StreamName: natsubj.BuildStreamName(key.AccountID, req.Manifold, "", pipe.Name),
+		TTLSeconds: int(maxAge / time.Second),
+		MaxMsgs:    maxMsgs,
+		MaxBytes:   maxBytes,
+	})
 }
 
 // handleDestroySource: DELETE /api/v1/sources/{handle}

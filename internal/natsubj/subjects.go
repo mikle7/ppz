@@ -156,12 +156,36 @@ func BuildSubject(accountID uuid.UUID, manifold, source, pipe string) string {
 //	source_<orgshort>_<handle>_<pipe>
 //
 // where orgshort is the first 8 hex chars of the org UUID, hyphens stripped.
+// Pre-Phase-1.5 three-role form; for the four-role form use BuildStreamName.
 func StreamName(accountID uuid.UUID, handle, pipe string) string {
 	hex := strings.ReplaceAll(accountID.String(), "-", "")
 	if len(hex) > 8 {
 		hex = hex[:8]
 	}
 	return "source_" + hex + "_" + handle + "_" + pipe
+}
+
+// BuildStreamName produces a JetStream stream name for the four-role pipe
+// shape. NATS stream names can't contain dots, so manifold dots are
+// replaced with underscores. Empty manifold/source slots are omitted
+// entirely — handle regex forbids underscores in segments so there's no
+// ambiguity.
+//
+//	pipe_<orgshort>[_<manifold-underscored>][_<source>]_<name>
+func BuildStreamName(accountID uuid.UUID, manifold, source, name string) string {
+	hex := strings.ReplaceAll(accountID.String(), "-", "")
+	if len(hex) > 8 {
+		hex = hex[:8]
+	}
+	parts := []string{"pipe", hex}
+	if manifold != "" {
+		parts = append(parts, strings.ReplaceAll(manifold, ".", "_"))
+	}
+	if source != "" {
+		parts = append(parts, source)
+	}
+	parts = append(parts, name)
+	return strings.Join(parts, "_")
 }
 
 // OrgSubscription is the wildcard subscription used by the server-side
