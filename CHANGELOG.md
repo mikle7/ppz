@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.31.0 — Data model under the new CLI surface (Phase 1.5)
+
+**Breaking release.** Pre-launch schema bump — cutover via Reset Database action then redeploy.
+
+Adds the structural primitives Phase 1's CLI surface implied but didn't ship: explicit hierarchical-grouping (manifold) on sources and pipes, sourceless (uncollared) pipes for symmetric many-to-many channels, and the namespace daemon-state verb that lets users scope subsequent pipe creates into a manifold.
+
+### New
+
+- **`manifold` column** on `sources` and `pipes` (text, NOT NULL DEFAULT `''`). Empty string represents the root namespace. Multi-team self-hosters and pipescloud use non-empty values; OSS-default deploys leave everything at `''`.
+- **Sourceless (uncollared) pipes** — `pipes.source_id` is nullable. `ppz pipe create LEAF` with no current handle creates an uncollared pipe; symmetric many-to-many semantics. Wire form: `<account>.<manifold?>.<pipe>` (no source segment).
+- **`ppz set namespace PATH`** / **`ppz unset namespace`** — daemon-state verbs that scope subsequent pipe creates into the given manifold. View via `ppz status` (no `ppz get namespace` — status is the read interface).
+- **`POST /api/v1/pipes`** — new HTTP endpoint for full-path-aware pipe creation. Body shape adds `manifold` and nullable `source_handle`. The pre-Phase-1.5 collared-shortcut `POST /api/v1/sources/{handle}/pipes` stays as-is.
+- **`natsubj.BuildSubject`** and **`natsubj.BuildStreamName`** — four-role helpers per locked decision #18.
+
+### Wire grammar (locked decision #18)
+
+```
+<account>.<manifold?>.<source?>.<pipe>
+```
+
+Wire-level the manifold-only and source-only shapes are indistinguishable — disambiguation happens by DB row at create time, not by the broker. See `docs/WIRE.md` §1.
+
+### ACL
+
+The existing per-account wildcard `<accountID>.>` already covers uncollared pipes by pattern match — no JWT-mint changes were required. Leaf-name conventions (`inbox` subscribe-only, `stdout` publish-only, etc.) and role-asymmetry inference are deferred to **Phase 3**.
+
+### Cutover
+
+Pre-launch schema bump. Same sequence as v0.30.2:
+
+1. Reset Database action — drops + recreates the production DB, leaves ppz-server stopped.
+2. Deploy v0.31.0 — `systemctl restart` brings up the new binary against the empty DB; baseline 0001 + 0002 migrations run cleanly.
+3. Smoke-test the live deployment.
+
 ## v0.30.0 — Pre-launch surface strip (Phase 1)
 
 **Breaking release.** Removes three concepts from the user-facing CLI
