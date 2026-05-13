@@ -69,7 +69,7 @@ func cmdPipeCreate(args []string) error {
 		}
 	}
 
-	req := cliproto.PipeCreateRequest{Handle: handle, Name: name}
+	req := cliproto.PipeCreateRequest{Handle: handle, Name: name, Session: sessionID()}
 	if *ttl > 0 {
 		secs := int(*ttl / time.Second)
 		req.TTLSeconds = &secs

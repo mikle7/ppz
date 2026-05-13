@@ -94,8 +94,8 @@ var subverbs = map[string][]string{
 	"pipe":     {"create", "destroy"},
 	"source":   {"create", "destroy"},
 	"terminal": {"create", "share", "watch", "read"},
-	"set":      {"handle"},
-	"unset":    {"handle"},
+	"set":      {"handle", "namespace"},
+	"unset":    {"handle", "namespace"},
 	"get":      {"handle"},
 }
 

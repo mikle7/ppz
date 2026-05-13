@@ -33,7 +33,8 @@ type Credentials struct {
 // contract — the test reset script deletes these by name.
 const (
 	fileCredentials = "credentials"
-	fileCurrent     = "current.json" // session → handle map (was "current")
+	fileCurrent     = "current.json"   // session → handle map (was "current")
+	fileNamespace   = "namespace.json" // session → namespace (Phase 1.5)
 	filePID         = "daemon.pid"
 	fileSocket      = "daemon.sock"
 )
@@ -47,12 +48,15 @@ type State struct {
 	mu          sync.RWMutex
 	home        string
 	creds       *Credentials
-	accountID       string // resolved at Login (returned by /auth/exchange)
-	accountName     string // resolved at Login (human label for status)
+	accountID   string // resolved at Login (returned by /auth/exchange)
+	accountName string // resolved at Login (human label for status)
 	keyPrefix   string // 8 chars; safe to display
-	current     map[string]string
-	knownPipes  map[string]struct{} // server-side handles cached after List/Create
-	pipesLoaded bool
+	current     map[string]string // Phase 1: session → handle
+	// Phase 1.5: session → namespace (manifold). Mirrors `current` but
+	// for the namespace slot. Empty value (or missing key) = root.
+	currentNamespace map[string]string
+	knownPipes       map[string]struct{} // server-side handles cached after List/Create
+	pipesLoaded      bool
 	// loginCheck caches the daemon's last server-touching call result.
 	// Empty means "no observation yet" (fresh daemon). LoginCheckOK on
 	// successful 2xx; LoginCheckInvalid on 401 / E_INVALID_API_KEY.
@@ -70,7 +74,12 @@ func normSession(s string) string {
 }
 
 func NewState(home string) *State {
-	return &State{home: home, current: map[string]string{}, knownPipes: map[string]struct{}{}}
+	return &State{
+		home:             home,
+		current:          map[string]string{},
+		currentNamespace: map[string]string{},
+		knownPipes:       map[string]struct{}{},
+	}
 }
 
 func (s *State) Home() string { return s.home }
@@ -165,6 +174,41 @@ func (s *State) ClearCurrent(session string) error {
 	return s.persistCurrentLocked()
 }
 
+// CurrentNamespace returns the per-session namespace, empty when unset.
+// Phase 1.5 (locked decision #18 / #20).
+func (s *State) CurrentNamespace(session string) string {
+	session = normSession(session)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.currentNamespace[session]
+}
+
+// SetNamespace stores the per-session namespace. Empty value clears (same
+// semantics as ClearNamespace). Persisted to disk.
+func (s *State) SetNamespace(session, namespace string) error {
+	session = normSession(session)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if namespace == "" {
+		delete(s.currentNamespace, session)
+	} else {
+		s.currentNamespace[session] = namespace
+	}
+	return s.persistNamespaceLocked()
+}
+
+// ClearNamespace drops this session's namespace. Idempotent.
+func (s *State) ClearNamespace(session string) error {
+	session = normSession(session)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.currentNamespace[session]; !ok {
+		return nil
+	}
+	delete(s.currentNamespace, session)
+	return s.persistNamespaceLocked()
+}
+
 func (s *State) RememberPipe(handle string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -227,6 +271,7 @@ func (s *State) LoadFromDisk() error {
 	s.accountName = ""
 	s.keyPrefix = ""
 	s.current = map[string]string{}
+	s.currentNamespace = map[string]string{}
 	s.knownPipes = map[string]struct{}{}
 	s.pipesLoaded = false
 	// Reload zeros the cache: a daemon that just woke up hasn't talked to
@@ -249,6 +294,17 @@ func (s *State) LoadFromDisk() error {
 		_ = json.Unmarshal(data, &s.current)
 		if s.current == nil {
 			s.current = map[string]string{}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	// Phase 1.5: namespace state. Missing file = no namespaces set
+	// (graceful upgrade from v0.30 daemon state).
+	if data, err := os.ReadFile(filepath.Join(s.home, fileNamespace)); err == nil {
+		_ = json.Unmarshal(data, &s.currentNamespace)
+		if s.currentNamespace == nil {
+			s.currentNamespace = map[string]string{}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -283,6 +339,20 @@ func (s *State) persistCurrentLocked() error {
 		return err
 	}
 	return os.Rename(tmp, filepath.Join(s.home, fileCurrent))
+}
+
+// persistNamespaceLocked mirrors persistCurrentLocked for the namespace map.
+// Phase 1.5.
+func (s *State) persistNamespaceLocked() error {
+	data, err := json.Marshal(s.currentNamespace)
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(s.home, fileNamespace+".tmp")
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(s.home, fileNamespace))
 }
 
 func (s *State) persistCredsLocked() error {

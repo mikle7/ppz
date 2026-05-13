@@ -29,6 +29,12 @@ const (
 	IPCPipeDestroy   = "PipeDestroy"
 	IPCSourceDestroy = "SourceDestroy"
 
+	// Phase 1.5 namespace (manifold) state verbs. `ppz set namespace
+	// PATH` / `ppz unset namespace` — symmetric with handle. No
+	// IPCGetNamespace: `ppz status` carries it in StatusReply.
+	IPCSetNamespace   = "SetNamespace"
+	IPCUnsetNamespace = "UnsetNamespace"
+
 	// Diag verb (Phase 0 — agent hardening). Returns the daemon's
 	// recent NATS connection-state events for `ppz diag`. Works
 	// without credentials and without a live NATS connection — the
@@ -130,6 +136,10 @@ type StatusReply struct {
 	// case so the user always sees the truth.
 	LoginCheck string `json:"login_check,omitempty"`
 	Current    string `json:"current,omitempty"`
+	// CurrentNamespace is the per-session manifold (Phase 1.5). Empty
+	// when unset = root namespace. Rendered as a `namespace: …` line by
+	// `ppz status`.
+	CurrentNamespace string `json:"current_namespace,omitempty"`
 	// CurrentPath is the daemon-side path to current.json — surfaced so
 	// `ppz status`'s env/daemon-disagree warning can point users at the
 	// actual file (which lives in the daemon's home, not the CLI's, when
@@ -184,6 +194,23 @@ type SwitchRequest struct {
 type SwitchReply struct {
 	Handle string `json:"handle"`
 }
+
+// Phase 1.5: namespace (manifold) per-session state.
+
+type SetNamespaceRequest struct {
+	Namespace string `json:"namespace"` // dot-separated path; '' = root (clear)
+	Session   string `json:"session,omitempty"`
+}
+
+type SetNamespaceReply struct {
+	Namespace string `json:"namespace"`
+}
+
+type UnsetNamespaceRequest struct {
+	Session string `json:"session,omitempty"`
+}
+
+type UnsetNamespaceReply struct{}
 
 // ConnectRequest is the input to `ppz connect <handle>`. The daemon ensures
 // the source exists (idempotent — pre-existing source is fine), then sets
@@ -422,6 +449,10 @@ type PipeCreateRequest struct {
 	TTLSeconds   *int    `json:"ttl_seconds,omitempty"`
 	MaxMsgs      *int    `json:"max_msgs,omitempty"`
 	MaxBytes     *int64  `json:"max_bytes,omitempty"`
+
+	// Session is set by the CLI for daemon-side manifold lookup; the IPC
+	// transport drops it before forwarding to the server. Phase 1.5.
+	Session string `json:"session,omitempty"`
 }
 
 // PipeCreateReply mirrors the server's resolved retention (after defaults

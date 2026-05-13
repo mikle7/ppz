@@ -91,6 +91,10 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handlePipeDestroy(ctx, conn, req.Params)
 	case cliproto.IPCSourceDestroy:
 		d.handleSourceDestroy(ctx, conn, req.Params)
+	case cliproto.IPCSetNamespace:
+		d.handleSetNamespace(ctx, conn, req.Params)
+	case cliproto.IPCUnsetNamespace:
+		d.handleUnsetNamespace(ctx, conn, req.Params)
 	case cliproto.IPCDiag:
 		d.handleDiag(ctx, conn, req.Params)
 	default:
@@ -148,6 +152,7 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		reply.LoginCheck = check
 	}
 	reply.Current = d.State.Current(req.Session)
+	reply.CurrentNamespace = d.State.CurrentNamespace(req.Session)
 	reply.CurrentPath = filepath.Join(d.State.Home(), fileCurrent)
 	writeIPC(conn, reply)
 }

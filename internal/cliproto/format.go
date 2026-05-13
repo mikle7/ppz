@@ -147,6 +147,13 @@ func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, cur
 	default:
 		fmt.Fprintf(w, "current source: %s\n", c.dim("-"))
 	}
+
+	// Phase 1.5: namespace line. Only rendered when set — omitting when
+	// empty keeps `ppz status` output tight for the common OSS-default
+	// case (no namespace).
+	if s.CurrentNamespace != "" {
+		fmt.Fprintf(w, "namespace: %s\n", c.green(s.CurrentNamespace))
+	}
 }
 
 func daemonVersionSuffix(c statusColors, daemonVersion, cliVersion string) string {

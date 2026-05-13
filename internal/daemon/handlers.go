@@ -529,6 +529,17 @@ func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params jso
 	// Decide collared vs uncollared from the request shape.
 	collared := req.Handle != "" || (req.SourceHandle != nil && *req.SourceHandle != "")
 
+	// Phase 1.5: stamp Manifold from the daemon's per-session namespace if
+	// the request didn't carry one explicitly. CLI users set namespace via
+	// `ppz set namespace`; the daemon-side stamping keeps that
+	// transparent. Explicit Manifold on the request (e.g. for callers that
+	// know what they want) takes precedence.
+	if req.Manifold == "" {
+		req.Manifold = d.State.CurrentNamespace(req.Session)
+	}
+	// Don't leak the session field to the server — it's daemon-side only.
+	req.Session = ""
+
 	var reply cliproto.PipeCreateReply
 	if collared {
 		// Resolve the handle from either field, prefer SourceHandle (new
@@ -653,6 +664,54 @@ func (d *Daemon) handleSwitch(ctx context.Context, conn net.Conn, params json.Ra
 		return
 	}
 	writeIPC(conn, cliproto.SwitchReply{Handle: req.Handle})
+}
+
+// handleSetNamespace stores the per-session manifold. Phase 1.5 (locked
+// decision #20 — `ppz set namespace PATH`). Validates each dot-separated
+// segment via the existing handle regex; empty namespace is a no-op clear.
+func (d *Daemon) handleSetNamespace(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.SetNamespaceRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+	if _, ok := d.State.Credentials(); !ok {
+		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
+		return
+	}
+	// Empty namespace via `set` is treated as clear — same behaviour as
+	// `unset namespace`, so users can `set namespace ""` interchangeably.
+	if req.Namespace != "" {
+		for _, seg := range strings.Split(req.Namespace, ".") {
+			if err := natsubj.ValidateHandle(seg); err != nil {
+				writeIPCErr(conn, &cliproto.Error{Code: "E_INVALID_MANIFOLD", Message: "namespace segment invalid: " + seg})
+				return
+			}
+		}
+	}
+	if err := d.State.SetNamespace(req.Session, req.Namespace); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	writeIPC(conn, cliproto.SetNamespaceReply{Namespace: req.Namespace})
+}
+
+// handleUnsetNamespace clears the per-session manifold. Idempotent.
+func (d *Daemon) handleUnsetNamespace(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.UnsetNamespaceRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+	if _, ok := d.State.Credentials(); !ok {
+		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
+		return
+	}
+	if err := d.State.ClearNamespace(req.Session); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	writeIPC(conn, cliproto.UnsetNamespaceReply{})
 }
 
 func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json.RawMessage) {
