@@ -54,12 +54,16 @@ jobs:
             body=$(git log -1 --format='%b' "$sha")
             echo "  $sha $subject"
 
-            # Breaking: `<type>!:` in subject, or `BREAKING CHANGE:` in body.
+            # Pre-1.0: breaking changes bump MINOR (per semver v0 free-for-all —
+            # any v0.x release is allowed to break). After 1.0 ships intentionally,
+            # switch the two `highest=2` lines below back to `highest=3; break`.
             if echo "$subject" | grep -qE '^[a-zA-Z]+(\([^)]+\))?!:'; then
-              highest=3; break
+              [ "$highest" -lt 2 ] && highest=2
+              continue
             fi
             if echo "$body" | grep -qE '^BREAKING CHANGE:'; then
-              highest=3; break
+              [ "$highest" -lt 2 ] && highest=2
+              continue
             fi
             # Feature
             if echo "$subject" | grep -qE '^feat(\([^)]+\))?:'; then
