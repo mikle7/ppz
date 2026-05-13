@@ -84,4 +84,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add update/manifest.json
           git commit -m "chore: publish ${TAG} update manifest"
-          git push origin main
+          # Concurrent pushes to main between the `git checkout` above
+          # and this push will reject as non-fast-forward. Rebase and
+          # retry a few times — the manifest commit is one line and
+          # cleanly rebases on top of anything reasonable.
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              break
+            fi
+            echo "push rejected (attempt $attempt); rebasing on origin/main"
+            git fetch origin main
+            git rebase origin/main
+          done
