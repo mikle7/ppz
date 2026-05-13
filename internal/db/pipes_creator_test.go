@@ -14,9 +14,10 @@ import (
 
 func TestPipe_HasCreatedByUserIDField(t *testing.T) {
 	uid := uuid.New()
+	srcID := uuid.New()
 	p := Pipe{
 		ID:              uuid.New(),
-		SourceID:        uuid.New(),
+		SourceID:        &srcID,
 		Name:            "archive",
 		CreatedByUserID: uid,
 	}
@@ -33,12 +34,14 @@ func TestPipe_HasCreatedByUserIDField(t *testing.T) {
 	}
 }
 
-// InsertPipe accepts (ctx, pool, sourceID, createdBy, name, ttl,
-// maxMsgs, maxBytes). Compile-time pin.
+// InsertPipe accepts (ctx, pool, accountID, manifold, sourceID, createdBy,
+// name, ttl, maxMsgs, maxBytes). Compile-time pin. Phase 1.5 added the
+// accountID + manifold args and made sourceID a *uuid.UUID for uncollared
+// pipes; this pin preserves the original "createdBy is required" intent.
 func TestInsertPipe_SignatureAcceptsCreatedBy(t *testing.T) {
-	_ = func(pool *Pool, sourceID, createdBy uuid.UUID) {
+	_ = func(pool *Pool, accountID, sourceID, createdBy uuid.UUID) {
 		var ttl, maxMsgs *int
 		var maxBytes *int64
-		_, _ = InsertPipe(nil, pool, sourceID, createdBy, "archive", ttl, maxMsgs, maxBytes)
+		_, _ = InsertPipe(nil, pool, accountID, "", &sourceID, createdBy, "archive", ttl, maxMsgs, maxBytes)
 	}
 }

@@ -190,7 +190,10 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 		return
 	}
 
-	src, err := db.InsertSource(ctx, s.Pool, key.AccountID, key.CreatedByUserID, req.Handle, kind)
+	// Phase 1.5: manifold defaults to '' (root) until the request shape
+	// adds an explicit field in Cycle B. The DB column is NOT NULL with
+	// default ''.
+	src, err := db.InsertSource(ctx, s.Pool, key.AccountID, key.CreatedByUserID, "", req.Handle, kind)
 	if err != nil {
 		if errors.Is(err, db.ErrHandleTaken) {
 			writeErr(w, cliproto.NewSourceTaken(req.Handle))
@@ -328,7 +331,11 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 		return
 	}
 
-	pipe, err := db.InsertPipe(ctx, s.Pool, src.ID, key.CreatedByUserID, req.Name,
+	// Phase 1.5: this endpoint is the collared-pipe path (POST
+	// /api/v1/sources/{handle}/pipes), so source_id is always set. The
+	// pipe inherits the source's manifold (root '' until Cycle B adds
+	// explicit manifold support).
+	pipe, err := db.InsertPipe(ctx, s.Pool, key.AccountID, src.Manifold, &src.ID, key.CreatedByUserID, req.Name,
 		req.TTLSeconds, req.MaxMsgs, req.MaxBytes)
 	if err != nil {
 		if errors.Is(err, db.ErrPipeNameTaken) {
