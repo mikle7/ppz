@@ -19,7 +19,7 @@
     <ul class="tidy" id="invites">
       {{range .Invites}}
       <li data-invite="{{.ID}}">
-        <span>Pending invitation to <strong>{{.OrganisationName}}</strong></span>
+        <span>Pending invitation to <strong>{{.AccountName}}</strong></span>
         <span class="actions">
           <form method="post" action="/invites/{{.ID}}/accept" class="inline">
             <button type="submit">Accept</button>

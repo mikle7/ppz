@@ -17,7 +17,7 @@ func TestSource_HasCreatedByUserIDField(t *testing.T) {
 	uid := uuid.New()
 	s := Source{
 		ID:              uuid.New(),
-		OrganisationID:  uuid.New(),
+		AccountID:  uuid.New(),
 		Handle:          "chat",
 		Kind:            SourceKindMessage,
 		CreatedByUserID: uid,
@@ -35,10 +35,10 @@ func TestSource_HasCreatedByUserIDField(t *testing.T) {
 	}
 }
 
-// InsertSource accepts (ctx, pool, orgID, createdBy, handle, kind).
+// InsertSource accepts (ctx, pool, accountID, createdBy, handle, kind).
 // Compile-time pin.
 func TestInsertSource_SignatureAcceptsCreatedBy(t *testing.T) {
-	_ = func(pool *Pool, orgID, createdBy uuid.UUID) {
-		_, _ = InsertSource(nil, pool, orgID, createdBy, "chat", SourceKindMessage)
+	_ = func(pool *Pool, accountID, createdBy uuid.UUID) {
+		_, _ = InsertSource(nil, pool, accountID, createdBy, "chat", SourceKindMessage)
 	}
 }

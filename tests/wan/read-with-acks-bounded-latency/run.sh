@@ -36,12 +36,12 @@ ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha2)" >/dev/null
 # Receiver source (daemon-a, under WAN). Sender source (daemon-b,
 # no latency) — needs a current source of its own so --request-ack
 # preflight passes and the ack has a destination.
-ppz_a source create alpha-side >/dev/null
-ppz_b source create beta-side  >/dev/null
+ppz_a terminal create alpha-side >/dev/null
+ppz_b terminal create beta-side  >/dev/null
 
 # Publish N --request-ack messages from daemon-b to alpha-side.inbox.
 # Sequential because --request-ack only applies to single sends, not
-# the streaming broadcast batch path. Each call is sub-ms on daemon-b's
+# any streaming batch path. Each call is sub-ms on daemon-b's
 # NATS path (no latency); the wall-time is dominated by CLI process
 # spawn overhead (~50ms each → ~2.5s total for N=50).
 N=50

@@ -68,7 +68,7 @@ type Server struct {
 	// Phase 3.5 — per-org account pool. Lazily provisions an
 	// Operator-signed Account JWT per org on first use, opens a
 	// per-account in-process connection, registers the JWT with
-	// the live resolver. AccountPool.Get(orgID) is the path to
+	// the live resolver. AccountPool.Get(accountID) is the path to
 	// per-org NATS state. (No legacy single-account fallback —
 	// every NATS operation routes through the pool.)
 	AccountPool    *AccountPool
@@ -140,7 +140,7 @@ func Run(ctx context.Context, cfg Config) error {
 	// broadcast_subscriber.go). No global subscriber is needed.
 
 	// Pre-warm the embedded NATS account resolver from the postgres
-	// `organisations` table. The resolver lives in-memory on the
+	// `accounts` table. The resolver lives in-memory on the
 	// embedded NATS server, so a server restart drops every previously-
 	// registered account. Without prewarm, NATS clients holding
 	// already-issued user JWTs (e.g. ppz daemons that connected before
@@ -151,7 +151,7 @@ func Run(ctx context.Context, cfg Config) error {
 	//
 	// Best-effort: a partial failure (e.g. one malformed JWT in the
 	// table) shouldn't block server boot. Per-org failures log + skip.
-	if orgs, err := db.ListOrganisations(ctx, pool); err == nil {
+	if orgs, err := db.ListAccounts(ctx, pool); err == nil {
 		for _, o := range orgs {
 			if o.NATSAccountPub == "" || o.NATSAccountJWT == "" {
 				continue

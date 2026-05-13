@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# alice accepts the invite — becomes an organisation_members row.
+# alice accepts the invite — becomes an account_members row.
 . /tests/lib/common.sh
 
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -v ON_ERROR_STOP=1 -tAc "
@@ -23,8 +23,8 @@ PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc "
 " | sed 's/^/invite_status: /'
 
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc "
-  SELECT count(*) FROM organisation_members m
-    JOIN organisations o ON o.id = m.organisation_id
+  SELECT count(*) FROM account_members m
+    JOIN accounts o ON o.id = m.account_id
     JOIN users u ON u.id = m.user_id
    WHERE o.name = 'alpha' AND u.username = 'alice'
 " | sed 's/^/membership_rows: /'

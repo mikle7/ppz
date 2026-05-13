@@ -6,8 +6,8 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a broadcast -m "hello" >/dev/null
-ppz_a broadcast -m "world" >/dev/null
+ppz_a send chat.inbox "hello" >/dev/null
+ppz_a send chat.inbox "world" >/dev/null
 wait_for 20 "ppz_a ls | grep -q world" >/dev/null
 
-ppz_a read chat.broadcast --json | jq -c '{sender, subject, payload}'
+ppz_a read chat.inbox --json | jq -c '{sender, subject, payload}'

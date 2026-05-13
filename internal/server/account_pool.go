@@ -30,8 +30,8 @@ import (
 // OrgAccount is the runtime state ppz-server holds for one
 // provisioned org's NATS account. Closed when the org is deleted.
 type OrgAccount struct {
-	OrgID      uuid.UUID
-	OrgName    string
+	AccountID      uuid.UUID
+	AccountName    string
 	AccountPub string
 
 	// SigningKP is loaded from the per-org signing seed on first
@@ -76,7 +76,7 @@ func newAccountPool(s *Server) *AccountPool {
 	}
 }
 
-// Get returns the OrgAccount for orgID, provisioning it if needed.
+// Get returns the OrgAccount for accountID, provisioning it if needed.
 // Provisioning steps (one-time per org):
 //
 //  1. Generate fresh Account + signing keypairs
@@ -89,15 +89,15 @@ func newAccountPool(s *Server) *AccountPool {
 //
 // Concurrent calls for the same org coalesce on the mutex; one
 // goroutine provisions, the rest reuse the cached entry.
-func (p *AccountPool) Get(ctx context.Context, orgID uuid.UUID) (*OrgAccount, error) {
+func (p *AccountPool) Get(ctx context.Context, accountID uuid.UUID) (*OrgAccount, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if oa, ok := p.byOrg[orgID]; ok {
+	if oa, ok := p.byOrg[accountID]; ok {
 		return oa, nil
 	}
 
-	org, err := db.GetOrganisation(ctx, p.server.Pool, orgID)
+	org, err := db.GetAccount(ctx, p.server.Pool, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("org lookup: %w", err)
 	}
@@ -143,25 +143,25 @@ func (p *AccountPool) Get(ctx context.Context, orgID uuid.UUID) (*OrgAccount, er
 		log.Printf("account_pool: ensure-streams for %s: %v", org.Name, err)
 	}
 
-	p.byOrg[orgID] = oa
+	p.byOrg[accountID] = oa
 	return oa, nil
 }
 
-// Drop evicts the cached OrgAccount for orgID, closing the underlying
+// Drop evicts the cached OrgAccount for accountID, closing the underlying
 // NATS connection. Used by the dev-gated /api/v1/admin/simulate-stale-
 // operator endpoint and (potentially) by future operations like
 // org deletion.
-func (p *AccountPool) Drop(orgID uuid.UUID) {
+func (p *AccountPool) Drop(accountID uuid.UUID) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if oa, ok := p.byOrg[orgID]; ok {
+	if oa, ok := p.byOrg[accountID]; ok {
 		if oa.cleanup != nil {
 			oa.cleanup()
 		}
 		if oa.NC != nil {
 			oa.NC.Close()
 		}
-		delete(p.byOrg, orgID)
+		delete(p.byOrg, accountID)
 	}
 }
 
@@ -190,7 +190,7 @@ func isAuthViolation(err error) bool {
 // reprovisioning self-healing for sources/pipes — the system rebuilds
 // the JetStream-side cache from postgres on demand.
 func (p *AccountPool) ensureStreamsForOrg(ctx context.Context, oa *OrgAccount) error {
-	sources, err := db.ListSourcesForOrg(ctx, p.server.Pool, oa.OrgID)
+	sources, err := db.ListSourcesForOrg(ctx, p.server.Pool, oa.AccountID)
 	if err != nil {
 		return fmt.Errorf("list sources: %w", err)
 	}
@@ -198,7 +198,7 @@ func (p *AccountPool) ensureStreamsForOrg(ctx context.Context, oa *OrgAccount) e
 		// Auto-provisioned pipes (kind-derived: broadcast / stdin /
 		// stdout / stdctrl).
 		for _, pipe := range src.Pipes() {
-			if err := ensurePipeStream(ctx, oa.JS, oa.OrgID, src.Handle, pipe); err != nil {
+			if err := ensurePipeStream(ctx, oa.JS, oa.AccountID, src.Handle, pipe); err != nil {
 				return fmt.Errorf("ensure auto stream %s.%s: %w", src.Handle, pipe, err)
 			}
 		}
@@ -210,7 +210,7 @@ func (p *AccountPool) ensureStreamsForOrg(ctx context.Context, oa *OrgAccount) e
 		}
 		for _, up := range userPipes {
 			age, msgs, bytes := pipeRetention(up)
-			if err := ensurePipeStreamWithRetention(ctx, oa.JS, oa.OrgID, src.Handle, up.Name, age, msgs, bytes); err != nil {
+			if err := ensurePipeStreamWithRetention(ctx, oa.JS, oa.AccountID, src.Handle, up.Name, age, msgs, bytes); err != nil {
 				return fmt.Errorf("ensure user stream %s.%s: %w", src.Handle, up.Name, err)
 			}
 		}
@@ -239,7 +239,7 @@ func pipeRetention(pipe db.Pipe) (time.Duration, int, int64) {
 
 // provisionAccount mints + registers + persists a brand-new account
 // for org. Mutates `org` with the freshly-set fields.
-func (p *AccountPool) provisionAccount(ctx context.Context, org *db.Organisation) error {
+func (p *AccountPool) provisionAccount(ctx context.Context, org *db.Account) error {
 	if p.server.OperatorKP == nil {
 		return fmt.Errorf("server operator key is not loaded")
 	}
@@ -282,7 +282,7 @@ func (p *AccountPool) provisionAccount(ctx context.Context, org *db.Organisation
 // opens a connection authenticated as that user. The connection
 // has broad pub/sub perms within the account (the account boundary
 // is what enforces tenant isolation, not within-account perms).
-func (p *AccountPool) openAccount(org db.Organisation) (*OrgAccount, error) {
+func (p *AccountPool) openAccount(org db.Account) (*OrgAccount, error) {
 	signKP, err := nkeys.FromSeed([]byte(org.NATSAccountSigningSeed))
 	if err != nil {
 		return nil, fmt.Errorf("parse signing seed: %w", err)
@@ -321,8 +321,8 @@ func (p *AccountPool) openAccount(org db.Organisation) (*OrgAccount, error) {
 	}
 
 	oa := &OrgAccount{
-		OrgID:      org.ID,
-		OrgName:    org.Name,
+		AccountID:      org.ID,
+		AccountName:    org.Name,
 		AccountPub: org.NATSAccountPub,
 		SigningKP:  signKP,
 		NC:         nc,
@@ -330,14 +330,6 @@ func (p *AccountPool) openAccount(org db.Organisation) (*OrgAccount, error) {
 		cleanup:    func() { nc.Close() },
 	}
 
-	// Per-account broadcast subscriber — mirrors broadcasts on this
-	// account's *.*.broadcast subjects into the DB so the GUI can
-	// render last_broadcast_* columns. Each account has its own
-	// subject namespace (Phase 3.5), so each needs its own sub.
-	if err := p.server.subscribeBroadcasts(oa); err != nil {
-		nc.Close()
-		return nil, fmt.Errorf("broadcast subscriber for %s: %w", org.Name, err)
-	}
 	return oa, nil
 }
 
@@ -357,8 +349,8 @@ func (p *AccountPool) Close() {
 // per-org JetStream client without dragging the full *OrgAccount
 // through. Calls AccountPool.Get under the hood, so the org is
 // provisioned on first use.
-func (s *Server) JSFor(ctx context.Context, orgID uuid.UUID) (jetstream.JetStream, error) {
-	oa, err := s.AccountPool.Get(ctx, orgID)
+func (s *Server) JSFor(ctx context.Context, accountID uuid.UUID) (jetstream.JetStream, error) {
+	oa, err := s.AccountPool.Get(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -367,8 +359,8 @@ func (s *Server) JSFor(ctx context.Context, orgID uuid.UUID) (jetstream.JetStrea
 
 // NCFor returns the per-org NATS connection — used by handlers that
 // need raw pub/sub (e.g. terminal WebSocket subscribers).
-func (s *Server) NCFor(ctx context.Context, orgID uuid.UUID) (*nats.Conn, error) {
-	oa, err := s.AccountPool.Get(ctx, orgID)
+func (s *Server) NCFor(ctx context.Context, accountID uuid.UUID) (*nats.Conn, error) {
+	oa, err := s.AccountPool.Get(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -378,14 +370,14 @@ func (s *Server) NCFor(ctx context.Context, orgID uuid.UUID) (*nats.Conn, error)
 // Forget removes an org from the pool (e.g. on org deletion). The
 // caller is responsible for any pre-close cleanup (draining streams
 // etc.). This just closes the connection and clears the cache.
-func (p *AccountPool) Forget(orgID uuid.UUID) {
+func (p *AccountPool) Forget(accountID uuid.UUID) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if oa, ok := p.byOrg[orgID]; ok {
+	if oa, ok := p.byOrg[accountID]; ok {
 		if oa.cleanup != nil {
 			oa.cleanup()
 		}
-		delete(p.byOrg, orgID)
+		delete(p.byOrg, accountID)
 	}
 }
 

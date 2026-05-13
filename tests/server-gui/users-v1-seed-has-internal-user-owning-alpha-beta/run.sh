@@ -17,7 +17,7 @@ echo "--- alpha and beta both have internal-mode owners ---"
 # which is what the contract actually pins.
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
   "SELECT o.name || ' owned by ' || u.username || ' (' || u.mode || ')'
-     FROM organisations o
+     FROM accounts o
      JOIN users u ON o.owner_user_id = u.id
     WHERE o.name IN ('alpha','beta')
     ORDER BY o.name"

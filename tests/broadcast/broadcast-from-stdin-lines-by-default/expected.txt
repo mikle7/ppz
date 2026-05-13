@@ -1,7 +1,0 @@
---- ls reports 3 buffered messages on foo.broadcast ---
-foo.broadcast 3 3 RELATIVE third foo
---- reread emits one payload per line, in order ---
-first
-second
-third
-exit=0

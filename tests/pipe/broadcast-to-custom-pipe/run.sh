@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A custom pipe round-trips messages: send to <h>.<custom-pipe>, read
-# them back. Same wire as broadcast/stdout — the only difference is the
+# them back. Same wire as inbox/stdout — the only difference is the
 # pipe name carved out by the user.
 . /tests/lib/common.sh
 

@@ -23,7 +23,7 @@ const (
 
 type Source struct {
 	ID                   uuid.UUID
-	OrganisationID       uuid.UUID
+	AccountID       uuid.UUID
 	CreatedByUserID      uuid.UUID // user that created the source (NOT NULL)
 	Handle               string
 	Kind                 SourceKind
@@ -34,7 +34,6 @@ type Source struct {
 
 // Pipes returns the pipe set for a source based on its kind.
 // All sources have:
-//   - broadcast: user-level messages (same as message-kind sources)
 //   - inbox: direct messages intended for this source/agent
 //
 // pty sources also have:
@@ -42,12 +41,18 @@ type Source struct {
 //   - stdout: byte-faithful capture of the PTY master's output (ANSI
 //     escapes intact); both `ppz read` and `ppz terminal view` consume
 //     this pipe.
+//   - stdctrl: control plane (resize events, etc.).
+//
+// `broadcast` was an auto-provisioned pipe pre-launch; it was removed
+// in Phase 1 (locked decision #16) — teams now use explicit room pipes
+// (`ppz pipe create team1.room` with --writers=anyone) for shared
+// channels.
 func (s Source) Pipes() []string {
 	switch s.Kind {
 	case SourceKindPTY:
-		return []string{"broadcast", "stdin", "stdout", "stdctrl", "inbox"}
+		return []string{"stdin", "stdout", "stdctrl", "inbox"}
 	default:
-		return []string{"broadcast", "inbox"}
+		return []string{"inbox"}
 	}
 }
 
@@ -68,22 +73,22 @@ var ErrHandleTaken = errors.New("handle taken")
 // InsertSource creates a row attributed to `createdBy` (NOT NULL on the
 // table). Server callers stamp this from the API-key's CreatedByUserID
 // (API path) or caller.UserID (OAuth path).
-func InsertSource(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, handle string, kind SourceKind) (Source, error) {
+func InsertSource(ctx context.Context, p *Pool, accountID, createdBy uuid.UUID, handle string, kind SourceKind) (Source, error) {
 	if kind == "" {
 		kind = SourceKindMessage
 	}
 	src := Source{
 		ID:              uuid.New(),
-		OrganisationID:  orgID,
+		AccountID:  accountID,
 		CreatedByUserID: createdBy,
 		Handle:          handle,
 		Kind:            kind,
 		CreatedAt:       time.Now().UTC(),
 	}
 	_, err := p.Exec(ctx,
-		`INSERT INTO sources (id, organisation_id, created_by_user_id, handle, kind, created_at)
+		`INSERT INTO sources (id, account_id, created_by_user_id, handle, kind, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		src.ID, src.OrganisationID, src.CreatedByUserID, src.Handle, string(src.Kind), src.CreatedAt)
+		src.ID, src.AccountID, src.CreatedByUserID, src.Handle, string(src.Kind), src.CreatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -94,13 +99,13 @@ func InsertSource(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, hand
 	return src, nil
 }
 
-func GetSourceByHandle(ctx context.Context, p *Pool, orgID uuid.UUID, handle string) (Source, error) {
+func GetSourceByHandle(ctx context.Context, p *Pool, accountID uuid.UUID, handle string) (Source, error) {
 	var src Source
 	var kind string
 	err := p.QueryRow(ctx,
-		`SELECT id, organisation_id, created_by_user_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
-		   FROM sources WHERE organisation_id = $1 AND handle = $2`, orgID, handle).
-		Scan(&src.ID, &src.OrganisationID, &src.CreatedByUserID, &src.Handle, &kind, &src.CreatedAt,
+		`SELECT id, account_id, created_by_user_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
+		   FROM sources WHERE account_id = $1 AND handle = $2`, accountID, handle).
+		Scan(&src.ID, &src.AccountID, &src.CreatedByUserID, &src.Handle, &kind, &src.CreatedAt,
 			&src.LastBroadcastAt, &src.LastBroadcastPayload)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Source{}, ErrNotFound
@@ -109,10 +114,10 @@ func GetSourceByHandle(ctx context.Context, p *Pool, orgID uuid.UUID, handle str
 	return src, err
 }
 
-func ListSourcesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Source, error) {
+func ListSourcesForOrg(ctx context.Context, p *Pool, accountID uuid.UUID) ([]Source, error) {
 	rows, err := p.Query(ctx,
-		`SELECT id, organisation_id, created_by_user_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
-		   FROM sources WHERE organisation_id = $1 ORDER BY handle ASC`, orgID)
+		`SELECT id, account_id, created_by_user_id, handle, kind, created_at, last_broadcast_at, last_broadcast_payload
+		   FROM sources WHERE account_id = $1 ORDER BY handle ASC`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +126,7 @@ func ListSourcesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Source,
 	for rows.Next() {
 		var src Source
 		var kind string
-		if err := rows.Scan(&src.ID, &src.OrganisationID, &src.CreatedByUserID, &src.Handle, &kind, &src.CreatedAt,
+		if err := rows.Scan(&src.ID, &src.AccountID, &src.CreatedByUserID, &src.Handle, &kind, &src.CreatedAt,
 			&src.LastBroadcastAt, &src.LastBroadcastPayload); err != nil {
 			return nil, err
 		}
@@ -134,9 +139,9 @@ func ListSourcesForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]Source,
 // DeleteSource removes a source row. The pipes FK is ON DELETE CASCADE so
 // pipe rows are removed automatically. JetStream stream cleanup is the
 // caller's responsibility. Returns ErrNotFound when (org, handle) doesn't exist.
-func DeleteSource(ctx context.Context, p *Pool, orgID uuid.UUID, handle string) error {
+func DeleteSource(ctx context.Context, p *Pool, accountID uuid.UUID, handle string) error {
 	tag, err := p.Exec(ctx,
-		`DELETE FROM sources WHERE organisation_id = $1 AND handle = $2`, orgID, handle)
+		`DELETE FROM sources WHERE account_id = $1 AND handle = $2`, accountID, handle)
 	if err != nil {
 		return err
 	}
@@ -149,10 +154,10 @@ func DeleteSource(ctx context.Context, p *Pool, orgID uuid.UUID, handle string) 
 // UpdateLastBroadcast records the most recent broadcast for this source.
 // Called by the server-side subscriber on every message. Idempotent on
 // identical inputs.
-func UpdateLastBroadcast(ctx context.Context, p *Pool, orgID uuid.UUID, handle string, at time.Time, payload string) error {
+func UpdateLastBroadcast(ctx context.Context, p *Pool, accountID uuid.UUID, handle string, at time.Time, payload string) error {
 	_, err := p.Exec(ctx,
 		`UPDATE sources SET last_broadcast_at = $1, last_broadcast_payload = $2
-		   WHERE organisation_id = $3 AND handle = $4`,
-		at, payload, orgID, handle)
+		   WHERE account_id = $3 AND handle = $4`,
+		at, payload, accountID, handle)
 	return err
 }

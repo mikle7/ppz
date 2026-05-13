@@ -1,3 +1,5 @@
-{"handle":"chat","pipe":"broadcast","total":1,"unread":1,"has_last_at":true,"payload_len":78,"truncated":false}
-{"handle":"chat","pipe":"inbox","total":0,"unread":0,"has_last_at":false,"payload_len":0,"truncated":false}
+{"handle":"chat","pipe":"inbox","total":1,"unread":1,"has_last_at":true,"payload_len":78,"truncated":false}
+{"handle":"chat","pipe":"stdctrl","total":0,"unread":0,"has_last_at":false,"payload_len":0,"truncated":false}
+{"handle":"chat","pipe":"stdin","total":0,"unread":0,"has_last_at":false,"payload_len":0,"truncated":false}
+{"handle":"chat","pipe":"stdout","total":0,"unread":0,"has_last_at":false,"payload_len":0,"truncated":false}
 exit=0

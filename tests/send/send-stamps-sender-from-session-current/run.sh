@@ -13,8 +13,8 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 # Create both sources. handleCreate sets current to whichever was made
 # most recently, so order matters: caller created last → current=caller.
 # Result: caller is the publisher's identity; mailbox is the destination.
-ppz_a source create mailbox >/dev/null
-ppz_a source create caller >/dev/null
+ppz_a terminal create mailbox >/dev/null
+ppz_a terminal create caller >/dev/null
 # Sanity-check the daemon's view of current matches our expectation.
 ppz_a status | grep "^current source:"
 

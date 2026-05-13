@@ -17,7 +17,7 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a broadcast -m "before drop" >/dev/null
+ppz_a send chat.inbox "before drop" >/dev/null
 
 # Brief NATS outage: stop ppz-server (which embeds NATS) for a few
 # seconds, then restart. The default Go NATS client retries every 2s

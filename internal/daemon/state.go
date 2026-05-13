@@ -13,15 +13,15 @@ import (
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
-// Credentials are persisted at $PPZ_HOME/credentials (mode 0600). OrgID +
-// OrgName are stored alongside URL+APIKey so a SIGHUP / file-poller reload
+// Credentials are persisted at $PPZ_HOME/credentials (mode 0600). AccountID +
+// AccountName are stored alongside URL+APIKey so a SIGHUP / file-poller reload
 // doesn't drop the resolved org info (the alternative would be re-calling
 // /auth/exchange after every reload).
 type Credentials struct {
 	URL     string `json:"url"`
 	APIKey  string `json:"api_key"`
-	OrgID   string `json:"org_id,omitempty"`
-	OrgName string `json:"org_name,omitempty"`
+	AccountID   string `json:"account_id,omitempty"`
+	AccountName string `json:"account_name,omitempty"`
 
 	// Auth V2 Phase 3 — short-lived NATS user credentials.
 	// Re-fetched periodically by the daemon's refresh goroutine.
@@ -47,8 +47,8 @@ type State struct {
 	mu          sync.RWMutex
 	home        string
 	creds       *Credentials
-	orgID       string // resolved at Login (returned by /auth/exchange)
-	orgName     string // resolved at Login (human label for status)
+	accountID       string // resolved at Login (returned by /auth/exchange)
+	accountName     string // resolved at Login (human label for status)
 	keyPrefix   string // 8 chars; safe to display
 	current     map[string]string
 	knownPipes  map[string]struct{} // server-side handles cached after List/Create
@@ -85,16 +85,16 @@ func (s *State) Credentials() (*Credentials, bool) {
 	return &c, true
 }
 
-func (s *State) OrgID() string {
+func (s *State) AccountID() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.orgID
+	return s.accountID
 }
 
-func (s *State) OrgName() string {
+func (s *State) AccountName() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.orgName
+	return s.accountName
 }
 
 // LoginCheck returns the cached server-validation result. "" means "not
@@ -127,14 +127,14 @@ func (s *State) Current(session string) string {
 	return s.current[session]
 }
 
-func (s *State) SetLogin(creds Credentials, orgID, orgName, keyPrefix string) error {
+func (s *State) SetLogin(creds Credentials, accountID, accountName, keyPrefix string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	creds.OrgID = orgID
-	creds.OrgName = orgName
+	creds.AccountID = accountID
+	creds.AccountName = accountName
 	s.creds = &creds
-	s.orgID = orgID
-	s.orgName = orgName
+	s.accountID = accountID
+	s.accountName = accountName
 	s.keyPrefix = keyPrefix
 	s.knownPipes = map[string]struct{}{}
 	s.pipesLoaded = false
@@ -223,8 +223,8 @@ func (s *State) LoadFromDisk() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.creds = nil
-	s.orgID = ""
-	s.orgName = ""
+	s.accountID = ""
+	s.accountName = ""
 	s.keyPrefix = ""
 	s.current = map[string]string{}
 	s.knownPipes = map[string]struct{}{}
@@ -238,8 +238,8 @@ func (s *State) LoadFromDisk() error {
 		if err := json.Unmarshal(data, &c); err == nil {
 			s.creds = &c
 			s.keyPrefix = keyPrefix(c.APIKey)
-			s.orgID = c.OrgID
-			s.orgName = c.OrgName
+			s.accountID = c.AccountID
+			s.accountName = c.AccountName
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -266,10 +266,10 @@ func (s *State) LoadFromDisk() error {
 	return nil
 }
 
-func (s *State) SetOrgID(id string) {
+func (s *State) SetAccountID(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.orgID = id
+	s.accountID = id
 }
 
 func (s *State) persistCurrentLocked() error {

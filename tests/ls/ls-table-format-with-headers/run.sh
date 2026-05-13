@@ -9,12 +9,12 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a source create chat >/dev/null
-ppz_a broadcast -m "hello world" >/dev/null
-ppz_a source create verbose >/dev/null
+ppz_a terminal create chat >/dev/null
+ppz_a send chat.inbox "hello world" >/dev/null
+ppz_a terminal create verbose >/dev/null
 # A payload that exceeds the 60-byte preview cap so we can assert the … marker.
 LONG="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-ppz_a broadcast -m "$LONG" >/dev/null
+ppz_a send verbose.inbox "$LONG" >/dev/null
 wait_for 20 "ppz_a ls | grep -q aaaaaaaa" >/dev/null
 
 # Normalise variable-width whitespace to a single space, and the relative

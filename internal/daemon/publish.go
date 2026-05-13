@@ -36,12 +36,12 @@ func buildBroadcastEnvelope(req cliproto.BroadcastRequest, sender string, now ti
 // No validation here — the rule is "validate at the IPC trust boundary
 // (handleBroadcast), trust the daemon-internal callers". Returns nil on
 // successful publish + flush.
-func (d *Daemon) publishEnvelope(orgID uuid.UUID, dest, pipe string, env envelope.Message) error {
+func (d *Daemon) publishEnvelope(accountID uuid.UUID, dest, pipe string, env envelope.Message) error {
 	data, err := env.Marshal()
 	if err != nil {
 		return err
 	}
-	subject := natsubj.Subject(orgID, dest, pipe)
+	subject := natsubj.Subject(accountID, dest, pipe)
 	if err := d.NC.Publish(subject, data); err != nil {
 		return err
 	}

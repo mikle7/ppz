@@ -1,4 +1,3 @@
-{"pipe":"broadcast","creator":"foo"}
 {"pipe":"inbox","creator":"foo"}
 {"pipe":"notes","creator":"bar"}
 exit=0

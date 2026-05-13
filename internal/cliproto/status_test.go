@@ -18,7 +18,7 @@ func TestPrintStatus_IncludesLastTokenRefreshRelativeTime(t *testing.T) {
 		DaemonPID:          12953,
 		LoggedIn:           true,
 		URL:                "https://pipescloud.io",
-		OrgName:            "jamesmiles",
+		AccountName:            "jamesmiles",
 		LastTokenRefreshAt: &lastRefresh,
 		Current:            "foo",
 	}, "", "", false)
@@ -27,7 +27,7 @@ func TestPrintStatus_IncludesLastTokenRefreshRelativeTime(t *testing.T) {
 		"daemon: logged in (pid=12953)\n" +
 		"last token refresh: 5 minutes ago\n" +
 		"server: https://pipescloud.io\n" +
-		"org: jamesmiles\n" +
+		"account: jamesmiles\n" +
 		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
@@ -41,7 +41,7 @@ func TestPrintStatus_IncludesMissingLastTokenRefreshPlaceholder(t *testing.T) {
 		DaemonPID: 12953,
 		LoggedIn:  true,
 		URL:       "https://pipescloud.io",
-		OrgName:   "jamesmiles",
+		AccountName:   "jamesmiles",
 		Current:   "foo",
 	}, "", "", false)
 
@@ -49,7 +49,7 @@ func TestPrintStatus_IncludesMissingLastTokenRefreshPlaceholder(t *testing.T) {
 		"daemon: logged in (pid=12953)\n" +
 		"last token refresh: -\n" +
 		"server: https://pipescloud.io\n" +
-		"org: jamesmiles\n" +
+		"account: jamesmiles\n" +
 		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
@@ -87,7 +87,7 @@ func TestPrintStatus_ColorsLastTokenRefreshAgeByThreshold(t *testing.T) {
 				DaemonPID:          12953,
 				LoggedIn:           true,
 				URL:                "https://pipescloud.io",
-				OrgName:            "jamesmiles",
+				AccountName:            "jamesmiles",
 				LastTokenRefreshAt: &tt.lastRefresh,
 				Current:            "foo",
 			}, "", "", true)
@@ -99,19 +99,19 @@ func TestPrintStatus_ColorsLastTokenRefreshAgeByThreshold(t *testing.T) {
 	}
 }
 
-func TestPrintStatus_ColorsServerAndOrgValuesWhenSet(t *testing.T) {
+func TestPrintStatus_ColorsServerAndAccountValuesWhenSet(t *testing.T) {
 	var b bytes.Buffer
 	PrintStatusWithEnv(&b, StatusReply{
 		DaemonPID: 12953,
 		LoggedIn:  true,
 		URL:       "https://pipescloud.io",
-		OrgName:   "jamesmiles",
+		AccountName:   "jamesmiles",
 		Current:   "foo",
 	}, "", "", true)
 
 	mustContain := []string{
 		"server: \x1b[32mhttps://pipescloud.io\x1b[0m\n",
-		"org: \x1b[32mjamesmiles\x1b[0m\n",
+		"account: \x1b[32mjamesmiles\x1b[0m\n",
 	}
 	for _, want := range mustContain {
 		if got := b.String(); !bytes.Contains([]byte(got), []byte(want)) {
@@ -127,7 +127,7 @@ func TestPrintStatus_IncludesDaemonVersionMatch(t *testing.T) {
 		DaemonVersion: "v0.18.0",
 		LoggedIn:      true,
 		URL:           "https://pipescloud.io",
-		OrgName:       "jamesmiles",
+		AccountName:       "jamesmiles",
 		Current:       "foo",
 	}, "", "", false, "v0.18.0")
 
@@ -135,7 +135,7 @@ func TestPrintStatus_IncludesDaemonVersionMatch(t *testing.T) {
 		"daemon: logged in (pid=12953), v0.18.0 (latest)\n" +
 		"last token refresh: -\n" +
 		"server: https://pipescloud.io\n" +
-		"org: jamesmiles\n" +
+		"account: jamesmiles\n" +
 		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
@@ -172,7 +172,7 @@ func TestPrintStatus_ColorsDaemonVersionByCLIMatch(t *testing.T) {
 				DaemonVersion: tt.daemonVersion,
 				LoggedIn:      true,
 				URL:           "https://pipescloud.io",
-				OrgName:       "jamesmiles",
+				AccountName:       "jamesmiles",
 				Current:       "foo",
 			}, "", "", true, tt.cliVersion)
 
@@ -189,7 +189,7 @@ func TestPrintStatus_ClarifiesUnknownDaemonVersion(t *testing.T) {
 		DaemonPID: 12953,
 		LoggedIn:  true,
 		URL:       "https://pipescloud.io",
-		OrgName:   "jamesmiles",
+		AccountName:   "jamesmiles",
 		Current:   "foo",
 	}, "", "", false, "v0.18.0")
 

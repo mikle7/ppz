@@ -1,4 +1,6 @@
 --- watch agent-* — only matching rows ---
-agent-one.broadcast 1 1 RELATIVE agent message foo
-agent-one.inbox 0 0 - - foo
+agent-one.inbox 1 1 RELATIVE agent message foo
+agent-one.stdctrl 0 0 - - foo
+agent-one.stdin 0 0 - - foo
+agent-one.stdout 0 0 - - foo
 exit=0

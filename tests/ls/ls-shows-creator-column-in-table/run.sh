@@ -6,8 +6,8 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a source create chat >/dev/null
-ppz_a broadcast -m "hello world" >/dev/null
+ppz_a terminal create chat >/dev/null
+ppz_a send chat.inbox "hello world" >/dev/null
 wait_for 20 "ppz_a ls | grep -q hello" >/dev/null
 
 # Normalise variable-width whitespace + relative time. Header row stays

@@ -14,9 +14,10 @@ import (
 // Verb hierarchy (Phase B):
 //
 //	ppz daemon {start|stop|login|logout}
-//	ppz source {create|destroy|switch}
+//	(source verbs removed in Phase 1 — see ppz terminal/agent create
+//	for replacements; current-handle state managed via ppz set/unset)
 //	ppz terminal {wrap|watch|peek}     (terminal verbs are reshaped in Phase D)
-//	ppz {status|ls|broadcast|read|send}
+//	ppz {status|ls|read|send}
 //
 // Old top-level verbs (`ppz create`, `ppz switch`, `ppz kill`, `ppz login`)
 // are removed without aliases — fresh MVP, no users to migrate.
@@ -45,12 +46,16 @@ func Run(args []string) error {
 		return cmdStatus(rest)
 	case "diag":
 		return cmdDiag(rest)
+	case "set":
+		return cmdSet(rest)
+	case "unset":
+		return cmdUnset(rest)
+	case "get":
+		return cmdGet(rest)
 	case "version":
 		return cmdVersion(rest)
 	case "upgrade":
 		return cmdUpgrade(rest)
-	case "broadcast":
-		return cmdBroadcast(rest)
 	case "ls":
 		return cmdLs(rest)
 	case "read":
@@ -61,8 +66,6 @@ func Run(args []string) error {
 		return cmdSend(rest)
 	case "command":
 		return cmdCommand(rest)
-	case "org", "orgs":
-		return cmdOrg(rest)
 	case "completion":
 		return cmdCompletion(rest)
 	case "__complete":
@@ -82,14 +85,14 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, `ppz — pipes for agents
 
 Messaging (the verbs you use most):
-  ppz status                       daemon state, current source, last token refresh
-  ppz ls [--watch [PATTERN...]]    list sources × pipes; --watch blocks until
+  ppz status                       daemon state, current handle, last token refresh
+  ppz ls [--watch [PATTERN...]]    list handles × pipes; --watch blocks until
                                    unread arrives on a matching handle
                                    (patterns use '*' quoted or % unquoted)
   ppz read TGT [--tail --json --tty --raw --bare]
                                    read NEW messages from <handle>.<pipe>;
                                    'ppz read inbox' reads <current>.inbox.
-                                   Default for inbox / broadcast pipes is the
+                                   Default for inbox pipes is the
                                    v0.23 tabular format —
                                      HH:MM:SS  <sender|->  <body>
                                    where <body> is "[subject] payload" for
@@ -113,8 +116,6 @@ Messaging (the verbs you use most):
                                                       inbox when their cursor
                                                       advances (best-effort,
                                                       non-blocking — see Acks).
-  ppz broadcast [-m TEXT]          publish to <current>.broadcast
-                                   (stdin form streams one message per line)
   ppz reread TGT [-l N --skip N --since DUR --json --tty --raw --bare]
                                    forensic / replay: every retained message;
                                    ignores and never advances the cursor.
@@ -140,28 +141,48 @@ Setup (once per workstation):
   ppz daemon logout                clear the stored credential
 
   Agents / subprocess-per-call: each shell session has its own current
-  source (keyed off the calling tty). Subprocesses with no shared tty
-  get a fresh session id per invocation, so 'ppz source create' in one
-  call won't be visible to the next — and 'ppz send --request-ack' will
-  reject with E_NO_CURRENT_SOURCE. Pin a stable id by exporting
+  handle (keyed off the calling tty). Subprocesses with no shared tty
+  get a fresh session id per invocation, so 'ppz terminal create' in
+  one call won't be visible to the next — and 'ppz send --request-ack'
+  will reject with E_NO_CURRENT_SOURCE. Pin a stable id by exporting
   PPZ_SESSION=<id> at the agent's lifecycle level so all subsequent
   ppz calls share session state.
 
-Sources (your addressable identities):
-  ppz source create HANDLE         create + set as current
-                                   (errors if HANDLE already exists)
-  ppz source switch HANDLE         set an existing HANDLE as current
-  ppz source clear                 clear the current source (source stays)
-  ppz source destroy PATTERN       glob-destroy sources or pipes
+Handles (your addressable identities):
+  ppz source create HANDLE         claim a bare message-kind handle
+                                   (auto-pipe: inbox). Use when you want a
+                                   named actor identity without committing
+                                   to a terminal or agent role.
+  ppz terminal create HANDLE       create a pty-backed handle (auto-pipes:
+                                   inbox/stdin/stdout/stdctrl) and set as
+                                   current.
+  ppz agent create HANDLE          create an agent handle and run an AI
+                                   harness in it.
+  ppz source destroy PATTERN       glob-destroy sources or pipes.
                                    bare pattern → matching sources
                                    handle.pipe pattern → matching pipes
                                    glob wildcards: * ? [abc] (path.Match rules)
                                    examples: destroy '*'  destroy 'agent-*'
                                              destroy '*.stdout'  destroy apple
 
-Pipes (custom sub-buckets on a source):
+Pipes:
   ppz pipe create [HANDLE.]NAME [--ttl=DUR --max-msgs=N --max-bytes=B]
-  ppz pipe destroy [HANDLE.]NAME
+  ppz pipe destroy [HANDLE.]NAME [--recursive]
+
+Daemon state (current handle, future settings):
+  ppz set handle HANDLE            switch the daemon's current handle for
+                                   this session. The current handle is
+                                   what gets stamped as 'sender' on
+                                   outgoing envelopes and used as the
+                                   implicit target for bare 'ppz read
+                                   inbox' / 'ppz send TARGET' invocations.
+  ppz unset handle                 clear the daemon's current handle for
+                                   this session. The source row stays —
+                                   only the per-session pointer is cleared.
+  ppz get handle                   print the current handle to stdout.
+                                   Exits 1 with empty output when no
+                                   current is set, so $(ppz get handle)
+                                   can detect "not set" via rc.
 
 Terminal:
   ppz terminal share H [-- CMD ...] run CMD (or $SHELL) in a pty bound to H —
@@ -195,8 +216,6 @@ Other:
                                    events. Works without login — useful
                                    when 'ppz status' shows "not running"
                                    or "authentication error".
-  ppz org {list|switch|create|invite}
-                                   multi-org operations
   ppz completion {bash|zsh}        tab-completion script
                                    add 'eval "$(ppz completion bash)"' to
                                    your shell rc`)

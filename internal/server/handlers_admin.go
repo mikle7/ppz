@@ -41,7 +41,7 @@ func (s *Server) handleAdminWipe(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 
-	orgs, err := db.ListOrganisations(ctx, s.Pool)
+	orgs, err := db.ListAccounts(ctx, s.Pool)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -104,7 +104,7 @@ func (s *Server) handleSimulateStaleOperator(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "api key lookup: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	orgID := key.OrganisationID
+	accountID := key.AccountID
 
 	// Fake operator — never persisted; only used to sign the about-to-
 	// be-orphaned account JWT.
@@ -127,19 +127,19 @@ func (s *Server) handleSimulateStaleOperator(w http.ResponseWriter, r *http.Requ
 	newSignSeed, _ := newSignKP.Seed()
 
 	fakeAccJWT, err := natsauth.MintAccountJWT(fakeOpKP,
-		"ppz-stale-"+orgID.String(), newAccKP, newSignKP)
+		"ppz-stale-"+accountID.String(), newAccKP, newSignKP)
 	if err != nil {
 		http.Error(w, "mint fake account jwt: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err := db.SetNATSAccount(ctx, s.Pool, orgID,
+	if err := db.SetNATSAccount(ctx, s.Pool, accountID,
 		newAccPub, fakeAccJWT, string(newSignSeed)); err != nil {
 		http.Error(w, "save org account: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	s.AccountPool.Drop(orgID)
+	s.AccountPool.Drop(accountID)
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))

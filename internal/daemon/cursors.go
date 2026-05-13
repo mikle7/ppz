@@ -9,7 +9,7 @@ import (
 )
 
 // Cursors persist per-session "highest-read JetStream sequence number"
-// per channel, keyed by `<orgID>.<handle>.<channel>`. Stored as JSON at
+// per channel, keyed by `<accountID>.<handle>.<channel>`. Stored as JSON at
 //
 //	<PPZ_HOME>/cursors/<session>.json
 //
@@ -100,6 +100,6 @@ func (c *cursors) saveLocked(s string, m map[string]uint64) error {
 }
 
 // CursorKey builds the per-channel key from the canonical subject parts.
-func CursorKey(orgID, handle, channel string) string {
-	return orgID + "." + handle + "." + channel
+func CursorKey(accountID, handle, channel string) string {
+	return accountID + "." + handle + "." + channel
 }

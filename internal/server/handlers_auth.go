@@ -137,9 +137,9 @@ func (s *Server) handleAuthGitHubCallback(w http.ResponseWriter, r *http.Request
 	//    with this user as the owner. Idempotent: if an org with that
 	//    name already exists, skip.
 	if isNew {
-		_, err := db.GetOrganisationByName(r.Context(), s.Pool, user.Username)
+		_, err := db.GetAccountByName(r.Context(), s.Pool, user.Username)
 		if err != nil {
-			if _, err := db.InsertOrganisation(r.Context(), s.Pool, user.Username, user.ID); err != nil {
+			if _, err := db.InsertAccount(r.Context(), s.Pool, user.Username, user.ID); err != nil {
 				http.Error(w, "create org: "+err.Error(), 500)
 				return
 			}

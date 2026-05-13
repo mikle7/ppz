@@ -28,11 +28,15 @@ func (s *Server) Routes() *http.ServeMux {
 	// which is also un-authed). When auth lands across the surface,
 	// this can be folded into requireAuth too.
 	mux.HandleFunc("POST /api/v1/keys/{id}/revoke", s.handleRevokeKey)
-	// Org / invite API (Phase 4 — multi-org).  These take a bearer
-	// (any authed) but require an OAuth user identity at the handler
-	// layer; API keys 403 because they're org-scoped.
-	mux.HandleFunc("GET /api/v1/orgs", s.requireBearer(s.handleAPIListOrgs))
-	mux.HandleFunc("POST /api/v1/orgs", s.requireBearer(s.handleAPICreateOrg))
+	// Account-scoped invite API. Bearer-authed; the handler layer
+	// gates on OAuth user identity (API keys 403 because they're
+	// account-scoped without a user). The /orgs/ URL prefix is
+	// kept for now as a stable wire shape — renaming to /accounts/
+	// requires also renaming the GUI's `/orgs/{slug}/...` page URLs
+	// (invitee accept-links are bookmarkable and forwardable), so
+	// the API URL and GUI URL must move together. Tracked for
+	// Phase 2 (auth restructure) which already touches the GUI
+	// heavily. *(See PR #41 review point #5.)*
 	mux.HandleFunc("POST /api/v1/orgs/{slug}/invites", s.requireBearer(s.handleAPICreateInvite))
 	mux.HandleFunc("GET /api/v1/orgs/{slug}/invites", s.requireBearer(s.handleAPIListInvitesForOrg))
 	mux.HandleFunc("POST /api/v1/orgs/{slug}/invites/{id}/revoke", s.requireBearer(s.handleAPIRevokeInvite))

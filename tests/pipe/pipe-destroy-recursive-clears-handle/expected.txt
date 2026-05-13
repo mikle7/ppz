@@ -1,0 +1,10 @@
+--- before destroy ---
+cindy.archive 0 0 - - foo
+cindy.inbox 0 0 - - foo
+cindy.stdctrl 0 0 - - foo
+cindy.stdin 0 0 - - foo
+cindy.stdout 0 0 - - foo
+destroyed source=cindy
+--- after destroy ---
+0
+exit=0

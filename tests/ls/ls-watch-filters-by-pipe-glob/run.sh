@@ -7,7 +7,7 @@
 # on a stdout pipe.
 #
 # Repro: two pty sources with stdout activity, watch `*.stdout`. We
-# expect both `.stdout` rows back; broadcast / stdin / stdctrl rows
+# expect both `.stdout` rows back; inbox / stdin / stdctrl rows
 # from the same handles should be filtered out.
 . /tests/lib/common.sh
 

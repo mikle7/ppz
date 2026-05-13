@@ -1,4 +1,6 @@
 {"handle":"chat","pipe":"archive","creator":"foo"}
-{"handle":"chat","pipe":"broadcast","creator":"foo"}
 {"handle":"chat","pipe":"inbox","creator":"foo"}
+{"handle":"chat","pipe":"stdctrl","creator":"foo"}
+{"handle":"chat","pipe":"stdin","creator":"foo"}
+{"handle":"chat","pipe":"stdout","creator":"foo"}
 exit=0

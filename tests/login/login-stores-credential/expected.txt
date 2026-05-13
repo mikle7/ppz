@@ -1,8 +1,8 @@
-logged in url=http://ppz-server:8080 key=KEYPREFIX org=ORG_ALPHA
+logged in url=http://ppz-server:8080 key=KEYPREFIX account=ORG_ALPHA
 daemon: logged in (pid=PID), VERSION (latest)
 last token refresh: just now
 server: http://ppz-server:8080
-org: alpha
+account: alpha
 nats: connected
 current source: -
 exit=0

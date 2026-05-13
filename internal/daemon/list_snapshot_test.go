@@ -12,15 +12,15 @@ import (
 )
 
 func TestStreamInfoByNameListsStreamsOnce(t *testing.T) {
-	orgID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	streamName := natsubj.StreamName(orgID, "agent", "broadcast")
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	streamName := natsubj.StreamName(accountID, "agent", "broadcast")
 	provider := &fakeStreamInfoProvider{
 		infos: []*jetstream.StreamInfo{
 			{Config: jetstream.StreamConfig{Name: streamName}},
 		},
 	}
 
-	got, err := streamInfoByName(context.Background(), provider, orgID)
+	got, err := streamInfoByName(context.Background(), provider, accountID)
 	if err != nil {
 		t.Fatalf("streamInfoByName: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestPipesForSourceDedupeSortedAutoAndUserPipes(t *testing.T) {
 		Kind:  string(cliproto.KindPTY),
 		Pipes: []string{"archive", "stdout", "alerts"},
 	})
-	want := []string{"alerts", "archive", "broadcast", "inbox", "stdctrl", "stdin", "stdout"}
+	want := []string{"alerts", "archive", "inbox", "stdctrl", "stdin", "stdout"}
 	if len(got) != len(want) {
 		t.Fatalf("pipesForSource len = %d (%v), want %d (%v)", len(got), got, len(want), want)
 	}

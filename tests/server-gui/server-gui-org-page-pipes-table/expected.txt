@@ -1,5 +1,9 @@
-chat:broadcast:RELATIVE:hello table
-chat:inbox::
-/orgs/alpha/sources/chat/pipes/broadcast
+chat:inbox:RELATIVE:hello table
+chat:stdctrl::
+chat:stdin::
+chat:stdout::
 /orgs/alpha/sources/chat/pipes/inbox
+/orgs/alpha/sources/chat/pipes/stdctrl
+/orgs/alpha/sources/chat/pipes/stdin
+/orgs/alpha/sources/chat/pipes/stdout
 exit=0

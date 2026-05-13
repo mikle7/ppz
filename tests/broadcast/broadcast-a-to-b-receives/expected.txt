@@ -1,3 +1,0 @@
-remote.broadcast 1 1 RELATIVE hi from a foo
-remote.inbox 0 0 - - foo
-exit=0

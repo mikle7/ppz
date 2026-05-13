@@ -77,13 +77,13 @@ func Message(c Code) string {
 	case EInvalidAPIKey:
 		return "invalid api key"
 	case ESourceTaken:
-		return "source already exists in this org"
+		return "source already exists in this account"
 	case ESourceNotFound:
 		return "source not found"
 	case EInvalidHandle:
 		return "invalid handle: must match [a-z0-9-] (max 32, no leading/trailing -, not reserved)"
 	case ENoCurrentSource:
-		return "no current source for this shell session; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state"
+		return "no current source for this shell session; run 'ppz terminal create <handle>' (or 'ppz set handle <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state"
 	case EPayloadTooLarge:
 		return "payload too large; max 64KiB encoded"
 	case EServerUnreachable:
@@ -133,9 +133,9 @@ func NewSourceNotFound(handle string) *Error {
 	return &Error{Code: ESourceNotFound, Message: fmt.Sprintf("source '%s' not found", handle)}
 }
 
-// NewSourceTaken: source 'foo' already exists in this org
+// NewSourceTaken: source 'foo' already exists in this account
 func NewSourceTaken(handle string) *Error {
-	return &Error{Code: ESourceTaken, Message: fmt.Sprintf("source '%s' already exists in this org", handle)}
+	return &Error{Code: ESourceTaken, Message: fmt.Sprintf("source '%s' already exists in this account", handle)}
 }
 
 // NewPipeTaken: pipe 'archive' already exists on source 'foo'

@@ -91,14 +91,6 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handlePipeDestroy(ctx, conn, req.Params)
 	case cliproto.IPCSourceDestroy:
 		d.handleSourceDestroy(ctx, conn, req.Params)
-	case cliproto.IPCOrgList:
-		d.handleOrgList(ctx, conn, req.Params)
-	case cliproto.IPCOrgSwitch:
-		d.handleOrgSwitch(ctx, conn, req.Params)
-	case cliproto.IPCOrgCreate:
-		d.handleOrgCreate(ctx, conn, req.Params)
-	case cliproto.IPCOrgInvite:
-		d.handleOrgInvite(ctx, conn, req.Params)
 	case cliproto.IPCDiag:
 		d.handleDiag(ctx, conn, req.Params)
 	default:
@@ -126,8 +118,8 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		reply.LoggedIn = true
 		reply.URL = creds.URL
 		reply.KeyPrefix = d.State.KeyPrefix()
-		reply.OrgID = d.State.OrgID()
-		reply.OrgName = d.State.OrgName()
+		reply.AccountID = d.State.AccountID()
+		reply.AccountName = d.State.AccountName()
 		if d.Refresh != nil {
 			lastRefresh := d.Refresh.LastRefreshAt()
 			if !lastRefresh.IsZero() {

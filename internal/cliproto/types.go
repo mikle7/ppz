@@ -8,8 +8,17 @@ const (
 	IPCLogin       = "Login"
 	IPCCreate      = "Create"
 	IPCSwitch      = "Switch"
+	// IPCBroadcast / IPCBroadcastBatch are the publish-IPC verbs. The
+	// `ppz broadcast` CLI verb was removed in Phase 1 (locked
+	// decision #16); `ppz send` (and `ppz command`, terminal stdin
+	// forwarding, etc.) keep using these names internally because
+	// renaming to IPCSend/IPCSendBatch would cascade through
+	// BroadcastRequest / handleBroadcast / resolveBroadcastTarget
+	// etc. with no behavioural change. Wire strings retained so
+	// older daemon binaries don't break during mid-rollout testing.
 	IPCBroadcast      = "Broadcast"
 	IPCBroadcastBatch = "BroadcastBatch"
+
 	IPCList        = "List"
 	IPCListWatch   = "ListWatch"
 	IPCSubscribe   = "Subscribe"
@@ -19,12 +28,6 @@ const (
 	IPCPipeCreate    = "PipeCreate"
 	IPCPipeDestroy   = "PipeDestroy"
 	IPCSourceDestroy = "SourceDestroy"
-
-	// Org / invite verbs (Phase 4 — multi-org support).
-	IPCOrgList   = "OrgList"
-	IPCOrgSwitch = "OrgSwitch"
-	IPCOrgCreate = "OrgCreate"
-	IPCOrgInvite = "OrgInvite"
 
 	// Diag verb (Phase 0 — agent hardening). Returns the daemon's
 	// recent NATS connection-state events for `ppz diag`. Works
@@ -116,8 +119,8 @@ type StatusReply struct {
 	LoggedIn           bool       `json:"logged_in"`
 	URL                string     `json:"url,omitempty"`
 	KeyPrefix          string     `json:"key_prefix,omitempty"`
-	OrgID              string     `json:"org_id,omitempty"`
-	OrgName            string     `json:"org_name,omitempty"`
+	AccountID              string     `json:"account_id,omitempty"`
+	AccountName            string     `json:"account_name,omitempty"`
 	LastTokenRefreshAt *time.Time `json:"last_token_refresh_at,omitempty"`
 	// LoginCheck is the daemon's last verification result against the
 	// server. "ok" means a recent server-touching call succeeded;
@@ -158,7 +161,7 @@ type LoginRequest struct {
 type LoginReply struct {
 	URL       string `json:"url"`
 	KeyPrefix string `json:"key_prefix"`
-	OrgID     string `json:"org_id"`
+	AccountID     string `json:"account_id"`
 }
 
 type CreateRequest struct {
@@ -330,41 +333,11 @@ type ListReply struct {
 
 type AuthExchangeRequest struct {
 	APIKey string `json:"api_key"`
-	// OrgID (Phase 3.5): which org's account to mint a User JWT in.
+	// AccountID (Phase 3.5): which org's account to mint a User JWT in.
 	// Optional — server defaults to the bearer's primary org (first
 	// owned, or first member). Multi-org users specify it explicitly
 	// to switch which org their daemon talks to.
-	OrgID string `json:"org_id,omitempty"`
-}
-
-// OrgInfo is one row in the ListOrgs response — what `ppz orgs ls`
-// prints. UUID + display name + role; no NATS-side fields here, this
-// endpoint is purely "which orgs am I in".
-type OrgInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Role string `json:"role,omitempty"` // owner / member / viewer / bot (Phase 3.6)
-	// Current is true for the org the daemon is currently bound to
-	// (per `ppz org switch`). Set by the daemon's IPCOrgList handler
-	// after the server returns the membership list — the server has
-	// no notion of "current org" since that's daemon-side state.
-	Current bool `json:"current,omitempty"`
-}
-
-type ListOrgsReply struct {
-	Orgs []OrgInfo `json:"orgs"`
-}
-
-// CreateOrgRequest is the body for POST /api/v1/orgs — bearer-auth'd
-// org create from the CLI (`ppz org create <name>`). Caller becomes
-// the owner.
-type CreateOrgRequest struct {
-	Name string `json:"name"`
-}
-
-type CreateOrgReply struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // CreateInviteRequest is the body for POST /api/v1/orgs/{slug}/invites
@@ -373,18 +346,18 @@ type CreateInviteRequest struct {
 	Username string `json:"username"`
 }
 
-// Invite is the API projection of a db.Invite row plus the org name
-// (so the dashboard can render "Pending invitation to <org>" without
+// Invite is the API projection of a db.Invite row plus the account name
+// (so the dashboard can render "Pending invitation to <account>" without
 // a second join).
 type Invite struct {
-	ID               string `json:"id"`
-	OrganisationID   string `json:"organisation_id"`
-	OrganisationName string `json:"organisation_name,omitempty"`
-	InviteeUsername  string `json:"invitee_username"`
-	InviterUserID    string `json:"inviter_user_id"`
-	Status           string `json:"status"`
-	CreatedAt        string `json:"created_at"`
-	DecidedAt        string `json:"decided_at,omitempty"`
+	ID              string `json:"id"`
+	AccountID       string `json:"account_id"`
+	AccountName     string `json:"account_name,omitempty"`
+	InviteeUsername string `json:"invitee_username"`
+	InviterUserID   string `json:"inviter_user_id"`
+	Status          string `json:"status"`
+	CreatedAt       string `json:"created_at"`
+	DecidedAt       string `json:"decided_at,omitempty"`
 }
 
 type CreateInviteReply struct {
@@ -395,38 +368,12 @@ type ListInvitesReply struct {
 	Invites []Invite `json:"invites"`
 }
 
-// OrgSwitchRequest carries the daemon-side IPC payload for `ppz org
-// switch <name>`. Daemon resolves name → org_id, re-runs auth/exchange
-// with the new org, persists.
-type OrgSwitchRequest struct {
-	Name string `json:"name"`
-}
-
-// OrgSwitchReply mirrors what `ppz status` cares about — the new
-// active org. Daemon returns the resolved id+name so the CLI can
-// echo back "switched to org=<name>".
-type OrgSwitchReply struct {
-	OrgID   string `json:"org_id"`
-	OrgName string `json:"org_name"`
-}
-
-// OrgCreateRequest is the IPC payload for `ppz org create <name>` —
-// daemon proxies to the server's POST /api/v1/orgs.
-type OrgCreateRequest struct {
-	Name string `json:"name"`
-}
-
-// OrgInviteRequest is the IPC payload for `ppz org invite <username>` —
-// daemon resolves "current org" and proxies to POST /api/v1/orgs/{slug}/invites.
-type OrgInviteRequest struct {
-	Username string `json:"username"`
-}
 
 type AuthExchangeReply struct {
 	JWT       string    `json:"jwt"`
 	NATSURL   string    `json:"nats_url"`
-	OrgID     string    `json:"org_id"`
-	OrgName   string    `json:"org_name"`
+	AccountID     string    `json:"account_id"`
+	AccountName   string    `json:"account_name"`
 	ExpiresAt time.Time `json:"expires_at"`
 
 	// Auth V2 Phase 3 — short-lived NATS user credentials. The daemon

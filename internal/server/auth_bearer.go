@@ -137,27 +137,27 @@ func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 		// the new row to the OAuth bearer's user — same field
 		// downstream code reads on the API-key path.
 		if raw := r.URL.Query().Get("org"); raw != "" {
-			orgID, err := uuid.Parse(raw)
+			accountID, err := uuid.Parse(raw)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "org is not a valid uuid"})
 				return
 			}
-			if !db.IsMemberOrOwner(r.Context(), s.Pool, orgID, caller.UserID) {
+			if !db.IsMemberOrOwner(r.Context(), s.Pool, accountID, caller.UserID) {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a member of org"})
 				return
 			}
-			h(w, r, db.APIKey{OrganisationID: orgID, CreatedByUserID: caller.UserID})
+			h(w, r, db.APIKey{AccountID: accountID, CreatedByUserID: caller.UserID})
 			return
 		}
 		// Fallback: caller's first owned org. Used by daemons that
 		// haven't switched (or haven't been updated to send ?org=).
-		org, err := db.FirstOwnedOrgFor(r.Context(), s.Pool, caller.UserID)
+		org, err := db.FirstOwnedAccountFor(r.Context(), s.Pool, caller.UserID)
 		if err != nil {
 			writeJSON(w, http.StatusForbidden, map[string]string{
 				"error": "no org owned by user; mint an API key on the GUI first",
 			})
 			return
 		}
-		h(w, r, db.APIKey{OrganisationID: org.ID, CreatedByUserID: caller.UserID})
+		h(w, r, db.APIKey{AccountID: org.ID, CreatedByUserID: caller.UserID})
 	})
 }

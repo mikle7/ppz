@@ -145,7 +145,7 @@ func (s *Server) handleAPIRevokeInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inv, err := db.GetInvite(ctx, s.Pool, inviteID)
-	if err != nil || inv.OrganisationID != org.ID {
+	if err != nil || inv.AccountID != org.ID {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "invite not found"})
 		return
 	}
@@ -181,7 +181,7 @@ func (s *Server) handleAPIListMyInvites(w http.ResponseWriter, r *http.Request) 
 	}
 	out := make([]cliproto.Invite, 0, len(rows))
 	for _, iw := range rows {
-		out = append(out, inviteToWire(iw.Invite, iw.OrganisationName))
+		out = append(out, inviteToWire(iw.Invite, iw.AccountName))
 	}
 	writeJSON(w, http.StatusOK, cliproto.ListInvitesReply{Invites: out})
 }
@@ -292,7 +292,7 @@ func (s *Server) handleGUIRevokeInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inv, err := db.GetInvite(ctx, s.Pool, inviteID)
-	if err != nil || inv.OrganisationID != org.ID {
+	if err != nil || inv.AccountID != org.ID {
 		http.Error(w, "invite not found", http.StatusNotFound)
 		return
 	}
@@ -349,11 +349,11 @@ func (s *Server) guiAcceptOrDecline(w http.ResponseWriter, r *http.Request, acce
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-func inviteToWire(inv db.Invite, orgName string) cliproto.Invite {
+func inviteToWire(inv db.Invite, accountName string) cliproto.Invite {
 	out := cliproto.Invite{
 		ID:               inv.ID.String(),
-		OrganisationID:   inv.OrganisationID.String(),
-		OrganisationName: orgName,
+		AccountID:   inv.AccountID.String(),
+		AccountName: accountName,
 		InviteeUsername:  inv.InviteeUsername,
 		InviterUserID:    inv.InviterUserID.String(),
 		Status:           string(inv.Status),

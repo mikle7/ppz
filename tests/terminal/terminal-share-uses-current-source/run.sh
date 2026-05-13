@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Bare `ppz terminal share` (no handle) uses the current source. If the
 # source doesn't yet have stdin/stdout pipes (e.g. it was created by
-# `connect`, which only auto-provisions broadcast), wrap creates them
+# `connect`, which only auto-provisions inbox), wrap creates them
 # transparently via the same code path as `pipe create`.
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a source create chat >/dev/null
+ppz_a terminal create chat >/dev/null
 
 # Bare wrap with an explicit child command so the test doesn't hang.
 ppz_a terminal share -- printf "wrapped" >/dev/null
@@ -19,7 +19,7 @@ wait_for 20 "ppz_a reread chat.stdout --json | jq -r '.payload' | tr -d '\r' | g
 ppz_a reread chat.stdout | tr -d '\r' | sed '/^$/d'
 
 # Sender contract: terminal share's pty stream forwarder publishes via
-# the same daemon IPC as `ppz broadcast` / `ppz send`. Verify it stamps
+# the same daemon IPC as `ppz send`. Verify it stamps
 # envelope.sender from the publishing session's current source — chat,
 # in this fixture (set by `source create chat` above). Without this, a
 # regression in sendStreamLine that drops the session id would land

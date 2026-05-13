@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Auto-provisioned pipes (broadcast, inbox) don't have rows in the
+# Auto-provisioned pipes (inbox) don't have rows in the
 # `pipes` table — there's no per-pipe creator to read. The renderer
 # falls back to the source's creator for those rows.
 #

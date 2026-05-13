@@ -3,7 +3,7 @@
 # a User JWT through /auth/exchange and uses it to connect to NATS.
 # Publishing within its own org succeeds.
 #
-# This is the existing login → broadcast flow, but post-Phase-3 the
+# This is the existing login → send flow, but post-Phase-3 the
 # daemon's NATS connection MUST present a JWT. Failure mode pre-fix:
 # /auth/exchange returns no JWT, daemon falls back to plain
 # nats.Connect, server now rejects with Authorization Violation.
@@ -25,9 +25,9 @@ else
 fi
 
 echo ""
-echo "--- broadcast within own org succeeds ---"
+echo "--- send within own org succeeds ---"
 ppz_a source create chat >/dev/null
-ppz_a broadcast -m "phase 3 hello" >/dev/null && echo "broadcast=ok" || echo "broadcast=fail"
+ppz_a send chat.inbox "phase 3 hello" >/dev/null && echo "send=ok" || echo "send=fail"
 
 echo ""
 echo "--- ls sees the message ---"

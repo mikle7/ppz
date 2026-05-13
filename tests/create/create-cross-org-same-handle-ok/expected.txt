@@ -1,5 +1,5 @@
-created handle=shared subject=ORG_ALPHA.shared.broadcast
+created handle=shared subject=ORG_ALPHA.shared.inbox
 current handle=shared
-created handle=shared subject=ORG_BETA.shared.broadcast
+created handle=shared subject=ORG_BETA.shared.inbox
 current handle=shared
 exit=0

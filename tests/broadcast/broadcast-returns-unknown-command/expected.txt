@@ -1,0 +1,3 @@
+exit=2
+stderr_contains_unknown=yes
+exit=0

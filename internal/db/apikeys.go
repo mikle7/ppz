@@ -17,7 +17,7 @@ import (
 
 type APIKey struct {
 	ID              uuid.UUID
-	OrganisationID  uuid.UUID
+	AccountID  uuid.UUID
 	CreatedByUserID uuid.UUID // user that minted the key (NOT NULL)
 	KeyHash         string
 	KeyPrefix       string
@@ -105,7 +105,7 @@ func VerifyAPIKey(plaintext, stored string) bool {
 // InsertAPIKey mints a fresh plaintext key, hashes it, and writes the row.
 // `createdBy` is the user who minted the key — required (NOT NULL on the
 // table) so every key is attributable for `ppz ls` HUMAN.
-func InsertAPIKey(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, label string) (key APIKey, plaintext string, err error) {
+func InsertAPIKey(ctx context.Context, p *Pool, accountID, createdBy uuid.UUID, label string) (key APIKey, plaintext string, err error) {
 	plaintext, err = GeneratePlaintextKey()
 	if err != nil {
 		return APIKey{}, "", err
@@ -116,7 +116,7 @@ func InsertAPIKey(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, labe
 	}
 	key = APIKey{
 		ID:              uuid.New(),
-		OrganisationID:  orgID,
+		AccountID:  accountID,
 		CreatedByUserID: createdBy,
 		KeyHash:         hash,
 		KeyPrefix:       KeyPrefix(plaintext),
@@ -124,9 +124,9 @@ func InsertAPIKey(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, labe
 		CreatedAt:       time.Now().UTC(),
 	}
 	_, err = p.Exec(ctx,
-		`INSERT INTO api_keys (id, organisation_id, created_by_user_id, key_hash, key_prefix, label, created_at)
+		`INSERT INTO api_keys (id, account_id, created_by_user_id, key_hash, key_prefix, label, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		key.ID, key.OrganisationID, key.CreatedByUserID, key.KeyHash, key.KeyPrefix, key.Label, key.CreatedAt)
+		key.ID, key.AccountID, key.CreatedByUserID, key.KeyHash, key.KeyPrefix, key.Label, key.CreatedAt)
 	return key, plaintext, err
 }
 
@@ -136,7 +136,7 @@ func InsertAPIKey(ctx context.Context, p *Pool, orgID, createdBy uuid.UUID, labe
 func LookupAPIKey(ctx context.Context, p *Pool, plaintext string) (APIKey, error) {
 	prefix := KeyPrefix(plaintext)
 	rows, err := p.Query(ctx,
-		`SELECT id, organisation_id, created_by_user_id, key_hash, key_prefix, label, created_at, revoked_at
+		`SELECT id, account_id, created_by_user_id, key_hash, key_prefix, label, created_at, revoked_at
 		   FROM api_keys WHERE key_prefix = $1 AND revoked_at IS NULL`, prefix)
 	if err != nil {
 		return APIKey{}, err
@@ -144,7 +144,7 @@ func LookupAPIKey(ctx context.Context, p *Pool, plaintext string) (APIKey, error
 	defer rows.Close()
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.ID, &k.OrganisationID, &k.CreatedByUserID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.AccountID, &k.CreatedByUserID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
 			return APIKey{}, err
 		}
 		if VerifyAPIKey(plaintext, k.KeyHash) {
@@ -161,12 +161,12 @@ func LookupAPIKey(ctx context.Context, p *Pool, plaintext string) (APIKey, error
 // ones — the GUI shows revoked keys (with strikethrough) so the audit
 // trail stays visible. Sorted active-first by creation time, then
 // revoked rows.
-func ListAPIKeysForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]APIKey, error) {
+func ListAPIKeysForOrg(ctx context.Context, p *Pool, accountID uuid.UUID) ([]APIKey, error) {
 	rows, err := p.Query(ctx,
-		`SELECT id, organisation_id, created_by_user_id, key_hash, key_prefix, label, created_at, revoked_at
+		`SELECT id, account_id, created_by_user_id, key_hash, key_prefix, label, created_at, revoked_at
 		   FROM api_keys
-		  WHERE organisation_id = $1
-		  ORDER BY (revoked_at IS NULL) DESC, created_at ASC`, orgID)
+		  WHERE account_id = $1
+		  ORDER BY (revoked_at IS NULL) DESC, created_at ASC`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func ListAPIKeysForOrg(ctx context.Context, p *Pool, orgID uuid.UUID) ([]APIKey,
 	var out []APIKey
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.ID, &k.OrganisationID, &k.CreatedByUserID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.AccountID, &k.CreatedByUserID, &k.KeyHash, &k.KeyPrefix, &k.Label, &k.CreatedAt, &k.RevokedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, k)

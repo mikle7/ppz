@@ -27,7 +27,7 @@ func DumpState(ipcSock string, w io.Writer) error {
 
 	out := snapshot{
 		LoggedIn: st.LoggedIn,
-		OrgID:    nilStringIfEmpty(st.OrgID),
+		AccountID:    nilStringIfEmpty(st.AccountID),
 		Sources:  []sourceView{},
 	}
 
@@ -85,7 +85,7 @@ func RunHeadless(ipcSock, httpAddr string) error {
 
 type snapshot struct {
 	LoggedIn bool         `json:"logged_in"`
-	OrgID    *string      `json:"org_id"`
+	AccountID    *string      `json:"account_id"`
 	Sources  []sourceView `json:"sources"`
 }
 

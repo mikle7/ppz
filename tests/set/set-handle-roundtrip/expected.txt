@@ -1,0 +1,7 @@
+--- get handle (after two creates) ---
+beta-h
+--- set handle alpha-h ---
+handle=alpha-h
+--- get handle (after set) ---
+alpha-h
+exit=0

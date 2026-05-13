@@ -1,0 +1,8 @@
+--- before unset: handle is alpha-h ---
+alpha-h
+--- unset ---
+unset
+--- after unset: get exits non-zero, empty output ---
+rc=1
+out=[]
+exit=0

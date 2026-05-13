@@ -11,8 +11,8 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
 for i in 1 2 3 4 5; do
-  ppz_a broadcast -m "msg-$i" >/dev/null
+  ppz_a send chat.inbox "msg-$i" >/dev/null
 done
 wait_for 20 "ppz_a ls | grep -q msg-5" >/dev/null
 
-ppz_a reread --bare chat.broadcast -l 2
+ppz_a reread --bare chat.inbox -l 2

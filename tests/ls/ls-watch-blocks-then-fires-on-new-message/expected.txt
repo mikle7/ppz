@@ -1,4 +1,6 @@
 --- watch fired with new message visible ---
-chat.broadcast 1 2 RELATIVE new foo
-chat.inbox 0 0 - - foo
+chat.inbox 1 2 RELATIVE new foo
+chat.stdctrl 0 0 - - foo
+chat.stdin 0 0 - - foo
+chat.stdout 0 0 - - foo
 exit=0

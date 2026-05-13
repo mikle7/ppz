@@ -17,7 +17,7 @@ func TestAPIKey_HasCreatedByUserIDField(t *testing.T) {
 	uid := uuid.New()
 	k := APIKey{
 		ID:              uuid.New(),
-		OrganisationID:  uuid.New(),
+		AccountID:  uuid.New(),
 		CreatedByUserID: uid,
 		KeyPrefix:       "abcdefgh",
 		Label:           "test",
@@ -41,12 +41,12 @@ func TestAPIKey_HasCreatedByUserIDField(t *testing.T) {
 
 // InsertAPIKey signature must accept a creator user id alongside the
 // org id and label. The compile-time call here is the test — if the
-// signature drifts back to (ctx, pool, orgID, label) this file stops
+// signature drifts back to (ctx, pool, accountID, label) this file stops
 // compiling, surfacing the regression.
 func TestInsertAPIKey_SignatureAcceptsCreatedBy(t *testing.T) {
 	// Compile-time only: we never call this. The closure pins the
 	// signature without needing a live pool.
-	_ = func(pool *Pool, orgID, createdBy uuid.UUID) {
-		_, _, _ = InsertAPIKey(nil, pool, orgID, createdBy, "label")
+	_ = func(pool *Pool, accountID, createdBy uuid.UUID) {
+		_, _, _ = InsertAPIKey(nil, pool, accountID, createdBy, "label")
 	}
 }

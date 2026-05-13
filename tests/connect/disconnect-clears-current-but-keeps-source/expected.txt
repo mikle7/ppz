@@ -1,6 +1,6 @@
-cleared
+unset
 --- status ---
 current source: -
 --- ls ---
-chat.broadcast 0 0 - - foo
+chat.inbox 0 0 - - foo
 exit=0

@@ -14,9 +14,9 @@ import (
 
 // RefreshFn is the work the refresh loop calls when a JWT is about
 // to expire. Implementations re-run POST /api/v1/auth/exchange and
-// return the new (jwt, seed). orgID lets a multi-org daemon route
+// return the new (jwt, seed). accountID lets a multi-org daemon route
 // to the right account.
-type RefreshFn func(ctx context.Context, orgID string) (jwt, seed string, expUnix int64, err error)
+type RefreshFn func(ctx context.Context, accountID string) (jwt, seed string, expUnix int64, err error)
 
 // ErrUnauthorized is what RefreshFn returns when the bearer was
 // revoked / expired — distinct from transient network failures
@@ -37,9 +37,9 @@ const retryAfter = 5 * time.Second
 // expiry. Concurrency: Current() may be called from any goroutine;
 // Start/Stop must be called from the same goroutine.
 type RefreshLoop struct {
-	OrgID          string
+	AccountID          string
 	Refresh        RefreshFn
-	OnUnauthorized func(orgID string)
+	OnUnauthorized func(accountID string)
 
 	mu      sync.Mutex
 	jwt     string
@@ -155,10 +155,10 @@ func (r *RefreshLoop) run(ctx context.Context) {
 }
 
 func (r *RefreshLoop) refreshNow(ctx context.Context) error {
-	newJWT, newSeed, newExp, err := r.Refresh(ctx, r.OrgID)
+	newJWT, newSeed, newExp, err := r.Refresh(ctx, r.AccountID)
 	if errors.Is(err, ErrUnauthorized) {
 		if r.OnUnauthorized != nil {
-			r.OnUnauthorized(r.OrgID)
+			r.OnUnauthorized(r.AccountID)
 		}
 		return err
 	}

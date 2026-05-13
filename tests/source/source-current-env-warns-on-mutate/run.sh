@@ -5,7 +5,7 @@
 # won't take effect until the user unsets it.
 #
 # Without the warning, "I just ran `ppz source switch foo` but my
-# broadcasts are still going to bar" is a confusing afternoon.
+# sends are still going to bar" is a confusing afternoon.
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
@@ -15,7 +15,7 @@ echo "--- env set, source create new: daemon current updated, stderr warns ---"
 PPZ_CURRENT_HANDLE=foo ppz_a source create new 2>&1 >/dev/null | grep '^warning:' || true
 
 echo "--- env set, source switch foo: daemon current updated, stderr warns ---"
-PPZ_CURRENT_HANDLE=foo ppz_a source switch foo 2>&1 >/dev/null | grep '^warning:' || true
+PPZ_CURRENT_HANDLE=foo ppz_a set handle foo 2>&1 >/dev/null | grep '^warning:' || true
 
 echo "--- env set, source clear: daemon current cleared, stderr warns ---"
-PPZ_CURRENT_HANDLE=foo ppz_a source clear 2>&1 >/dev/null | grep '^warning:' || true
+PPZ_CURRENT_HANDLE=foo ppz_a unset handle 2>&1 >/dev/null | grep '^warning:' || true

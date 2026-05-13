@@ -1,4 +1,6 @@
 --- watch returns immediately (level-triggered) ---
-chat.broadcast 1 1 RELATIVE preexisting foo
-chat.inbox 0 0 - - foo
+chat.inbox 1 1 RELATIVE preexisting foo
+chat.stdctrl 0 0 - - foo
+chat.stdin 0 0 - - foo
+chat.stdout 0 0 - - foo
 exit=0

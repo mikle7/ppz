@@ -16,7 +16,7 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
-// MintAccountJWT signs a fresh Account JWT for orgName, with the
+// MintAccountJWT signs a fresh Account JWT for accountName, with the
 // supplied signing-key public registered as an authorized signer.
 // The Operator key (`operatorKP`) signs the JWT — caller is
 // responsible for that key's security (production: env var).
@@ -24,7 +24,7 @@ import (
 // JetStream limits are set to unlimited (-1) — a single ppz-server
 // is the only client of every account anyway, so per-account
 // quotas don't add safety, only friction.
-func MintAccountJWT(operatorKP nkeys.KeyPair, orgName string, accountKP, signingKP nkeys.KeyPair) (string, error) {
+func MintAccountJWT(operatorKP nkeys.KeyPair, accountName string, accountKP, signingKP nkeys.KeyPair) (string, error) {
 	accPub, err := accountKP.PublicKey()
 	if err != nil {
 		return "", fmt.Errorf("account pub: %w", err)
@@ -35,7 +35,7 @@ func MintAccountJWT(operatorKP nkeys.KeyPair, orgName string, accountKP, signing
 	}
 
 	claims := jwt.NewAccountClaims(accPub)
-	claims.Name = orgName
+	claims.Name = accountName
 	claims.SigningKeys.Add(signPub)
 	claims.Limits.JetStreamLimits.MemoryStorage = -1
 	claims.Limits.JetStreamLimits.DiskStorage = -1

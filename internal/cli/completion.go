@@ -71,39 +71,41 @@ func cmdCompletion(args []string) error {
 // alphabetical so it scans easily; "completion" / "__complete" are
 // intentionally omitted (operator-internal, not for everyday use).
 var topLevelVerbs = []string{
-	"broadcast",
 	"command",
 	"daemon",
+	"get",
 	"login",
 	"ls",
-	"org",
 	"pipe",
 	"read",
 	"reread",
 	"send",
+	"set",
 	"source",
 	"status",
 	"terminal",
+	"unset",
 	"upgrade",
 	"version",
 }
 
 var subverbs = map[string][]string{
-	"source":   {"create", "switch", "clear", "destroy"},
 	"daemon":   {"start", "stop", "login", "logout"},
-	"org":      {"list", "switch", "invite"},
 	"pipe":     {"create", "destroy"},
-	"terminal": {"share", "watch", "read"},
+	"source":   {"create", "destroy"},
+	"terminal": {"create", "share", "watch", "read"},
+	"set":      {"handle"},
+	"unset":    {"handle"},
+	"get":      {"handle"},
 }
 
 // Verbs that take a `<handle>.<pipe>` target as their first positional.
 // Tab on the target slot completes against everything the daemon's
 // IPCList knows about.
 var targetTakingVerbs = map[string]bool{
-	"read":      true,
-	"reread":    true,
-	"send":      true,
-	"broadcast": true,
+	"read":   true,
+	"reread": true,
+	"send":   true,
 }
 
 // Terminal subverbs whose first positional is a handle (no `.pipe`).

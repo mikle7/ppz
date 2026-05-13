@@ -1,0 +1,10 @@
+--- set foo bar (unknown key) ---
+rc=2
+unknown key
+--- unset foo bar (unknown key) ---
+rc=2
+unknown key
+--- get foo bar (unknown key) ---
+rc=2
+unknown key
+exit=0

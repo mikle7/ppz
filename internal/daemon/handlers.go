@@ -131,19 +131,19 @@ func connectNATSWithRefresh(url string, r *RefreshLoop, ring *NATSEventRing) (*n
 
 // authExchangeRefresh is the RefreshFn we register with RefreshLoop.
 // On every fire it re-runs POST /api/v1/auth/exchange with the
-// daemon's bearer for the supplied orgID, and returns the new
+// daemon's bearer for the supplied accountID, and returns the new
 // (jwt, seed, exp). 401 → ErrUnauthorized so the loop stops + the
 // daemon's loginCheck flips to invalid.
-func (d *Daemon) authExchangeRefresh(ctx context.Context, orgID string) (string, string, int64, error) {
+func (d *Daemon) authExchangeRefresh(ctx context.Context, accountID string) (string, string, int64, error) {
 	creds, ok := d.State.Credentials()
 	if !ok {
 		return "", "", 0, ErrUnauthorized
 	}
-	// Phase 4: thread the persisted OrgID so the refresh stays bound to
-	// the org the user is currently switched to. Empty OrgID falls back
+	// Phase 4: thread the persisted AccountID so the refresh stays bound to
+	// the org the user is currently switched to. Empty AccountID falls back
 	// to the server's "first owned org" default — preserves behaviour
 	// for daemons that haven't yet switched.
-	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey, OrgID: d.State.OrgID()})
+	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey, AccountID: d.State.AccountID()})
 	req, err := http.NewRequestWithContext(ctx, "POST", creds.URL+"/api/v1/auth/exchange", bytes.NewReader(body))
 	if err != nil {
 		return "", "", 0, err
@@ -168,19 +168,19 @@ func (d *Daemon) authExchangeRefresh(ctx context.Context, orgID string) (string,
 	// without an immediate /auth/exchange round-trip.
 	creds.NATSUserJWT = ex.NATSUserJWT
 	creds.NATSUserSeed = ex.NATSUserSeed
-	_ = d.State.SetLogin(*creds, ex.OrgID, ex.OrgName, keyPrefix(creds.APIKey))
+	_ = d.State.SetLogin(*creds, ex.AccountID, ex.AccountName, keyPrefix(creds.APIKey))
 	return ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix(), nil
 }
 
 // startRefreshLoop swaps d.Refresh for a fresh RefreshLoop tied to
 // the supplied initial credentials. Idempotent — stops any existing
 // loop first.
-func (d *Daemon) startRefreshLoop(orgID, jwt, seed string, expUnix int64) {
+func (d *Daemon) startRefreshLoop(accountID, jwt, seed string, expUnix int64) {
 	if d.Refresh != nil {
 		d.Refresh.Stop()
 	}
 	d.Refresh = &RefreshLoop{
-		OrgID:   orgID,
+		AccountID:   accountID,
 		Refresh: d.authExchangeRefresh,
 		OnUnauthorized: func(string) {
 			d.State.SetLoginCheck(cliproto.LoginCheckInvalid)
@@ -230,7 +230,7 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 		NATSUserSeed: ex.NATSUserSeed,
 	}
 	prefix := keyPrefix(req.APIKey)
-	if err := d.State.SetLogin(creds, ex.OrgID, ex.OrgName, prefix); err != nil {
+	if err := d.State.SetLogin(creds, ex.AccountID, ex.AccountName, prefix); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
@@ -253,12 +253,12 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 		d.NC.Close()
 		d.NC = nil
 	}
-	d.startRefreshLoop(ex.OrgID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
+	d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
 	if nc, err := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents); err == nil {
 		d.NC = nc
 	}
 
-	writeIPC(conn, cliproto.LoginReply{URL: req.URL, KeyPrefix: prefix, OrgID: ex.OrgID})
+	writeIPC(conn, cliproto.LoginReply{URL: req.URL, KeyPrefix: prefix, AccountID: ex.AccountID})
 }
 
 // ensureNATS establishes the daemon's NATS connection from stored
@@ -316,8 +316,8 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 		// don't depend on stale on-disk values.
 		creds.NATSUserJWT = ex.NATSUserJWT
 		creds.NATSUserSeed = ex.NATSUserSeed
-		_ = d.State.SetLogin(*creds, creds.OrgID, creds.OrgName, keyPrefix(creds.APIKey))
-		d.startRefreshLoop(ex.OrgID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
+		_ = d.State.SetLogin(*creds, creds.AccountID, creds.AccountName, keyPrefix(creds.APIKey))
+		d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
 	}
 	// If we got here without /auth/exchange (NATSURL was already
 	// known) but the refresh loop never started (e.g. fresh daemon
@@ -349,7 +349,7 @@ func (d *Daemon) ensureRefreshLoopFromCreds(creds *Credentials) {
 	if d.Refresh != nil || creds.NATSUserJWT == "" || creds.NATSUserSeed == "" {
 		return
 	}
-	d.startRefreshLoop(creds.OrgID, creds.NATSUserJWT, creds.NATSUserSeed, time.Now().Add(-time.Minute).Unix())
+	d.startRefreshLoop(creds.AccountID, creds.NATSUserJWT, creds.NATSUserSeed, time.Now().Add(-time.Minute).Unix())
 }
 
 // authHTTP sets the bearer header on a request.
@@ -364,7 +364,7 @@ func (d *Daemon) authHTTP(req *http.Request) error {
 
 // callServer is a thin JSON-in / JSON-out helper for daemon → server calls.
 //
-// Phase 4: when the daemon has a stored OrgID (set by login or `org
+// Phase 4: when the daemon has a stored AccountID (set by login or `org
 // switch`), we stamp it as `?org=<id>` on every call. The server's
 // requireAPIKey middleware uses it to scope OAuth-bearer requests to
 // the right tenant; without this, /api/v1/sources etc. would silently
@@ -383,12 +383,12 @@ func (d *Daemon) callServer(ctx context.Context, method, path string, body any, 
 		bodyReader = bytes.NewReader(b)
 	}
 	url := creds.URL + path
-	if orgID := d.State.OrgID(); orgID != "" {
+	if accountID := d.State.AccountID(); accountID != "" {
 		sep := "?"
 		if strings.Contains(path, "?") {
 			sep = "&"
 		}
-		url += sep + "org=" + orgID
+		url += sep + "org=" + accountID
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
@@ -794,7 +794,7 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 			return broadcastTarget{}, cliproto.NewSourceNotFound(current)
 		}
 	}
-	orgID, err := uuid.Parse(d.State.OrgID())
+	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
 		return broadcastTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"}
 	}
@@ -817,7 +817,7 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 	//     pipe invalidity misled agents away from the real cause.
 	//   - any other error → E_INVALID_PIPE catch-all. Truly unexpected.
 	if js, err := jetstream.New(d.NC); err == nil {
-		if _, err := js.Stream(ctx, natsubj.StreamName(orgID, current, pipe)); err != nil {
+		if _, err := js.Stream(ctx, natsubj.StreamName(accountID, current, pipe)); err != nil {
 			switch {
 			case errors.Is(err, jetstream.ErrStreamNotFound):
 				return broadcastTarget{}, cliproto.NewPipeNotFound(pipe, current)
@@ -836,7 +836,7 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 	// (`ppz send foo`, or PPZ_CURRENT_HANDLE inside `ppz terminal`).
 	// Empty when this session has never connected.
 	return broadcastTarget{
-		subject: natsubj.Subject(orgID, current, pipe),
+		subject: natsubj.Subject(accountID, current, pipe),
 		sender:  d.State.Current(session),
 	}, nil
 }
@@ -875,13 +875,13 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
 	}
-	orgID, err := uuid.Parse(d.State.OrgID())
+	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
 		return
 	}
 
-	enriched, err := enrichSourcesWithPipeInfo(ctx, js, lr.Sources, orgID, req.Session, nil, cursorSnapshot(d.Cursors, req.Session))
+	enriched, err := enrichSourcesWithPipeInfo(ctx, js, lr.Sources, accountID, req.Session, nil, cursorSnapshot(d.Cursors, req.Session))
 	if err != nil {
 		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
@@ -891,17 +891,18 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 }
 
 // pipesForKind mirrors db.Source.Pipes() at the daemon level so we don't
-// import internal/db just for this helper.
+// import internal/db just for this helper. Sorted alphabetically so ls
+// output is deterministic. `broadcast` was removed pre-launch (locked
+// decision #16).
 func pipesForKind(kind string) []string {
 	if kind == string(cliproto.KindPTY) {
-		// Sorted alphabetically so ls output is deterministic.
-		return []string{"broadcast", "inbox", "stdctrl", "stdin", "stdout"}
+		return []string{"inbox", "stdctrl", "stdin", "stdout"}
 	}
-	return []string{"broadcast", "inbox"}
+	return []string{"inbox"}
 }
 
-func daemonCursorKey(orgID uuid.UUID, handle, pipe string) string {
-	return CursorKey(orgID.String(), handle, pipe)
+func daemonCursorKey(accountID uuid.UUID, handle, pipe string) string {
+	return CursorKey(accountID.String(), handle, pipe)
 }
 
 func (d *Daemon) handleSubscribe(ctx context.Context, conn net.Conn, _ json.RawMessage) {

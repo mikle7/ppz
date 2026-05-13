@@ -11,21 +11,33 @@ import (
 
 // cmdSourceGroup dispatches `ppz source <subverb>`.
 //
-// Phase B ships create + switch (carried over from the old top-level verbs).
-// `destroy` lands in a later phase together with the matching server
-// endpoint + cleanup story; until then, calling it returns exit 2.
+// Phase 1 reshape (locked decisions #18-21): the four-verb family
+// (create / switch / clear / destroy) is now two — create and
+// destroy. Switch and clear were replaced by `ppz set handle` and
+// `ppz unset handle`; their replacements are clean. Create and
+// destroy survive because no replacement covers their semantics:
+//
+//   ppz source create HANDLE   — claim a bare actor identity
+//                                 (message-kind source, with inbox
+//                                 auto-pipe). Distinct from
+//                                 `ppz terminal create` (pty pipe
+//                                 set) and `ppz agent create` (agent
+//                                 pipe set + harness).
+//   ppz source destroy PATTERN — glob-destroy sources / pipes. The
+//                                 expressive bits (glob across
+//                                 handles, pipe-pattern matching
+//                                 that crosses source boundaries,
+//                                 clears-current on destroy) aren't
+//                                 covered by `ppz pipe destroy
+//                                 --recursive`.
 func cmdSourceGroup(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source {create|switch|clear} [HANDLE]")
+		fmt.Fprintln(os.Stderr, "usage: ppz source {create|destroy} ...")
 		os.Exit(2)
 	}
 	switch args[0] {
 	case "create":
 		return cmdSourceCreate(args[1:])
-	case "switch":
-		return cmdSourceSwitch(args[1:])
-	case "clear":
-		return cmdSourceClear(args[1:])
 	case "destroy":
 		return cmdSourceDestroy(args[1:])
 	}
@@ -34,17 +46,24 @@ func cmdSourceGroup(args []string) error {
 	return nil
 }
 
-// warnIfEnvOverrides prints a stderr warning when PPZ_CURRENT_HANDLE is
-// set during a mutating "current"-changing command — the daemon-side
-// mutation lands but env still wins for effective resolution. Without
-// the warning, "I just ran `source switch foo` but my broadcasts go to
-// bar" is a confusing afternoon.
-func warnIfEnvOverrides(action string) {
-	if env := os.Getenv("PPZ_CURRENT_HANDLE"); env != "" {
-		fmt.Fprintf(os.Stderr,
-			"warning: PPZ_CURRENT_HANDLE=%s is set; daemon current was %s but env still wins\n",
-			env, action)
+// cmdSourceCreate creates a bare message-kind source (auto-pipe set:
+// inbox only) and sets it as the session's current handle. Strict:
+// errors with E_HANDLE_TAKEN if the handle already exists in the
+// account. Distinct from `ppz terminal create` and `ppz agent create`
+// which provision richer pipe bundles.
+func cmdSourceCreate(args []string) error {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: ppz source create HANDLE")
+		os.Exit(2)
 	}
+	var reply cliproto.CreateReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCCreate,
+		cliproto.CreateRequest{Handle: args[0], Session: sessionID()}, &reply); err != nil {
+		return err
+	}
+	cliproto.PrintCreate(os.Stdout, reply)
+	warnIfHandleEnvOverride("updated")
+	return nil
 }
 
 // cmdSourceDestroy implements `ppz source destroy PATTERN`.
@@ -170,55 +189,4 @@ func resolveDestroyTargets(pattern string, sources []cliproto.Source) ([]string,
 		}
 	}
 	return nil, pipes, nil
-}
-
-// cmdSourceCreate creates a source AND sets it as current. Strict: errors
-// with E_SOURCE_TAKEN if the handle already exists in the org. To point
-// at a pre-existing source, use `ppz source switch HANDLE`.
-func cmdSourceCreate(args []string) error {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source create HANDLE")
-		os.Exit(2)
-	}
-	var reply cliproto.CreateReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCCreate,
-		cliproto.CreateRequest{Handle: args[0], Session: sessionID()}, &reply); err != nil {
-		return err
-	}
-	cliproto.PrintCreate(os.Stdout, reply)
-	warnIfEnvOverrides("updated")
-	return nil
-}
-
-func cmdSourceSwitch(args []string) error {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source switch HANDLE")
-		os.Exit(2)
-	}
-	var reply cliproto.SwitchReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCSwitch,
-		cliproto.SwitchRequest{Handle: args[0], Session: sessionID()}, &reply); err != nil {
-		return err
-	}
-	cliproto.PrintSwitch(os.Stdout, reply)
-	warnIfEnvOverrides("updated")
-	return nil
-}
-
-// cmdSourceClear clears the daemon's current-source binding for this
-// session. Reuses the IPCDisconnect handler — same daemon-side state
-// change, just under the more discoverable `source clear` name.
-func cmdSourceClear(args []string) error {
-	if len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source clear")
-		os.Exit(2)
-	}
-	var reply cliproto.DisconnectReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCDisconnect,
-		cliproto.DisconnectRequest{Session: sessionID()}, &reply); err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stdout, "cleared")
-	warnIfEnvOverrides("cleared")
-	return nil
 }

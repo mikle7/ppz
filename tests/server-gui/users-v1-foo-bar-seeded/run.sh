@@ -26,7 +26,7 @@ bar_db="$(PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc "SELECT id FRO
 echo "--- seeded memberships: foo→alpha, bar→beta ---"
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
   "SELECT u.username || '→' || o.name
-     FROM organisation_members m
+     FROM account_members m
      JOIN users u         ON u.id = m.user_id
-     JOIN organisations o ON o.id = m.organisation_id
+     JOIN accounts o ON o.id = m.account_id
     ORDER BY o.name, u.username"

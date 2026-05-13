@@ -119,14 +119,8 @@ func ValidateUserPipeName(name string) error {
 func ValidateChannel(c string) error { return ValidatePipe(c) }
 
 // Subject builds <org>.<handle>.<pipe>.
-func Subject(orgID uuid.UUID, handle, pipe string) string {
-	return fmt.Sprintf("%s.%s.%s", orgID.String(), handle, pipe)
-}
-
-// Broadcast is the canonical helper for the broadcast channel — preserved
-// for callers that don't think in terms of channels yet.
-func Broadcast(orgID uuid.UUID, handle string) string {
-	return Subject(orgID, handle, "broadcast")
+func Subject(accountID uuid.UUID, handle, pipe string) string {
+	return fmt.Sprintf("%s.%s.%s", accountID.String(), handle, pipe)
 }
 
 // StreamName produces the JetStream stream name per WIRE.md §2:
@@ -134,8 +128,8 @@ func Broadcast(orgID uuid.UUID, handle string) string {
 //	source_<orgshort>_<handle>_<pipe>
 //
 // where orgshort is the first 8 hex chars of the org UUID, hyphens stripped.
-func StreamName(orgID uuid.UUID, handle, pipe string) string {
-	hex := strings.ReplaceAll(orgID.String(), "-", "")
+func StreamName(accountID uuid.UUID, handle, pipe string) string {
+	hex := strings.ReplaceAll(accountID.String(), "-", "")
 	if len(hex) > 8 {
 		hex = hex[:8]
 	}
@@ -144,6 +138,6 @@ func StreamName(orgID uuid.UUID, handle, pipe string) string {
 
 // OrgSubscription is the wildcard subscription used by the server-side
 // subscriber and by the daemon's NATS user JWT permission set.
-func OrgSubscription(orgID uuid.UUID) string {
-	return orgID.String() + ".>"
+func OrgSubscription(accountID uuid.UUID) string {
+	return accountID.String() + ".>"
 }
