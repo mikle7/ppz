@@ -30,6 +30,8 @@ func Run(args []string) error {
 	switch verb {
 	case "daemon":
 		return cmdDaemonGroup(rest)
+	case "source":
+		return cmdSourceGroup(rest)
 	case "pipe":
 		return cmdPipeGroup(rest)
 	case "terminal":
@@ -147,13 +149,25 @@ Setup (once per workstation):
   ppz calls share session state.
 
 Handles (your addressable identities):
-  ppz terminal create HANDLE       create a pty-backed handle (inbox + stdin/stdout/stdctrl pipes) and set as current
-  ppz agent create HANDLE          create an agent handle and run an AI harness in it
-  (ppz set / unset / get land in a follow-up commit — locked decision #20)
+  ppz source create HANDLE         claim a bare message-kind handle
+                                   (auto-pipe: inbox). Use when you want a
+                                   named actor identity without committing
+                                   to a terminal or agent role.
+  ppz terminal create HANDLE       create a pty-backed handle (auto-pipes:
+                                   inbox/stdin/stdout/stdctrl) and set as
+                                   current.
+  ppz agent create HANDLE          create an agent handle and run an AI
+                                   harness in it.
+  ppz source destroy PATTERN       glob-destroy sources or pipes.
+                                   bare pattern → matching sources
+                                   handle.pipe pattern → matching pipes
+                                   glob wildcards: * ? [abc] (path.Match rules)
+                                   examples: destroy '*'  destroy 'agent-*'
+                                             destroy '*.stdout'  destroy apple
 
 Pipes:
   ppz pipe create [HANDLE.]NAME [--ttl=DUR --max-msgs=N --max-bytes=B]
-  ppz pipe destroy [HANDLE.]NAME
+  ppz pipe destroy [HANDLE.]NAME [--recursive]
 
 Terminal:
   ppz terminal share H [-- CMD ...] run CMD (or $SHELL) in a pty bound to H —
