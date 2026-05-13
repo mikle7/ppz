@@ -89,9 +89,41 @@ func TestUsage_MentionsSourceCreateAndDestroy(t *testing.T) {
 	}
 }
 
+// TestUsage_MentionsSetGetUnset asserts the top-level usage text
+// advertises `ppz set/unset/get` as discoverable verbs. Locked
+// decision #20 introduced them as the new daemon-state CLI
+// pattern (replacing `ppz source switch` / `ppz source clear`),
+// but the initial Phase 1 commit added them to dispatch +
+// completion without updating the usage text — so `ppz --help`
+// users can't find them.
+//
+// Found by manual smoke test against a real daemon: `ppz --help |
+// grep "ppz set"` returns nothing.
+func TestUsage_MentionsSetGetUnset(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	usage(w)
+	_ = w.Close()
+	out, _ := io.ReadAll(r)
+	_ = r.Close()
+
+	text := string(out)
+	for _, want := range []string{
+		"ppz set ",
+		"ppz unset ",
+		"ppz get ",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("usage() missing %q — new daemon-state verbs need to be discoverable in --help", want)
+		}
+	}
+}
+
 // TestTopLevelVerbs_IncludesSetGetUnset asserts the new
-// daemon-state CLI pattern surfaces. Locked decision #20:
-// `ppz set [key] [value]`, `ppz unset [key]`, `ppz get [key]`.
+// daemon-state CLI pattern surfaces in completion. Locked decision
+// #20: `ppz set [key] [value]`, `ppz unset [key]`, `ppz get [key]`.
 func TestTopLevelVerbs_IncludesSetGetUnset(t *testing.T) {
 	for _, want := range []string{"set", "unset", "get"} {
 		found := false
