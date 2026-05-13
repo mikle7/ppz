@@ -1,0 +1,13 @@
+--- set (no args) ---
+rc=2
+usage:
+--- set handle (no value) ---
+rc=2
+usage:
+--- unset (no key) ---
+rc=2
+usage:
+--- get (no key) ---
+rc=2
+usage:
+exit=0
