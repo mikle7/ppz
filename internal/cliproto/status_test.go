@@ -27,7 +27,7 @@ func TestPrintStatus_IncludesLastTokenRefreshRelativeTime(t *testing.T) {
 		"daemon: logged in (pid=12953)\n" +
 		"last token refresh: 5 minutes ago\n" +
 		"server: https://pipescloud.io\n" +
-		"org: jamesmiles\n" +
+		"account: jamesmiles\n" +
 		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
@@ -49,7 +49,7 @@ func TestPrintStatus_IncludesMissingLastTokenRefreshPlaceholder(t *testing.T) {
 		"daemon: logged in (pid=12953)\n" +
 		"last token refresh: -\n" +
 		"server: https://pipescloud.io\n" +
-		"org: jamesmiles\n" +
+		"account: jamesmiles\n" +
 		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {
@@ -99,7 +99,7 @@ func TestPrintStatus_ColorsLastTokenRefreshAgeByThreshold(t *testing.T) {
 	}
 }
 
-func TestPrintStatus_ColorsServerAndOrgValuesWhenSet(t *testing.T) {
+func TestPrintStatus_ColorsServerAndAccountValuesWhenSet(t *testing.T) {
 	var b bytes.Buffer
 	PrintStatusWithEnv(&b, StatusReply{
 		DaemonPID: 12953,
@@ -111,7 +111,7 @@ func TestPrintStatus_ColorsServerAndOrgValuesWhenSet(t *testing.T) {
 
 	mustContain := []string{
 		"server: \x1b[32mhttps://pipescloud.io\x1b[0m\n",
-		"org: \x1b[32mjamesmiles\x1b[0m\n",
+		"account: \x1b[32mjamesmiles\x1b[0m\n",
 	}
 	for _, want := range mustContain {
 		if got := b.String(); !bytes.Contains([]byte(got), []byte(want)) {
@@ -135,7 +135,7 @@ func TestPrintStatus_IncludesDaemonVersionMatch(t *testing.T) {
 		"daemon: logged in (pid=12953), v0.18.0 (latest)\n" +
 		"last token refresh: -\n" +
 		"server: https://pipescloud.io\n" +
-		"org: jamesmiles\n" +
+		"account: jamesmiles\n" +
 		"nats: unknown\n" +
 		"current source: foo\n"
 	if got := b.String(); got != want {

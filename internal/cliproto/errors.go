@@ -77,7 +77,7 @@ func Message(c Code) string {
 	case EInvalidAPIKey:
 		return "invalid api key"
 	case ESourceTaken:
-		return "source already exists in this org"
+		return "source already exists in this account"
 	case ESourceNotFound:
 		return "source not found"
 	case EInvalidHandle:
@@ -133,9 +133,9 @@ func NewSourceNotFound(handle string) *Error {
 	return &Error{Code: ESourceNotFound, Message: fmt.Sprintf("source '%s' not found", handle)}
 }
 
-// NewSourceTaken: source 'foo' already exists in this org
+// NewSourceTaken: source 'foo' already exists in this account
 func NewSourceTaken(handle string) *Error {
-	return &Error{Code: ESourceTaken, Message: fmt.Sprintf("source '%s' already exists in this org", handle)}
+	return &Error{Code: ESourceTaken, Message: fmt.Sprintf("source '%s' already exists in this account", handle)}
 }
 
 // NewPipeTaken: pipe 'archive' already exists on source 'foo'

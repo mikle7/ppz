@@ -169,6 +169,21 @@ Pipes:
   ppz pipe create [HANDLE.]NAME [--ttl=DUR --max-msgs=N --max-bytes=B]
   ppz pipe destroy [HANDLE.]NAME [--recursive]
 
+Daemon state (current handle, future settings):
+  ppz set handle HANDLE            switch the daemon's current handle for
+                                   this session. The current handle is
+                                   what gets stamped as 'sender' on
+                                   outgoing envelopes and used as the
+                                   implicit target for bare 'ppz read
+                                   inbox' / 'ppz send TARGET' invocations.
+  ppz unset handle                 clear the daemon's current handle for
+                                   this session. The source row stays —
+                                   only the per-session pointer is cleared.
+  ppz get handle                   print the current handle to stdout.
+                                   Exits 1 with empty output when no
+                                   current is set, so $(ppz get handle)
+                                   can detect "not set" via rc.
+
 Terminal:
   ppz terminal share H [-- CMD ...] run CMD (or $SHELL) in a pty bound to H —
                                     bidirectional: stdout published, stdin
