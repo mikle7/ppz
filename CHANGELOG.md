@@ -18,8 +18,9 @@ in its closed-source control plane.
   auto-provisioned pipe are gone. Teams overwhelmingly use shared "room"
   pipes (e.g. `ppz pipe create team1.room` with implicit `--writers=anyone`),
   not one-to-many announce.
-- **`ppz source`** — `ppz source create/switch/clear/destroy` are gone.
-  See replacements below.
+- **`ppz source switch / clear`** — gone (cleanly replaced; see migration
+  table below). `ppz source create` and `ppz source destroy` *survive*
+  the strip — their semantics aren't covered by other verbs.
 
 ### Renamed (schema + Go types)
 
@@ -64,10 +65,10 @@ in its closed-source control plane.
   |---|---|
   | `ppz org list/switch/create/invite` | (web UI — pipescloud only) |
   | `ppz broadcast HANDLE MSG` | `ppz pipe create HANDLE.room` once, then `ppz send HANDLE.room MSG` |
-  | `ppz source create HANDLE` | `ppz terminal create HANDLE` or `ppz agent create HANDLE` |
+  | `ppz source create HANDLE` | unchanged — `ppz source create HANDLE` (bare actor identity; auto-pipe set is just inbox). For richer pipe bundles, use `ppz terminal create HANDLE` (pty) or `ppz agent create HANDLE` (agent harness). |
   | `ppz source switch HANDLE` | `ppz set handle HANDLE` |
   | `ppz source clear` | `ppz unset handle` |
-  | `ppz source destroy HANDLE` | `ppz pipe destroy --recursive HANDLE` |
+  | `ppz source destroy PATTERN` | unchanged — `ppz source destroy PATTERN` (glob across handles and pipes). For per-handle recursive destroy, `ppz pipe destroy --recursive HANDLE` also works. |
 
 ### Internal / not user-visible
 
