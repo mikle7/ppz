@@ -90,3 +90,40 @@ func TestBuildSubject_RootCollaredMatchesLegacySubject(t *testing.T) {
 			legacy, new4)
 	}
 }
+
+// BuildStreamName produces a unique JetStream stream name from the
+// four-role shape. Manifold dots are replaced with underscores
+// (NATS stream names can't contain dots). Empty manifold/source
+// slots are omitted entirely rather than emitted as empty
+// segments — keeps names short, and manifold/source segments can't
+// contain underscores (handle regex forbids them) so no ambiguity.
+func TestBuildStreamName_FourShapes(t *testing.T) {
+	acct := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	// First 8 hex chars of acct UUID with hyphens stripped.
+	hexShort := "00000000"
+
+	cases := []struct {
+		name     string
+		manifold string
+		source   string
+		pipeName string
+		want     string
+	}{
+		{"root uncollared", "", "", "public", "pipe_" + hexShort + "_public"},
+		{"root collared on cindy", "", "cindy", "inbox", "pipe_" + hexShort + "_cindy_inbox"},
+		{"single-segment manifold uncollared", "team1", "", "room", "pipe_" + hexShort + "_team1_room"},
+		{"single-segment manifold collared", "team1", "cindy", "stdout", "pipe_" + hexShort + "_team1_cindy_stdout"},
+		{"multi-segment manifold uncollared", "proj.team", "", "announcements", "pipe_" + hexShort + "_proj_team_announcements"},
+		{"multi-segment manifold collared", "proj.team", "cindy", "stdout", "pipe_" + hexShort + "_proj_team_cindy_stdout"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := BuildStreamName(acct, tc.manifold, tc.source, tc.pipeName)
+			if got != tc.want {
+				t.Errorf("BuildStreamName(_, %q, %q, %q) = %q, want %q",
+					tc.manifold, tc.source, tc.pipeName, got, tc.want)
+			}
+		})
+	}
+}
