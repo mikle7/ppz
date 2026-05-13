@@ -44,3 +44,17 @@ func TestPipeCreateRequest_HasNullableSourceHandle(t *testing.T) {
 		t.Errorf("PipeCreateRequest.SourceHandle elem = %v, want string", field.Type.Elem())
 	}
 }
+
+// Phase 1.5 Cycle C: StatusReply carries the current namespace so the
+// CLI can render the `namespace: …` line without a second IPC
+// round-trip. Empty string when no namespace is set — same as
+// Current/handle today.
+func TestStatusReply_HasCurrentNamespaceField(t *testing.T) {
+	field, ok := reflect.TypeOf(StatusReply{}).FieldByName("CurrentNamespace")
+	if !ok {
+		t.Fatal("StatusReply.CurrentNamespace field missing — needed for `ppz status` to render the namespace line")
+	}
+	if field.Type.Kind() != reflect.String {
+		t.Errorf("StatusReply.CurrentNamespace type = %v, want string", field.Type)
+	}
+}
