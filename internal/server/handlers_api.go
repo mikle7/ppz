@@ -381,6 +381,18 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 	})
 }
 
+// handleCreatePipeFullPath: POST /api/v1/pipes
+//
+// The Phase 1.5 full-path-aware pipe creation endpoint. Body shape is
+// cliproto.PipeCreateRequest with explicit Manifold + SourceHandle
+// fields. SourceHandle = nil signals an uncollared (sourceless)
+// pipe. The handler logic is plumbed in a follow-up RED→GREEN pair
+// within Cycle B; this stub satisfies the route-mounting RED so that
+// requireAPIKey gates auth as expected.
+func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request, key db.APIKey) {
+	writeErr(w, &cliproto.Error{Code: "E_NOT_IMPLEMENTED", Message: "Phase 1.5: uncollared pipe handler stub — implementation lands in a follow-up commit"})
+}
+
 // handleDestroySource: DELETE /api/v1/sources/{handle}
 //
 // Removes the source row (CASCADE removes pipe rows) then best-effort deletes

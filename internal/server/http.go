@@ -50,6 +50,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("DELETE /api/v1/sources/{handle}", s.requireAPIKey(s.handleDestroySource))
 	mux.HandleFunc("POST /api/v1/sources/{handle}/pipes", s.requireAPIKey(s.handleCreatePipe))
 	mux.HandleFunc("DELETE /api/v1/sources/{handle}/pipes/{name}", s.requireAPIKey(s.handleDestroyPipe))
+	mux.HandleFunc("POST /api/v1/pipes", s.requireAPIKey(s.handleCreatePipeFullPath))
 
 	// Auth V2 Phase 2: device-flow endpoints + GUI verify page.
 	mux.HandleFunc("POST /oauth/device/code", s.handleDeviceCode)
