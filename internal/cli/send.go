@@ -74,11 +74,15 @@ func cmdSend(args []string) error {
 		return cliproto.New(cliproto.EInvalidSubject)
 	}
 
-	idx := strings.LastIndex(target, ".")
-	if idx == -1 {
+	// Phase 1.5: capture the raw bare target before the .inbox sugar.
+	// The daemon uses BareTarget to fall back to uncollared pipe
+	// resolution when the source-handle lookup misses.
+	bareTarget := ""
+	if !strings.Contains(target, ".") {
+		bareTarget = target
 		target += ".inbox"
-		idx = strings.LastIndex(target, ".")
 	}
+	idx := strings.LastIndex(target, ".")
 	if idx <= 0 || idx == len(target)-1 {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
@@ -100,6 +104,7 @@ func cmdSend(args []string) error {
 		cliproto.SendRequest{
 			Handle:       handle,
 			Channel:      channel,
+			BareTarget:   bareTarget,
 			Payload:      payload,
 			MsgSubject:   *subject,
 			InReplyTo:    *inReplyTo,

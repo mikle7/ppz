@@ -730,7 +730,7 @@ func (d *Daemon) handleSend(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.EInvalidSubject))
 		return
 	}
-	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -775,7 +775,7 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 		writeIPC(conn, cliproto.SendBatchReply{})
 		return
 	}
-	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -821,15 +821,60 @@ type sendTarget struct {
 // stale-current cleanup), JetStream stream existence, and ensureNATS.
 // Returns the destination subject + sender id on success. Used by
 // both handleSend (single) and handleSendBatch (N).
-func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, session string) (sendTarget, *cliproto.Error) {
+func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, bareTarget, session string) (sendTarget, *cliproto.Error) {
 	if _, ok := d.State.Credentials(); !ok {
 		return sendTarget{}, cliproto.New(cliproto.ENotLoggedIn)
 	}
+	accountID, err := uuid.Parse(d.State.AccountID())
+	if err != nil {
+		return sendTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad account id"}
+	}
+	// Phase 1.5: bare target → try uncollared first if the user has no
+	// current handle. The CLI sends BareTarget=X when the user typed
+	// `ppz send X "msg"` without a dot. Resolution order:
+	//   1. If a current handle is set (req.Handle != "" from CLI's .inbox
+	//      sugar, but only when there's no other interpretation, OR via
+	//      PPZ_CURRENT_HANDLE / session current), fall through to the
+	//      legacy collared path (today's behaviour: bare X = X's inbox).
+	//   2. Otherwise treat BareTarget as an uncollared pipe at the
+	//      session's current_namespace. Stream existence is the
+	//      authoritative check — if the uncollared stream is there,
+	//      that's the destination.
+	hasCurrentHandle := os.Getenv("PPZ_CURRENT_HANDLE") != "" || d.State.Current(session) != ""
+	if bareTarget != "" && !hasCurrentHandle {
+		if err := natsubj.ValidatePipe(bareTarget); err != nil {
+			return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
+		}
+		manifold := d.State.CurrentNamespace(session)
+		if d.NC == nil || !d.NC.IsConnected() {
+			if err := d.ensureNATS(ctx); err != nil {
+				return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+			}
+		}
+		if js, jsErr := jetstream.New(d.NC); jsErr == nil {
+			if _, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", bareTarget)); err != nil {
+				switch {
+				case errors.Is(err, jetstream.ErrStreamNotFound):
+					return sendTarget{}, cliproto.NewPipeNotFound(bareTarget, "")
+				case errors.Is(err, context.DeadlineExceeded),
+					errors.Is(err, nats.ErrTimeout),
+					errors.Is(err, nats.ErrConnectionClosed),
+					errors.Is(err, nats.ErrNoServers):
+					return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+				default:
+					return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
+				}
+			}
+		}
+		return sendTarget{
+			subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
+			sender:  "", // uncollared publish — no sender identity
+		}, nil
+	}
 	// Resolve target. Explicit handle from the request wins (used by
-	// `ppz send` and by `ppz broadcast` when PPZ_CURRENT_HANDLE is
+	// `ppz send` and by terminal-share when PPZ_CURRENT_HANDLE is
 	// set); otherwise fall back to the calling session's current
-	// handle on .broadcast — different terminal windows have
-	// different "current"s.
+	// handle — different terminal windows have different "current"s.
 	fromCurrent := reqHandle == "" && os.Getenv("PPZ_CURRENT_HANDLE") == ""
 	current := reqHandle
 	if current == "" {
@@ -874,10 +919,6 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, s
 			}
 			return sendTarget{}, cliproto.NewSourceNotFound(current)
 		}
-	}
-	accountID, err := uuid.Parse(d.State.AccountID())
-	if err != nil {
-		return sendTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"}
 	}
 	if d.NC == nil || !d.NC.IsConnected() {
 		if err := d.ensureNATS(ctx); err != nil {

@@ -65,6 +65,12 @@ type ReadRequest struct {
 	Session   string `json:"session,omitempty"`    // cursor key — defaults to "default" daemon-side
 	NoAdvance bool   `json:"no_advance,omitempty"` // observational reads (terminal view) skip cursor advance
 	All       bool   `json:"all,omitempty"`        // forensic mode (`reread`): ignore the cursor (deliver everything) and don't advance it. Implies NoAdvance.
+
+	// Phase 1.5: BareTarget carries the raw user input when `ppz
+	// read/reread LEAF` was bare. The daemon resolves it as an
+	// uncollared pipe at the session's current_namespace. Handle and
+	// Channel are empty in this case.
+	BareTarget string `json:"bare_target,omitempty"`
 }
 
 // ReadEvent is the wire format of one streamed line in a Read response.
@@ -283,10 +289,11 @@ type SendReply struct {
 // the same "bytes confirmed at server" contract as the single
 // IPCSend call, just amortised across the batch.
 type SendBatchRequest struct {
-	Handle   string   `json:"handle,omitempty"`
-	Channel  string   `json:"channel,omitempty"`
-	Payloads []string `json:"payloads"`
-	Session  string   `json:"session,omitempty"`
+	Handle     string   `json:"handle,omitempty"`
+	Channel    string   `json:"channel,omitempty"`
+	BareTarget string   `json:"bare_target,omitempty"` // Phase 1.5: see SendRequest.BareTarget
+	Payloads   []string `json:"payloads"`
+	Session    string   `json:"session,omitempty"`
 }
 
 // SendBatchReply mirrors SendReply but as parallel arrays,
