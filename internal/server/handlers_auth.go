@@ -26,6 +26,25 @@ const sessionTTL = 7 * 24 * time.Hour // 7 days
 
 // ─── /login ─────────────────────────────────────────────────────────
 
+// handleGUILogin dispatches the /login route by Server.AuthMode.
+//
+//   AuthModeNone     — render the upgrade-path panel (login.html).
+//                      Session auto-completion happens when the user
+//                      clicks "Continue to dashboard" → /, which goes
+//                      through requireSession → unauthorized →
+//                      back to /login. To avoid that loop in mode=none,
+//                      /login also writes the session cookie inline
+//                      (when Pool is non-nil — middleware-only unit
+//                      tests can skip the DB hit).
+//   AuthModePassword — render the username/password form
+//                      (login_password.html). POST validation flow
+//                      lands in Cycle F when the Users page mints
+//                      password_hash.
+//   AuthModeOAuth    — delegate to Server.Provider.Authorize().
+//
+// All modes terminate in the same downstream contract: a user_id
+// session cookie. See pipes-internal/docs/PHASE-2-IMPLEMENTATION-PLAN.md
+// Cycle D.
 func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
 	// If already signed in, send them where they were going (or /dashboard).
 	if uid, ok := s.verifyRequestSession(r); ok && uid != uuid.Nil {
@@ -33,10 +52,28 @@ func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, next, http.StatusFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = tmpl.ExecuteTemplate(w, "login.html", map[string]any{
-		"Next": r.URL.Query().Get("next"),
-	})
+
+	switch s.AuthMode {
+	case AuthModeOAuth:
+		s.Provider.Authorize(w, r)
+		return
+	case AuthModePassword:
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = tmpl.ExecuteTemplate(w, "login_password.html", map[string]any{
+			"Next": r.URL.Query().Get("next"),
+		})
+		return
+	default:
+		// AuthModeNone (and any unset zero-value): render the upgrade
+		// panel. Session auto-completion is best-effort: if Pool is
+		// nil (middleware-only unit tests), skip the cookie write
+		// and just render the panel.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = tmpl.ExecuteTemplate(w, "login.html", map[string]any{
+			"Next": r.URL.Query().Get("next"),
+		})
+		return
+	}
 }
 
 // ─── /auth/github/start ────────────────────────────────────────────

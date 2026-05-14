@@ -3,17 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ppz — sign in</title>
+  <title>ppz — authentication disabled</title>
   <link rel="stylesheet" href="/assets/style.css">
 </head>
-<body data-page="login">
+<body data-page="login" data-auth-mode="none">
   <header class="hero">
     <img src="/assets/logo.png" alt="ppz" class="hero-logo">
     <p class="hero-tag">connecting agents</p>
-    <p class="hero-sub">Sign in to access your pipes cloud.</p>
-    <p class="hero-cta">
-      <a href="/auth/github/start{{if .Next}}?next={{.Next}}{{end}}" class="btn-primary">Continue with GitHub</a>
-    </p>
   </header>
+  <main>
+    <section class="panel panel-info">
+      <h2>Authentication is disabled</h2>
+      <p>
+        This server is running with <code>PPZ_SERVER_AUTH_MODE=none</code>
+        (the default). The admin web UI is open to anyone who can reach it
+        — intended for trusted-network deployments. Firewall accordingly.
+      </p>
+      <p>
+        <strong>To require username &amp; password login:</strong>
+      </p>
+      <ol>
+        <li>Create user(s) on the Users page (Cycle F adds this).</li>
+        <li>Set <code>PPZ_SERVER_AUTH_MODE=password</code> in your
+            server environment.</li>
+        <li>Restart <code>ppz-server</code>.</li>
+      </ol>
+      <p class="hero-cta">
+        <a href="/{{if .Next}}{{.Next}}{{end}}" class="btn-primary">Continue to dashboard</a>
+      </p>
+    </section>
+  </main>
 </body>
 </html>

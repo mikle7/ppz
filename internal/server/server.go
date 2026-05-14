@@ -12,6 +12,7 @@ import (
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nkeys"
 
+	"github.com/pipescloud/ppz/internal/auth"
 	"github.com/pipescloud/ppz/internal/db"
 )
 
@@ -90,9 +91,14 @@ type Server struct {
 	DevLogin           bool
 
 	// AuthMode is the parsed PPZ_SERVER_AUTH_MODE env var. Determines
-	// how /login authenticates admin web UI users. Cycle D's dispatcher
-	// reads this field; Cycle C only populates it.
+	// how /login authenticates admin web UI users.
 	AuthMode AuthMode
+
+	// Provider implements the auth_mode=oauth flow. OSS deployments
+	// get an *auth.StubProvider (returns "not configured"); pipescloud
+	// installs its own implementation against the auth.Provider
+	// interface. Always non-nil after Run() — defaults to the stub.
+	Provider auth.Provider
 
 	Version string // set via -ldflags at build time; shown in /healthz and dashboard footer
 }
@@ -142,6 +148,7 @@ func Run(ctx context.Context, cfg Config) error {
 		GitHubUserURL:      defaultIfEmpty(cfg.GitHubUserURL, "https://api.github.com/user"),
 		DevLogin:           cfg.DevLogin,
 		AuthMode:           cfg.AuthMode,
+		Provider:           &auth.StubProvider{},
 		Version:            cfg.Version,
 	}
 	srv.AccountPool = newAccountPool(srv)
