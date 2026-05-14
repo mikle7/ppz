@@ -4,5 +4,5 @@ Location: /login?next=%2Fdashboard
 
 --- /accounts/alpha/pipes without cookie (deep link preserves next=) ---
 status=302
-Location: /login?next=%2Forgs%2Falpha%2Fpipes
+Location: /login?next=%2Faccounts%2Falpha%2Fpipes
 exit=0
