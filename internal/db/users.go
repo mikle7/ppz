@@ -65,10 +65,22 @@ func GetUserByUsername(ctx context.Context, p *Pool, username string) (User, err
 	var u User
 	var mode string
 	err := p.QueryRow(ctx,
-		`SELECT id, username, email, mode, created_at FROM users WHERE username = $1`, username).
-		Scan(&u.ID, &u.Username, &u.Email, &mode, &u.CreatedAt)
+		`SELECT id, username, email, mode, password_hash, created_at FROM users WHERE username = $1`, username).
+		Scan(&u.ID, &u.Username, &u.Email, &mode, &u.PasswordHash, &u.CreatedAt)
 	u.Mode = UserMode(mode)
 	return u, err
+}
+
+// SetUserPasswordHash stores a bcrypt hash on the user row. Used by
+// the Users GUI when the operator sets or resets a password for a
+// user. Pass an empty string to clear (NULL out) the hash.
+func SetUserPasswordHash(ctx context.Context, p *Pool, userID uuid.UUID, hash string) error {
+	if hash == "" {
+		_, err := p.Exec(ctx, `UPDATE users SET password_hash = NULL WHERE id = $1`, userID)
+		return err
+	}
+	_, err := p.Exec(ctx, `UPDATE users SET password_hash = $2 WHERE id = $1`, userID, hash)
+	return err
 }
 
 // UsernamesByIDs resolves a set of user IDs to {id → username}. Used by

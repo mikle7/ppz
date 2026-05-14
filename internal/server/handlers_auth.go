@@ -29,22 +29,14 @@ const sessionTTL = 7 * 24 * time.Hour // 7 days
 // handleGUILogin dispatches the /login route by Server.AuthMode.
 //
 //   AuthModeNone     — render the upgrade-path panel (login.html).
-//                      Session auto-completion happens when the user
-//                      clicks "Continue to dashboard" → /, which goes
-//                      through requireSession → unauthorized →
-//                      back to /login. To avoid that loop in mode=none,
-//                      /login also writes the session cookie inline
-//                      (when Pool is non-nil — middleware-only unit
-//                      tests can skip the DB hit).
-//   AuthModePassword — render the username/password form
-//                      (login_password.html). POST validation flow
-//                      lands in Cycle F when the Users page mints
-//                      password_hash.
+//   AuthModePassword — GET: render the username/password form.
+//                      POST: validate against users.password_hash,
+//                            set session cookie, redirect to next.
 //   AuthModeOAuth    — delegate to Server.Provider.Authorize().
 //
 // All modes terminate in the same downstream contract: a user_id
 // session cookie. See pipes-internal/docs/PHASE-2-IMPLEMENTATION-PLAN.md
-// Cycle D.
+// Cycles D + F.
 func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
 	// If already signed in, send them where they were going (or /dashboard).
 	if uid, ok := s.verifyRequestSession(r); ok && uid != uuid.Nil {
@@ -58,6 +50,10 @@ func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
 		s.Provider.Authorize(w, r)
 		return
 	case AuthModePassword:
+		if r.Method == http.MethodPost {
+			s.handleLoginPasswordPost(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tmpl.ExecuteTemplate(w, "login_password.html", map[string]any{
 			"Next": r.URL.Query().Get("next"),
@@ -74,6 +70,62 @@ func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+}
+
+// handleLoginPasswordPost validates a username/password submission
+// under AuthModePassword. On success: sets the session cookie and
+// 303s to the requested next path. On failure: re-renders the form
+// with an error message. Distinct-error-message is a security
+// trade-off — surfacing "wrong password" vs "unknown user"
+// separately would let a probe enumerate usernames. Both surface
+// as "invalid username or password".
+func (s *Server) handleLoginPasswordPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "parse form", http.StatusBadRequest)
+		return
+	}
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	next := safeNext(r.URL.Query().Get("next"))
+	renderInvalid := func() {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = tmpl.ExecuteTemplate(w, "login_password.html", map[string]any{
+			"Next":  r.URL.Query().Get("next"),
+			"Error": "invalid username or password",
+		})
+	}
+	if username == "" || password == "" {
+		renderInvalid()
+		return
+	}
+	if s.Pool == nil {
+		http.Error(w, "no db pool", http.StatusInternalServerError)
+		return
+	}
+	user, err := db.GetUserByUsername(r.Context(), s.Pool, username)
+	if err != nil {
+		renderInvalid()
+		return
+	}
+	hash := ""
+	if user.PasswordHash != nil {
+		hash = *user.PasswordHash
+	}
+	if !db.VerifyPassword(hash, password) {
+		renderInvalid()
+		return
+	}
+	cookieValue, err := SignSessionCookie(s.SessionKey, SessionPayload{
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(sessionTTL),
+	})
+	if err != nil {
+		http.Error(w, "sign cookie: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.setSessionCookie(w, cookieValue)
+	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
 // ─── /auth/logout ─────────────────────────────────────────────────

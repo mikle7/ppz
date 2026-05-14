@@ -57,6 +57,7 @@ func (s *Server) Routes() *http.ServeMux {
 	// GUI public routes (no auth).
 	mux.HandleFunc("GET /{$}", s.handleGUILanding)
 	mux.HandleFunc("GET /login", s.handleGUILogin)
+	mux.HandleFunc("POST /login", s.handleGUILogin)
 
 	// Auth flow endpoints (publicly accessible; the flow itself is
 	// the gate). Phase 2 Cycle E stripped GitHub-specific routes;

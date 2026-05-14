@@ -10,13 +10,13 @@ import (
 	"github.com/pipescloud/ppz/internal/db"
 )
 
-// handleCreateUser: POST /users (form: username, email, mode).
-// Used by the v1 GUI; v2 replaces this path with the GitHub OAuth
-// callback. Internal-mode users continue to be created here for
-// e2e + non-OAuth flows.
+// handleCreateUser: POST /users (form: username, email, mode, password?).
+// Phase 2 Cycle F: when password is provided, the user is created
+// with users.password_hash set (bcrypt). Omitting password leaves
+// password_hash NULL — the user can't sign in via auth_mode=password
+// until a hash is set.
 //
-// Redirects to /users on success so the new row is visible. API
-// callers (no Referer) get a plain 303 to the same place.
+// Redirects to the Referer on success.
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -25,19 +25,32 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	email := strings.TrimSpace(r.FormValue("email"))
 	mode := db.UserMode(strings.TrimSpace(r.FormValue("mode")))
+	password := r.FormValue("password")
 	if username == "" || email == "" {
 		http.Error(w, "username and email required", http.StatusBadRequest)
 		return
 	}
 	ctx, cancel := withTimeout(r)
 	defer cancel()
-	if _, err := db.InsertUser(ctx, s.Pool, username, email, mode); err != nil {
+	user, err := db.InsertUser(ctx, s.Pool, username, email, mode)
+	if err != nil {
 		if errors.Is(err, db.ErrInvalidUserMode) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if password != "" {
+		hash, err := db.HashPassword(password)
+		if err != nil {
+			http.Error(w, "hash password: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := db.SetUserPasswordHash(ctx, s.Pool, user.ID, hash); err != nil {
+			http.Error(w, "store password: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	browserSubmit(w, r)
 }
