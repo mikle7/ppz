@@ -1,0 +1,4 @@
+send-exit=0
+sent id=ID8 to=foo.inbox bytes=N
+messaging shorthand
+exit=0

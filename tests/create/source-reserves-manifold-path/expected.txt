@@ -1,0 +1,3 @@
+error: E_NAME_TAKEN: manifold path 'team1' is reserved by source 'team1' at root
+exit2=21
+exit=0

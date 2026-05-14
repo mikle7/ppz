@@ -1,0 +1,4 @@
+created pipe=team-a.foo retention=ttl=24h0m0s,msgs=5000,bytes=16777216
+foo.inbox
+team-a.foo
+exit=0
