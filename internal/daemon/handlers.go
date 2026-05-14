@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -596,6 +597,10 @@ func (d *Daemon) handleSourceDestroy(ctx context.Context, conn net.Conn, params 
 }
 
 // handlePipeDestroy proxies `ppz pipe destroy` to the server.
+//
+// Phase 1.5 routing: BareTarget set + no Handle → uncollared destroy
+// via DELETE /api/v1/pipes; otherwise collared destroy via the legacy
+// per-source path.
 func (d *Daemon) handlePipeDestroy(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	var req cliproto.PipeDestroyRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -606,6 +611,27 @@ func (d *Daemon) handlePipeDestroy(ctx context.Context, conn net.Conn, params js
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+
+	if req.Handle == "" && req.BareTarget != "" {
+		// Uncollared destroy.
+		if err := natsubj.ValidatePipe(req.BareTarget); err != nil {
+			writeIPCErr(conn, cliproto.New(cliproto.EInvalidPipe))
+			return
+		}
+		manifold := d.State.CurrentNamespace(req.Session)
+		q := url.Values{}
+		q.Set("name", req.BareTarget)
+		if manifold != "" {
+			q.Set("manifold", manifold)
+		}
+		if e := d.callServer(ctx, "DELETE", "/api/v1/pipes?"+q.Encode(), nil, nil); e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
+		writeIPC(conn, cliproto.PipeDestroyReply{Manifold: manifold, Name: req.BareTarget})
+		return
+	}
+
 	if err := natsubj.ValidateHandle(req.Handle); err != nil {
 		writeIPCErr(conn, cliproto.New(cliproto.EInvalidHandle))
 		return
@@ -1009,7 +1035,63 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
-	writeIPC(conn, cliproto.ListReply{Sources: enriched})
+	// Phase 1.5: append uncollared (sourceless) pipes. Walking sources
+	// alone misses them; the server's GET /api/v1/pipes lists them
+	// explicitly.
+	var ucReply cliproto.ListUncollaredPipesReply
+	if e := d.callServer(ctx, "GET", "/api/v1/pipes", nil, &ucReply); e != nil {
+		writeIPCErr(conn, e)
+		return
+	}
+	uncollared := make([]cliproto.UncollaredPipe, 0, len(ucReply.Pipes))
+	for _, p := range ucReply.Pipes {
+		info := uncollaredPipeInfo(ctx, js, accountID, p.Manifold, p.Name, req.Session, d.Cursors)
+		info.CreatedBy = p.CreatedBy
+		uncollared = append(uncollared, cliproto.UncollaredPipe{
+			Manifold: p.Manifold,
+			Name:     p.Name,
+			Info:     info,
+		})
+	}
+
+	writeIPC(conn, cliproto.ListReply{Sources: enriched, UncollaredPipes: uncollared})
+}
+
+// uncollaredPipeInfo gathers JetStream stats for one uncollared pipe.
+// Mirrors the per-pipe enrichment in enrichSourcesWithPipeInfo but
+// scoped to a sourceless stream. Phase 1.5.
+func uncollaredPipeInfo(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, name, session string, cursors *cursors) cliproto.PipeInfo {
+	info := cliproto.PipeInfo{Pipe: cliproto.FormatPipePath(manifold, "", name)}
+	stream, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", name))
+	if err != nil {
+		return info
+	}
+	sInfo, err := stream.Info(ctx)
+	if err != nil {
+		return info
+	}
+	info.Total = sInfo.State.Msgs
+	info.LastSeq = sInfo.State.LastSeq
+	// Cursor key matches handleRead's uncollared form.
+	cursorKey := "uncollared:" + natsubj.BuildSubject(accountID, manifold, "", name)
+	cursor := cursors.Get(session, cursorKey)
+	if sInfo.State.LastSeq > cursor {
+		info.Unread = sInfo.State.LastSeq - cursor
+	}
+	// Best-effort preview/last-payload: fetch the last message if any.
+	if sInfo.State.LastSeq > 0 {
+		if rawMsg, err := stream.GetMsg(ctx, sInfo.State.LastSeq); err == nil && rawMsg != nil {
+			if env, perr := envelope.Unmarshal(rawMsg.Data); perr == nil {
+				info.Payload = env.Payload
+				info.Preview = cliproto.TruncatePayload(env.Payload)
+				if !rawMsg.Time.IsZero() {
+					t := rawMsg.Time
+					info.LastAt = &t
+				}
+			}
+		}
+	}
+	return info
 }
 
 // pipesForKind mirrors db.Source.Pipes() at the daemon level so we don't

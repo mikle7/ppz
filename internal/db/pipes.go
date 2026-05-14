@@ -117,3 +117,42 @@ func DeletePipe(ctx context.Context, p *Pool, sourceID uuid.UUID, name string) e
 	}
 	return nil
 }
+
+// DeleteUncollaredPipe removes an uncollared pipe row by (account, manifold,
+// name). Stream cleanup is the caller's responsibility. Phase 1.5.
+func DeleteUncollaredPipe(ctx context.Context, p *Pool, accountID uuid.UUID, manifold, name string) error {
+	tag, err := p.Exec(ctx,
+		`DELETE FROM pipes WHERE account_id = $1 AND manifold = $2 AND name = $3 AND source_id IS NULL`,
+		accountID, manifold, name)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListUncollaredPipesForAccount returns every uncollared pipe row in the
+// account, sorted (manifold, name). Used by `ppz ls` to surface the
+// sourceless rows that walking sources alone misses. Phase 1.5.
+func ListUncollaredPipesForAccount(ctx context.Context, p *Pool, accountID uuid.UUID) ([]Pipe, error) {
+	rows, err := p.Query(ctx,
+		`SELECT id, account_id, manifold, source_id, created_by_user_id, name, ttl_seconds, max_msgs, max_bytes, created_at
+		   FROM pipes WHERE account_id = $1 AND source_id IS NULL
+		   ORDER BY manifold ASC, name ASC`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Pipe
+	for rows.Next() {
+		var pipe Pipe
+		if err := rows.Scan(&pipe.ID, &pipe.AccountID, &pipe.Manifold, &pipe.SourceID, &pipe.CreatedByUserID, &pipe.Name,
+			&pipe.TTLSeconds, &pipe.MaxMsgs, &pipe.MaxBytes, &pipe.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, pipe)
+	}
+	return out, rows.Err()
+}

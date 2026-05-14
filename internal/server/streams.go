@@ -76,6 +76,19 @@ func deletePipeStream(ctx context.Context, js jetstream.JetStream, accountID uui
 	return nil
 }
 
+// deleteUncollaredPipeStream removes the JetStream stream backing an
+// uncollared pipe (source="" — sourceless). Idempotent. Phase 1.5.
+func deleteUncollaredPipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, name string) error {
+	streamName := natsubj.BuildStreamName(accountID, manifold, "", name)
+	if err := js.DeleteStream(ctx, streamName); err != nil {
+		if errors.Is(err, jetstream.ErrStreamNotFound) {
+			return nil
+		}
+		return fmt.Errorf("delete stream %s: %w", streamName, err)
+	}
+	return nil
+}
+
 // ensurePipeStreamPhase15 is the four-role variant — used by the new
 // POST /api/v1/pipes endpoint for sourceless (and future manifold-
 // aware) pipes. source="" means uncollared. manifold="" means root.

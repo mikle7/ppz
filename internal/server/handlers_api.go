@@ -470,6 +470,90 @@ func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// handleListUncollaredPipes: GET /api/v1/pipes
+//
+// Returns every sourceless (source_id IS NULL) pipe row in the caller's
+// account. The collared rows still come through /api/v1/sources joins;
+// this endpoint surfaces what walking sources alone misses. Phase 1.5.
+func (s *Server) handleListUncollaredPipes(w http.ResponseWriter, r *http.Request, key db.APIKey) {
+	ctx, cancel := withTimeout(r)
+	defer cancel()
+	rows, err := db.ListUncollaredPipesForAccount(ctx, s.Pool, key.AccountID)
+	if err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	// Resolve creators in one batch. The CLI's `ppz ls` renders this in
+	// the CREATOR column.
+	idSet := make(map[uuid.UUID]struct{}, len(rows))
+	for _, p := range rows {
+		idSet[p.CreatedByUserID] = struct{}{}
+	}
+	ids := make([]uuid.UUID, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	creators, err := db.UsernamesByIDs(ctx, s.Pool, ids)
+	if err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	out := make([]cliproto.UncollaredPipeListEntry, 0, len(rows))
+	for _, p := range rows {
+		out = append(out, cliproto.UncollaredPipeListEntry{
+			Manifold:  p.Manifold,
+			Name:      p.Name,
+			CreatedBy: creators[p.CreatedByUserID],
+		})
+	}
+	writeJSON(w, http.StatusOK, cliproto.ListUncollaredPipesReply{Pipes: out})
+}
+
+// handleDestroyUncollaredPipe: DELETE /api/v1/pipes?manifold=M&name=N
+//
+// Removes the uncollared pipe row + its JetStream stream. Idempotent on
+// missing stream (row is the source of truth). Phase 1.5.
+func (s *Server) handleDestroyUncollaredPipe(w http.ResponseWriter, r *http.Request, key db.APIKey) {
+	manifold := r.URL.Query().Get("manifold")
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		writeErr(w, cliproto.New(cliproto.EInvalidPipe))
+		return
+	}
+	if err := natsubj.ValidateUserPipeName(name); err != nil {
+		writeErr(w, cliproto.NewInvalidPipeName(name))
+		return
+	}
+	if manifold != "" {
+		for _, seg := range strings.Split(manifold, ".") {
+			if err := natsubj.ValidateHandle(seg); err != nil {
+				writeErr(w, &cliproto.Error{Code: "E_INVALID_MANIFOLD", Message: "manifold segment invalid: " + seg})
+				return
+			}
+		}
+	}
+	ctx, cancel := withTimeout(r)
+	defer cancel()
+	if err := db.DeleteUncollaredPipe(ctx, s.Pool, key.AccountID, manifold, name); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeErr(w, cliproto.NewPipeNotFound(name, ""))
+			return
+		}
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	js, err := s.JSFor(ctx, key.AccountID)
+	if err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "account: " + err.Error()})
+		return
+	}
+	if err := deleteUncollaredPipeStream(ctx, js, key.AccountID, manifold, name); err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleDestroySource: DELETE /api/v1/sources/{handle}
 //
 // Removes the source row (CASCADE removes pipe rows) then best-effort deletes

@@ -128,21 +128,32 @@ func cmdPipeDestroy(args []string) error {
 		return nil
 	}
 
-	handle, name, err := splitHandleName(rest[0])
-	if err != nil {
-		return cliproto.New(cliproto.EInvalidPipe)
-	}
-	if handle == "" {
-		resolved, err := effectiveCurrentHandle()
-		if err != nil {
-			return err
+	// Phase 1.5: branch on dotted-vs-bare. Bare names with no current
+	// handle resolve as uncollared at the session's current namespace
+	// (daemon-side); the CLI just forwards the raw name as BareTarget.
+	target := rest[0]
+	var handle, name, bareTarget string
+	if !strings.Contains(target, ".") {
+		bareTarget = target
+		// Legacy collared path still works when a current handle is set;
+		// best-effort resolve so the daemon doesn't have to guess. If
+		// no current handle, leave handle empty and the daemon takes
+		// the uncollared path.
+		if resolved, err := effectiveCurrentHandle(); err == nil {
+			handle = resolved
+			name = target
 		}
-		handle = resolved
+	} else {
+		h, n, err := splitHandleName(target)
+		if err != nil {
+			return cliproto.New(cliproto.EInvalidPipe)
+		}
+		handle, name = h, n
 	}
 
 	var reply cliproto.PipeDestroyReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCPipeDestroy,
-		cliproto.PipeDestroyRequest{Handle: handle, Name: name}, &reply); err != nil {
+		cliproto.PipeDestroyRequest{Handle: handle, Name: name, BareTarget: bareTarget, Session: sessionID()}, &reply); err != nil {
 		return err
 	}
 	cliproto.PrintPipeDestroy(os.Stdout, reply)

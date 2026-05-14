@@ -321,6 +321,12 @@ type listRow struct {
 // trailing un-padded, but CREATOR now needs vertical alignment so PAYLOAD
 // pads to its widest preview — bounded at 60 chars by TruncatePayload).
 func PrintList(w io.Writer, sources []Source, iso bool) {
+	PrintListWithUncollared(w, sources, nil, iso)
+}
+
+// PrintListWithUncollared renders the same table as PrintList but also
+// includes uncollared (sourceless) pipes. Phase 1.5.
+func PrintListWithUncollared(w io.Writer, sources []Source, uncollared []UncollaredPipe, iso bool) {
 	now := timeNow()
 	rows := make([]listRow, 0)
 	for _, s := range sources {
@@ -335,6 +341,16 @@ func PrintList(w io.Writer, sources []Source, iso bool) {
 			})
 		}
 	}
+	for _, p := range uncollared {
+		rows = append(rows, listRow{
+			pipeColumn: FormatPipePath(p.Manifold, "", p.Name),
+			unread:     p.Info.Unread,
+			buffered:   p.Info.Total,
+			last:       lastColumn(p.Info.LastAt, now, iso),
+			payload:    payloadColumn(p.Info.Preview),
+			creator:    p.Info.CreatedBy,
+		})
+	}
 	writeListTable(w, rows)
 }
 
@@ -346,6 +362,12 @@ func PrintList(w io.Writer, sources []Source, iso bool) {
 // `creator` carries the same username the table shows: pipe-level if set,
 // otherwise the source's creator (auto-pipe inheritance).
 func PrintListJSON(w io.Writer, sources []Source) {
+	PrintListJSONWithUncollared(w, sources, nil)
+}
+
+// PrintListJSONWithUncollared is the JSON variant including uncollared
+// pipes. Phase 1.5.
+func PrintListJSONWithUncollared(w io.Writer, sources []Source, uncollared []UncollaredPipe) {
 	for _, s := range sources {
 		for _, p := range s.PipeInfos {
 			obj := map[string]any{
@@ -354,7 +376,7 @@ func PrintListJSON(w io.Writer, sources []Source) {
 				"total":   p.Total,
 				"unread":  p.Unread,
 				"payload": p.Payload,
-				"creator":   humanColumn(p.CreatedBy, s.CreatedBy),
+				"creator": humanColumn(p.CreatedBy, s.CreatedBy),
 			}
 			if p.LastAt != nil {
 				obj["last_at"] = p.LastAt.UTC().Format(time.RFC3339)
@@ -364,6 +386,24 @@ func PrintListJSON(w io.Writer, sources []Source) {
 			line, _ := json.Marshal(obj)
 			fmt.Fprintln(w, string(line))
 		}
+	}
+	for _, p := range uncollared {
+		obj := map[string]any{
+			"handle":   "",
+			"manifold": p.Manifold,
+			"pipe":     p.Name,
+			"total":    p.Info.Total,
+			"unread":   p.Info.Unread,
+			"payload":  p.Info.Payload,
+			"creator":  p.Info.CreatedBy,
+		}
+		if p.Info.LastAt != nil {
+			obj["last_at"] = p.Info.LastAt.UTC().Format(time.RFC3339)
+		} else {
+			obj["last_at"] = nil
+		}
+		line, _ := json.Marshal(obj)
+		fmt.Fprintln(w, string(line))
 	}
 }
 

@@ -367,6 +367,31 @@ type ListWatchRequest struct {
 
 type ListReply struct {
 	Sources []Source `json:"sources"`
+	// Phase 1.5: uncollared (sourceless) pipes — pipes with source_id IS
+	// NULL. Walking sources alone misses them. The daemon enriches each
+	// row with JetStream stats the same way it does PipeInfos.
+	UncollaredPipes []UncollaredPipe `json:"uncollared_pipes,omitempty"`
+}
+
+// UncollaredPipe is the wire projection of a sourceless pipe row + its
+// JetStream stats. Phase 1.5.
+type UncollaredPipe struct {
+	Manifold string `json:"manifold,omitempty"` // '' = root namespace
+	Name     string `json:"name"`
+	Info     PipeInfo `json:"info"`
+}
+
+// ListUncollaredPipesReply is the server response for GET /api/v1/pipes
+// (uncollared listing). One entry per sourceless pipe in the account.
+// Phase 1.5.
+type ListUncollaredPipesReply struct {
+	Pipes []UncollaredPipeListEntry `json:"pipes"`
+}
+
+type UncollaredPipeListEntry struct {
+	Manifold  string `json:"manifold,omitempty"`
+	Name      string `json:"name"`
+	CreatedBy string `json:"created_by,omitempty"`
 }
 
 // Server HTTP types.
@@ -483,11 +508,17 @@ type PipeCreateReply struct {
 type PipeDestroyRequest struct {
 	Handle string `json:"handle"`
 	Name   string `json:"name"`
+	// Phase 1.5: BareTarget set by the CLI when the user typed
+	// `ppz pipe destroy LEAF` without a dot. Daemon resolves as an
+	// uncollared pipe at the session's current namespace.
+	BareTarget string `json:"bare_target,omitempty"`
+	Session    string `json:"session,omitempty"`
 }
 
 type PipeDestroyReply struct {
-	Handle string `json:"handle"`
-	Name   string `json:"name"`
+	Handle   string `json:"handle"`
+	Manifold string `json:"manifold,omitempty"` // Phase 1.5: present for uncollared destroys
+	Name     string `json:"name"`
 }
 
 type SourceDestroyRequest struct {
