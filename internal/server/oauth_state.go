@@ -1,10 +1,14 @@
 package server
 
-// OAuth `state` parameter — the CSRF token we hand to GitHub at
-// /auth/github/start and verify when the user comes back through
-// /auth/github/callback. The state blob also round-trips an opaque
-// `next` URL so the callback can redirect to the page the user was
-// originally trying to reach.
+// OAuth `state` parameter — the CSRF token a Provider implementation
+// hands to its upstream authorize endpoint and verifies on callback.
+// The state blob also round-trips an opaque `next` URL so the callback
+// can redirect to the page the user was originally trying to reach.
+//
+// Phase 2 Cycle E stripped the GitHub-specific authorize/callback
+// handlers; these helpers stay so any out-of-tree Provider (e.g.
+// pipescloud's) can reuse the same CSRF + replay-protection logic
+// without re-implementing it.
 //
 // Wire format: base64url(payload-json) + "." + base64url(hmac-sha256(payload, key))
 // Payload: {"n":"<nonce>","r":"<next-path>","exp":<unix>}

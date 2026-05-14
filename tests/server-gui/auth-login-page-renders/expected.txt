@@ -1,7 +1,9 @@
 --- login page identifier ---
 data-page="login"
---- GitHub auth link present ---
-href="/auth/github/start"
---- CTA copy ---
-Continue with GitHub
+--- auth mode ---
+data-auth-mode="none"
+--- upgrade path mentions PPZ_SERVER_AUTH_MODE ---
+PPZ_SERVER_AUTH_MODE
+--- continue link ---
+Continue to dashboard
 exit=0

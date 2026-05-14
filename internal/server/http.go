@@ -59,9 +59,9 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /login", s.handleGUILogin)
 
 	// Auth flow endpoints (publicly accessible; the flow itself is
-	// the gate).
-	mux.HandleFunc("GET /auth/github/start", s.handleAuthGitHubStart)
-	mux.HandleFunc("GET /auth/github/callback", s.handleAuthGitHubCallback)
+	// the gate). Phase 2 Cycle E stripped GitHub-specific routes;
+	// /login dispatches by AuthMode and oauth mode delegates to
+	// Server.Provider.
 	mux.HandleFunc("POST /auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("POST /dev/login", s.handleDevLogin) // gated by s.DevLogin internally
 

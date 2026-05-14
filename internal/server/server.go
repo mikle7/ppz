@@ -32,16 +32,6 @@ type Config struct {
 	// "https://pipescloud.io" or "http://localhost:8080".
 	BaseURL string
 
-	// GitHub OAuth config. Real values come from .env.local (dev) or
-	// AWS Secrets Manager (prod). The three URL fields default to
-	// real-GitHub if empty; the e2e stack overrides them to point at
-	// the mock-github container.
-	GitHubClientID     string
-	GitHubClientSecret string
-	GitHubAuthorizeURL string
-	GitHubTokenURL     string
-	GitHubUserURL      string
-
 	// DevLogin enables POST /dev/login?user=<seed-user> for tests.
 	// MUST be false in production.
 	DevLogin bool
@@ -82,13 +72,8 @@ type Server struct {
 	NATSResolver   natsserver.AccountResolver // for runtime account JWT registration
 	NATSClientURL  string                    // for AccountPool.openAccount
 
-	BaseURL            string
-	GitHubClientID     string
-	GitHubClientSecret string
-	GitHubAuthorizeURL string
-	GitHubTokenURL     string
-	GitHubUserURL      string
-	DevLogin           bool
+	BaseURL  string
+	DevLogin bool
 
 	// AuthMode is the parsed PPZ_SERVER_AUTH_MODE env var. Determines
 	// how /login authenticates admin web UI users.
@@ -141,11 +126,6 @@ func Run(ctx context.Context, cfg Config) error {
 		NATSResolver:       ns.AccountResolver(),
 		NATSClientURL:      ns.ClientURL(),
 		BaseURL:            cfg.BaseURL,
-		GitHubClientID:     cfg.GitHubClientID,
-		GitHubClientSecret: cfg.GitHubClientSecret,
-		GitHubAuthorizeURL: defaultIfEmpty(cfg.GitHubAuthorizeURL, "https://github.com/login/oauth/authorize"),
-		GitHubTokenURL:     defaultIfEmpty(cfg.GitHubTokenURL, "https://github.com/login/oauth/access_token"),
-		GitHubUserURL:      defaultIfEmpty(cfg.GitHubUserURL, "https://api.github.com/user"),
 		DevLogin:           cfg.DevLogin,
 		AuthMode:           cfg.AuthMode,
 		Provider:           &auth.StubProvider{},

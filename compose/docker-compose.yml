@@ -20,19 +20,6 @@ services:
       retries: 30
     networks: [ppz]
 
-  mock-github:
-    build:
-      context: ..
-      dockerfile: compose/Dockerfile.mock-github
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/healthz | grep -q ok"]
-      interval: 1s
-      timeout: 3s
-      retries: 30
-    ports:
-      - "9000:9000"   # exposed so the host browser can hit the OAuth authorize page
-    networks: [ppz]
-
   ppz-server:
     build:
       context: ..
@@ -47,28 +34,15 @@ services:
       # PPZ_NATS_PUBLIC_URL to override.
       PPZ_SEED: "true"
       PPZ_SEED_DIR: /seed
-      # Auth V2: GitHub URLs point at mock-github so e2e tests exercise
-      # the full OAuth flow without real github.com. Production sets
-      # none of these → defaults to real GitHub.
-      # BASE_URL + AUTHORIZE_URL use docker-internal hostnames so the
-      # in-network e2e suite can follow OAuth redirects via `curl -L`.
-      # mock-github's port is exposed on :9000 of the host so a human
-      # reviewer can also drive the flow in a browser — but doing so
-      # requires `127.0.0.1 mock-github ppz-server` in /etc/hosts so the
-      # docker hostnames resolve from the host. Without that, use
-      # `/dev/login` (PPZ_DEV_LOGIN is true below) to skip OAuth.
+      # Phase 2 Cycle E stripped GitHub OAuth from OSS; auth_mode is
+      # the new knob. e2e runs in auth_mode=none with PPZ_DEV_LOGIN
+      # for session setup.
       PPZ_BASE_URL: "http://ppz-server:8080"
-      PPZ_GITHUB_CLIENT_ID: "test-client"
-      PPZ_GITHUB_CLIENT_SECRET: "test-secret"
-      PPZ_GITHUB_AUTHORIZE_URL: "http://mock-github:9000/login/oauth/authorize"
-      PPZ_GITHUB_TOKEN_URL: "http://mock-github:9000/login/oauth/access_token"
-      PPZ_GITHUB_USER_URL: "http://mock-github:9000/user"
       PPZ_SESSION_KEY: "compose-test-session-key-32-bytes-x"
       PPZ_DEV_LOGIN: "true"
+      PPZ_SERVER_AUTH_MODE: "none"
     depends_on:
       postgres:
-        condition: service_healthy
-      mock-github:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz | grep -q ok"]

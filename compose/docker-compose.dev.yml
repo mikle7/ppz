@@ -1,21 +1,13 @@
-# Overlay for local-OAuth manual testing — used by `make dev`.
+# Overlay for local manual testing — used by `make dev`.
 #
-# Swaps the mock-github URLs (which the base file hardcodes for e2e)
-# for real github.com endpoints. Secrets come from .env.local at the
-# repo root via `--env-file` on the compose CLI; we reference them with
-# ${VAR} substitution so they explicitly override the base file's
-# `environment:` block (which beats `env_file:` in compose precedence).
-#
-# mock-github still appears in depends_on (compose merges depends_on
-# from both files) — that's fine, it just sits idle since the URL
-# override means ppz-server never hits it.
+# Phase 2 Cycle E stripped GitHub OAuth from OSS. For local manual
+# testing the server runs in auth_mode=none and skipped-session-check
+# via PPZ_DEV_LOGIN. Production deployments that want OAuth use
+# auth_mode=oauth with an out-of-tree Provider implementation
+# (pipescloud's, for example).
 services:
   ppz-server:
     environment:
       PPZ_BASE_URL: "http://localhost:8080"
-      PPZ_GITHUB_CLIENT_ID: ${PPZ_GITHUB_CLIENT_ID}
-      PPZ_GITHUB_CLIENT_SECRET: ${PPZ_GITHUB_CLIENT_SECRET}
       PPZ_SESSION_KEY: ${PPZ_SESSION_KEY}
-      PPZ_GITHUB_AUTHORIZE_URL: "https://github.com/login/oauth/authorize"
-      PPZ_GITHUB_TOKEN_URL: "https://github.com/login/oauth/access_token"
-      PPZ_GITHUB_USER_URL: "https://api.github.com/user"
+      PPZ_SERVER_AUTH_MODE: "none"
