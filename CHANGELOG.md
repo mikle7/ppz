@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.32.0 — Auth surface restructure + /orgs → /accounts rename (Phase 2)
+
+**Breaking release.** Pre-launch schema bump + URL surface change — cutover via Reset Database action then redeploy.
+
+Restructures admin-UI authentication around an env-var-driven mode (`PPZ_SERVER_AUTH_MODE`), strips the GitHub-specific OAuth implementation, and renames `/orgs/*` and `/api/v1/orgs/*` to `/accounts/*` (the deferred Phase 1 GUI drift).
+
+### New
+
+- **`PPZ_SERVER_AUTH_MODE` env var** — three modes:
+  - `none` (default) — admin web UI is unauthenticated; intended for trusted-network deploys.
+  - `password` — username/password form against `users.password_hash`.
+  - `oauth` — delegates to an out-of-tree `auth.Provider` implementation (pipescloud's, etc.). OSS ships a stub provider that returns "not configured".
+  Invalid values fail boot loudly.
+- **`/login` is now a mode dispatcher.** Three rendering paths, one downstream session-cookie contract.
+- **Password-mode auth path** — `POST /users` accepts an optional `password` form value (bcrypt cost 10); `POST /login` validates against `users.password_hash`.
+- **`db.HashPassword` / `db.VerifyPassword`** — bcrypt helpers wrapping `golang.org/x/crypto/bcrypt`.
+- **`db.SetUserPasswordHash`** — store/clear a user's password hash from the GUI.
+- **`internal/auth.Provider`** interface — the OSS-facing contract pipescloud implements out-of-tree.
+
+### Renamed
+
+- **All `/orgs/*` and `/api/v1/orgs/*` routes → `/accounts/*` and `/api/v1/accounts/*`.** Handler method names, template files, e2e fixtures, and doc comments follow. Pipescloud's customer-facing concept stays "organisation" per the OSS/SaaS split — the marketing landing page is exempt and keeps `ppz.cloud/orgs/...` URLs.
+- Templates: `org.html` → `account.html`; all visible "Organisation"/"organisation" text → "Account"/"account".
+
+### Removed
+
+- **GitHub OAuth implementation** stripped from OSS. `handleAuthGitHubStart`, `handleAuthGitHubCallback`, the `/auth/github/*` routes, the `PPZ_GITHUB_*` env reads, the GitHub config fields on Server + Config, and the e2e `mock-github` service are all gone. Out-of-tree provider implementations (e.g. pipescloud's) plug in via `internal/auth.Provider`.
+- **Templates:** the "Continue with GitHub" CTA. The new `login.html` is an upgrade-path informational panel for `mode=none`; `login_password.html` is the form for `mode=password`.
+- **e2e tests** specific to the GitHub OAuth flow (`auth-callback-creates-user-and-org`, `auth-callback-returning-user`, `auth-state-csrf-rejected`). `auth-login-page-renders` migrated to assert the new `mode=none` panel.
+
+### Schema
+
+- `users.password_hash text` (nullable) — added by migration `0003_password_hash.sql`. NULL on existing rows; NULL means "this user can't sign in via password".
+
+### Cutover
+
+Pre-launch schema bump. Same sequence as v0.31.x:
+
+1. Reset Database action — drops + recreates production DB, ppz-server stopped.
+2. Deploy v0.32.0 — `systemctl restart` brings up the new binary against the empty DB; baseline + 0002 + 0003 migrations run cleanly.
+3. Smoke-test.
+
+See `pipes-internal/docs/PHASE-2-IMPLEMENTATION-PLAN.md` for the full TDD cycle log and `pipes-internal/docs/OSS-PIPESCLOUD-ARCHITECTURE-SPLIT.md` for the strategic context.
+
 ## v0.31.1 — Strict bare rule + first-wins collisions (Phase 1.5.1)
 
 **Breaking release.** Wire-level stream naming changed — cutover via Reset Database action then redeploy.
