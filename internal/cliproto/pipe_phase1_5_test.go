@@ -43,6 +43,13 @@ func TestPipeCreateRequest_HasNullableSourceHandle(t *testing.T) {
 	if field.Type.Elem().Kind() != reflect.String {
 		t.Errorf("PipeCreateRequest.SourceHandle elem = %v, want string", field.Type.Elem())
 	}
+	// Pin the JSON tag too — the omitempty + pointer combination is what
+	// distinguishes "uncollared" (field omitted) from "explicit empty
+	// source handle" on the wire. Drift on either would change the wire
+	// shape silently.
+	if tag := field.Tag.Get("json"); tag != "source_handle,omitempty" {
+		t.Errorf("PipeCreateRequest.SourceHandle json tag = %q, want source_handle,omitempty", tag)
+	}
 }
 
 // Phase 1.5 Cycle C: StatusReply carries the current namespace so the

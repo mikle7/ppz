@@ -115,7 +115,8 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		switch {
 		case errors.Is(err, jetstream.ErrStreamNotFound):
 			if uncollared {
-				writeReadErr(conn, cliproto.NewPipeNotFound(req.BareTarget, ""))
+				manifold := d.State.CurrentNamespace(req.Session)
+				writeReadErr(conn, cliproto.NewUncollaredPipeNotFound(req.BareTarget, manifold))
 			} else {
 				writeReadErr(conn, cliproto.NewPipeNotFound(req.Channel, req.Handle))
 			}
@@ -175,10 +176,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// stream. NoAdvance is implied by All; cursor never moves under reread.
 	cursorKey := daemonCursorKey(accountID, req.Handle, req.Channel)
 	if uncollared {
-		// Cursor key for uncollared pipes uses the full subject path so
-		// multiple uncollared pipes with the same leaf-name across
-		// manifolds don't collide.
-		cursorKey = "uncollared:" + filterSubject
+		cursorKey = uncollaredCursorKey(filterSubject)
 	}
 	startSeq := info.State.FirstSeq
 	if !req.All && info.State.Msgs > 0 {

@@ -398,13 +398,13 @@ func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if req.Handle != "" || (req.SourceHandle != nil && *req.SourceHandle != "") {
-		writeErr(w, &cliproto.Error{Code: "E_INVALID", Message: "collared pipes go to POST /api/v1/sources/{handle}/pipes"})
+		writeErr(w, &cliproto.Error{Code: cliproto.EInvalidPipe, Message: "POST /api/v1/pipes is the uncollared (sourceless) endpoint; for collared pipes use POST /api/v1/sources/{handle}/pipes"})
 		return
 	}
 	if req.Manifold != "" {
 		for _, seg := range strings.Split(req.Manifold, ".") {
 			if err := natsubj.ValidateHandle(seg); err != nil {
-				writeErr(w, &cliproto.Error{Code: "E_INVALID_MANIFOLD", Message: "manifold segment invalid: " + seg})
+				writeErr(w, &cliproto.Error{Code: cliproto.EInvalidManifold, Message: "manifold segment invalid: " + seg})
 				return
 			}
 		}
@@ -527,7 +527,7 @@ func (s *Server) handleDestroyUncollaredPipe(w http.ResponseWriter, r *http.Requ
 	if manifold != "" {
 		for _, seg := range strings.Split(manifold, ".") {
 			if err := natsubj.ValidateHandle(seg); err != nil {
-				writeErr(w, &cliproto.Error{Code: "E_INVALID_MANIFOLD", Message: "manifold segment invalid: " + seg})
+				writeErr(w, &cliproto.Error{Code: cliproto.EInvalidManifold, Message: "manifold segment invalid: " + seg})
 				return
 			}
 		}
@@ -536,7 +536,7 @@ func (s *Server) handleDestroyUncollaredPipe(w http.ResponseWriter, r *http.Requ
 	defer cancel()
 	if err := db.DeleteUncollaredPipe(ctx, s.Pool, key.AccountID, manifold, name); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			writeErr(w, cliproto.NewPipeNotFound(name, ""))
+			writeErr(w, cliproto.NewUncollaredPipeNotFound(name, manifold))
 			return
 		}
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})

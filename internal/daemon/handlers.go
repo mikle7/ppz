@@ -710,7 +710,7 @@ func (d *Daemon) handleSetNamespace(ctx context.Context, conn net.Conn, params j
 	if req.Namespace != "" {
 		for _, seg := range strings.Split(req.Namespace, ".") {
 			if err := natsubj.ValidateHandle(seg); err != nil {
-				writeIPCErr(conn, &cliproto.Error{Code: "E_INVALID_MANIFOLD", Message: "namespace segment invalid: " + seg})
+				writeIPCErr(conn, &cliproto.Error{Code: cliproto.EInvalidManifold, Message: "namespace segment invalid: " + seg})
 				return
 			}
 		}
@@ -834,6 +834,32 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 	writeIPC(conn, cliproto.SendBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
 }
 
+// shouldDispatchUncollared decides whether resolveSendTarget should take
+// the Phase 1.5 uncollared branch. Pure function so the decision is
+// unit-testable without standing up NATS / the daemon.
+//
+// Rule: take the uncollared path when the CLI signalled a bare target
+// (no dot) AND there's no current source identity from any layer
+// (explicit Handle from the request, PPZ_CURRENT_HANDLE env, or the
+// session's currently-set handle). The collared shortcut wins
+// whenever any handle is in play — preserves today's `ppz send X`
+// → `X.inbox` shorthand for cases where X is a known source.
+func shouldDispatchUncollared(bareTarget, reqHandle, envHandle, sessionHandle string) bool {
+	if bareTarget == "" {
+		return false
+	}
+	return reqHandle == "" && envHandle == "" && sessionHandle == ""
+}
+
+// uncollaredCursorKey is the per-session cursor key shape for uncollared
+// pipe reads. Phase 1.5: namespaced with the full subject so two
+// uncollared pipes named the same in different manifolds don't share a
+// cursor. Pinned by tests so handleRead (read.go) and uncollaredPipeInfo
+// (handlers.go) stay in sync.
+func uncollaredCursorKey(filterSubject string) string {
+	return "uncollared:" + filterSubject
+}
+
 // sendTarget bundles the resolved facts a publish needs: the
 // destination subject + the sender id we stamp into the envelope.
 type sendTarget struct {
@@ -866,8 +892,7 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 	//      session's current_namespace. Stream existence is the
 	//      authoritative check — if the uncollared stream is there,
 	//      that's the destination.
-	hasCurrentHandle := os.Getenv("PPZ_CURRENT_HANDLE") != "" || d.State.Current(session) != ""
-	if bareTarget != "" && !hasCurrentHandle {
+	if shouldDispatchUncollared(bareTarget, reqHandle, os.Getenv("PPZ_CURRENT_HANDLE"), d.State.Current(session)) {
 		if err := natsubj.ValidatePipe(bareTarget); err != nil {
 			return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
 		}
@@ -881,7 +906,7 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 			if _, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", bareTarget)); err != nil {
 				switch {
 				case errors.Is(err, jetstream.ErrStreamNotFound):
-					return sendTarget{}, cliproto.NewPipeNotFound(bareTarget, "")
+					return sendTarget{}, cliproto.NewUncollaredPipeNotFound(bareTarget, manifold)
 				case errors.Is(err, context.DeadlineExceeded),
 					errors.Is(err, nats.ErrTimeout),
 					errors.Is(err, nats.ErrConnectionClosed),
@@ -1073,7 +1098,7 @@ func uncollaredPipeInfo(ctx context.Context, js jetstream.JetStream, accountID u
 	info.Total = sInfo.State.Msgs
 	info.LastSeq = sInfo.State.LastSeq
 	// Cursor key matches handleRead's uncollared form.
-	cursorKey := "uncollared:" + natsubj.BuildSubject(accountID, manifold, "", name)
+	cursorKey := uncollaredCursorKey(natsubj.BuildSubject(accountID, manifold, "", name))
 	cursor := cursors.Get(session, cursorKey)
 	if sInfo.State.LastSeq > cursor {
 		info.Unread = sInfo.State.LastSeq - cursor
