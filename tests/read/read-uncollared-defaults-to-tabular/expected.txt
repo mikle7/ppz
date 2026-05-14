@@ -1,0 +1,2 @@
+HH:MM:SS  -             hello
+exit=0
