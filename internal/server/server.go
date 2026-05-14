@@ -49,6 +49,11 @@ type Config struct {
 	// /healthz and the dashboard footer.
 	Version string
 
+	// AuthMode is the parsed PPZ_SERVER_AUTH_MODE env var; controls
+	// the /login route's behaviour. Defaults to AuthModeNone. Read at
+	// boot, no live reconfigure.
+	AuthMode AuthMode
+
 	// Auth V2 §Phase 3.5 — NSC/JWT decentralized NATS auth.
 	// Operator seed is the runtime secret (signs new per-org
 	// Account JWTs as orgs are provisioned). Operator JWT is
@@ -83,6 +88,11 @@ type Server struct {
 	GitHubTokenURL     string
 	GitHubUserURL      string
 	DevLogin           bool
+
+	// AuthMode is the parsed PPZ_SERVER_AUTH_MODE env var. Determines
+	// how /login authenticates admin web UI users. Cycle D's dispatcher
+	// reads this field; Cycle C only populates it.
+	AuthMode AuthMode
 
 	Version string // set via -ldflags at build time; shown in /healthz and dashboard footer
 }
@@ -131,6 +141,7 @@ func Run(ctx context.Context, cfg Config) error {
 		GitHubTokenURL:     defaultIfEmpty(cfg.GitHubTokenURL, "https://github.com/login/oauth/access_token"),
 		GitHubUserURL:      defaultIfEmpty(cfg.GitHubUserURL, "https://api.github.com/user"),
 		DevLogin:           cfg.DevLogin,
+		AuthMode:           cfg.AuthMode,
 		Version:            cfg.Version,
 	}
 	srv.AccountPool = newAccountPool(srv)

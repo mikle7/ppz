@@ -12,6 +12,13 @@ import (
 )
 
 func main() {
+	// Phase 2 Cycle C: PPZ_SERVER_AUTH_MODE governs the /login route's
+	// behaviour. Default (unset) is AuthModeNone; invalid values fail
+	// boot loudly.
+	authMode, err := server.ParseAuthMode(os.Getenv("PPZ_SERVER_AUTH_MODE"))
+	if err != nil {
+		log.Fatal(err)
+	}
 	cfg := server.Config{
 		DBURL:         envOr("PPZ_DB_URL", "postgres://postgres:ppz@localhost:5432/ppz?sslmode=disable"),
 		HTTPAddr:      envOr("PPZ_HTTP_ADDR", ":8080"),
@@ -27,6 +34,7 @@ func main() {
 		GitHubTokenURL:     envOr("PPZ_GITHUB_TOKEN_URL", ""),
 		GitHubUserURL:      envOr("PPZ_GITHUB_USER_URL", ""),
 		DevLogin:           envOr("PPZ_DEV_LOGIN", "") == "true",
+		AuthMode:           authMode,
 		// Auth V2 §Phase 3.5 — NATS NSC/JWT auth.
 		NATSOperatorSeed:     envOr("PPZ_NATS_OPERATOR_SEED", ""),
 		NATSOperatorJWT:      envOr("PPZ_NATS_OPERATOR_JWT", ""),
