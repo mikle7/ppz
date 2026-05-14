@@ -183,6 +183,15 @@ Daemon state (current handle, future settings):
                                    Exits 1 with empty output when no
                                    current is set, so $(ppz get handle)
                                    can detect "not set" via rc.
+  ppz set namespace PATH           set the daemon's current namespace
+                                   (manifold) for this session. New
+                                   pipes created with 'ppz pipe create
+                                   LEAF' inherit this manifold. (Phase
+                                   1.5; locked decision #18.)
+  ppz unset namespace              clear the daemon's namespace. New
+                                   pipes are created at the root
+                                   manifold. View current namespace via
+                                   'ppz status'.
 
 Terminal:
   ppz terminal share H [-- CMD ...] run CMD (or $SHELL) in a pty bound to H —

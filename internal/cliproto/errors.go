@@ -29,6 +29,12 @@ const (
 	// prefix invariant. Daemon-emitted protocol messages own the `ack:`
 	// prefix; users cannot stamp it themselves.
 	EInvalidSubject Code = "E_INVALID_SUBJECT"
+
+	// EInvalidManifold is returned when a manifold (hierarchical-grouping
+	// path) segment fails validation. Each dot-separated segment must
+	// match the handle regex (lowercase alnum + hyphens, max 32, no
+	// leading/trailing hyphen). Phase 1.5.
+	EInvalidManifold Code = "E_INVALID_MANIFOLD"
 )
 
 // ExitCode returns the integer the CLI exits with for a given Code. Unknown
@@ -63,6 +69,8 @@ func ExitCode(c Code) int {
 		return 22
 	case EInvalidSubject:
 		return 23
+	case EInvalidManifold:
+		return 24
 	}
 	return 1
 }
@@ -105,6 +113,8 @@ func Message(c Code) string {
 		return "pipe not found on this source"
 	case EInvalidSubject:
 		return "invalid subject; the 'ack:' prefix is reserved for system-emitted protocol messages"
+	case EInvalidManifold:
+		return "invalid manifold: each dot-separated segment must match [a-z0-9-] (max 32, no leading/trailing -, not reserved)"
 	}
 	return "unknown error"
 }
@@ -148,6 +158,17 @@ func NewPipeNotFound(pipe, handle string) *Error {
 	return &Error{Code: EPipeNotFound, Message: fmt.Sprintf("pipe '%s' not found on source '%s'", pipe, handle)}
 }
 
+// NewUncollaredPipeNotFound: uncollared pipe 'room' not found at manifold ''
+// (or at manifold 'team-a'). Phase 1.5 — avoids rendering an empty
+// "on source ''" tail for sourceless pipes.
+func NewUncollaredPipeNotFound(name, manifold string) *Error {
+	location := "root"
+	if manifold != "" {
+		location = fmt.Sprintf("manifold '%s'", manifold)
+	}
+	return &Error{Code: EPipeNotFound, Message: fmt.Sprintf("uncollared pipe '%s' not found at %s", name, location)}
+}
+
 // NewInvalidPipeReserved: pipe name 'system' is reserved
 func NewInvalidPipeReserved(name string) *Error {
 	return &Error{Code: EInvalidPipe, Message: fmt.Sprintf("pipe name '%s' is reserved", name)}
@@ -185,6 +206,8 @@ func HTTPStatus(c Code) int {
 	case EPipeNotFound:
 		return 404
 	case EInvalidSubject:
+		return 400
+	case EInvalidManifold:
 		return 400
 	}
 	return 500

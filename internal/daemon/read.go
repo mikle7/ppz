@@ -36,32 +36,44 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		writeReadErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
-	if err := natsubj.ValidatePipe(req.Channel); err != nil {
-		writeReadErr(conn, cliproto.New(cliproto.EInvalidPipe))
-		return
-	}
-	if err := natsubj.ValidateHandle(req.Handle); err != nil {
-		writeReadErr(conn, cliproto.NewInvalidHandle(req.Handle))
-		return
-	}
 
-	// Verify the source exists in this org via the server. (Without this any
-	// not-yet-created handle would silently return empty rather than error.)
-	var listReply cliproto.ListSourcesReply
-	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &listReply); e != nil {
-		writeReadErr(conn, e)
-		return
-	}
-	found := false
-	for _, s := range listReply.Sources {
-		if s.Handle == req.Handle {
-			found = true
-			break
+	// Phase 1.5: branch on uncollared vs collared. BareTarget != "" =
+	// the CLI saw a bare name with no dot; resolve as uncollared at
+	// current_namespace. Otherwise: today's collared (handle.pipe) flow.
+	uncollared := req.BareTarget != ""
+	if uncollared {
+		if err := natsubj.ValidatePipe(req.BareTarget); err != nil {
+			writeReadErr(conn, cliproto.New(cliproto.EInvalidPipe))
+			return
 		}
-	}
-	if !found {
-		writeReadErr(conn, cliproto.NewSourceNotFound(req.Handle))
-		return
+	} else {
+		if err := natsubj.ValidatePipe(req.Channel); err != nil {
+			writeReadErr(conn, cliproto.New(cliproto.EInvalidPipe))
+			return
+		}
+		if err := natsubj.ValidateHandle(req.Handle); err != nil {
+			writeReadErr(conn, cliproto.NewInvalidHandle(req.Handle))
+			return
+		}
+
+		// Verify the source exists in this org via the server. (Without this any
+		// not-yet-created handle would silently return empty rather than error.)
+		var listReply cliproto.ListSourcesReply
+		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &listReply); e != nil {
+			writeReadErr(conn, e)
+			return
+		}
+		found := false
+		for _, s := range listReply.Sources {
+			if s.Handle == req.Handle {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeReadErr(conn, cliproto.NewSourceNotFound(req.Handle))
+			return
+		}
 	}
 
 	if err := d.ensureNATS(ctx); err != nil {
@@ -71,10 +83,16 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 
 	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
-		writeReadErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
+		writeReadErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad account id"})
 		return
 	}
-	streamName := natsubj.StreamName(accountID, req.Handle, req.Channel)
+	var streamName string
+	if uncollared {
+		manifold := d.State.CurrentNamespace(req.Session)
+		streamName = natsubj.BuildStreamName(accountID, manifold, "", req.BareTarget)
+	} else {
+		streamName = natsubj.StreamName(accountID, req.Handle, req.Channel)
+	}
 
 	js, err := jetstream.New(d.NC)
 	if err != nil {
@@ -84,7 +102,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	stream, err := js.Stream(ctx, streamName)
 	if err != nil {
 		// Classify the error so the user sees the right cause. Mirror of
-		// the routing logic in handleBroadcast / resolveBroadcastTarget
+		// the routing logic in handleSend / resolveSendTarget
 		// (handlers.go) — same bug shape, same fix shape:
 		//   - jetstream.ErrStreamNotFound → E_PIPE_NOT_FOUND. The pipe
 		//     genuinely doesn't exist on this source; message names the
@@ -96,7 +114,12 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		//   - anything else → E_INVALID_PIPE catch-all. Truly unexpected.
 		switch {
 		case errors.Is(err, jetstream.ErrStreamNotFound):
-			writeReadErr(conn, cliproto.NewPipeNotFound(req.Channel, req.Handle))
+			if uncollared {
+				manifold := d.State.CurrentNamespace(req.Session)
+				writeReadErr(conn, cliproto.NewUncollaredPipeNotFound(req.BareTarget, manifold))
+			} else {
+				writeReadErr(conn, cliproto.NewPipeNotFound(req.Channel, req.Handle))
+			}
 		case errors.Is(err, context.DeadlineExceeded),
 			errors.Is(err, nats.ErrTimeout),
 			errors.Is(err, nats.ErrConnectionClosed),
@@ -122,12 +145,25 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// default; without it, bytes positioned for a wider source garble
 	// when vt10x's grid wraps. Stdctrl missing / unparseable / dims=0
 	// are all treated as "no info" — caller falls back to defaults.
-	if req.Channel == "stdout" {
+	// Uncollared pipes don't have stdctrl semantics (no source identity);
+	// skip the meta probe.
+	if !uncollared && req.Channel == "stdout" {
 		if cols, rows, ok := latestStdctrlResize(ctx, js, accountID, req.Handle); ok {
 			_ = json.NewEncoder(conn).Encode(cliproto.ReadEvent{
 				Meta: &cliproto.ReadMeta{Cols: cols, Rows: rows},
 			})
 		}
+	}
+
+	// Phase 1.5: compute the subject for filter / cursor-key purposes.
+	// Uncollared uses the four-role builder; collared uses the legacy
+	// three-arg form to keep cursor keys stable.
+	var filterSubject string
+	if uncollared {
+		manifold := d.State.CurrentNamespace(req.Session)
+		filterSubject = natsubj.BuildSubject(accountID, manifold, "", req.BareTarget)
+	} else {
+		filterSubject = natsubj.Subject(accountID, req.Handle, req.Channel)
 	}
 
 	var (
@@ -139,6 +175,9 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// (req.All=true) ignores the cursor entirely — replay the full retained
 	// stream. NoAdvance is implied by All; cursor never moves under reread.
 	cursorKey := daemonCursorKey(accountID, req.Handle, req.Channel)
+	if uncollared {
+		cursorKey = uncollaredCursorKey(filterSubject)
+	}
 	startSeq := info.State.FirstSeq
 	if !req.All && info.State.Msgs > 0 {
 		cursor := d.Cursors.Get(req.Session, cursorKey)
@@ -163,7 +202,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		historicalEnd := info.State.LastSeq
 		expected := int(historicalEnd - startSeq + 1)
 		consumer, cerr := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-			FilterSubject:     natsubj.Subject(accountID, req.Handle, req.Channel),
+			FilterSubject:     filterSubject,
 			DeliverPolicy:     jetstream.DeliverByStartSequencePolicy,
 			OptStartSeq:       startSeq,
 			AckPolicy:         jetstream.AckNonePolicy,
@@ -267,7 +306,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// sequence we drained (so we don't double-deliver). Stream until the
 	// CLI closes the socket or the request ctx is cancelled.
 	consumer, err := stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
-		FilterSubjects: []string{natsubj.Subject(accountID, req.Handle, req.Channel)},
+		FilterSubjects: []string{filterSubject},
 		DeliverPolicy:  jetstream.DeliverByStartSequencePolicy,
 		OptStartSeq:    lastSeqSeen + 1,
 	})

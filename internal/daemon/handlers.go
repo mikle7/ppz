@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -501,8 +502,12 @@ func (d *Daemon) handleConnect(ctx context.Context, conn net.Conn, params json.R
 }
 
 // handlePipeCreate proxies `ppz pipe create` to the server. Daemon-side
-// validation: handle must be known + name must pass ValidateUserPipeName.
-// Server validates again and provisions the JetStream stream.
+// validation; server validates again and provisions the JetStream stream.
+//
+// Phase 1.5 routing: when req.Handle is empty AND req.SourceHandle is nil
+// (or empty), this is the uncollared shape — route to the sourceless
+// endpoint POST /api/v1/pipes. Otherwise it's collared — route to the
+// existing POST /api/v1/sources/{handle}/pipes shortcut.
 func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	var req cliproto.PipeCreateRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -513,14 +518,7 @@ func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params jso
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
-	if err := natsubj.ValidateHandle(req.Handle); err != nil {
-		writeIPCErr(conn, cliproto.New(cliproto.EInvalidHandle))
-		return
-	}
 	if err := natsubj.ValidateUserPipeName(req.Name); err != nil {
-		// ValidateUserPipeName returns "invalid pipe name" (regex) or
-		// "name is reserved" — keep the distinction so the user can see
-		// which constraint they hit.
 		if err.Error() == "name is reserved" {
 			writeIPCErr(conn, cliproto.NewInvalidPipeReserved(req.Name))
 		} else {
@@ -528,10 +526,46 @@ func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params jso
 		}
 		return
 	}
+
+	// Decide collared vs uncollared from the request shape.
+	collared := req.Handle != "" || (req.SourceHandle != nil && *req.SourceHandle != "")
+
+	// Phase 1.5: stamp Manifold from the daemon's per-session namespace if
+	// the request didn't carry one explicitly. CLI users set namespace via
+	// `ppz set namespace`; the daemon-side stamping keeps that
+	// transparent. Explicit Manifold on the request (e.g. for callers that
+	// know what they want) takes precedence.
+	if req.Manifold == "" {
+		req.Manifold = d.State.CurrentNamespace(req.Session)
+	}
+	// Don't leak the session field to the server — it's daemon-side only.
+	req.Session = ""
+
 	var reply cliproto.PipeCreateReply
-	if e := d.callServer(ctx, "POST", "/api/v1/sources/"+req.Handle+"/pipes", req, &reply); e != nil {
-		writeIPCErr(conn, e)
-		return
+	if collared {
+		// Resolve the handle from either field, prefer SourceHandle (new
+		// Phase 1.5 field) over Handle (legacy field).
+		handle := req.Handle
+		if req.SourceHandle != nil && *req.SourceHandle != "" {
+			handle = *req.SourceHandle
+		}
+		if err := natsubj.ValidateHandle(handle); err != nil {
+			writeIPCErr(conn, cliproto.New(cliproto.EInvalidHandle))
+			return
+		}
+		// Normalise so the server sees the handle in the request body's
+		// legacy Handle field (the collared endpoint reads from there).
+		req.Handle = handle
+		if e := d.callServer(ctx, "POST", "/api/v1/sources/"+handle+"/pipes", req, &reply); e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
+	} else {
+		// Uncollared — Phase 1.5 sourceless pipe.
+		if e := d.callServer(ctx, "POST", "/api/v1/pipes", req, &reply); e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
 	}
 	writeIPC(conn, reply)
 }
@@ -563,6 +597,10 @@ func (d *Daemon) handleSourceDestroy(ctx context.Context, conn net.Conn, params 
 }
 
 // handlePipeDestroy proxies `ppz pipe destroy` to the server.
+//
+// Phase 1.5 routing: BareTarget set + no Handle → uncollared destroy
+// via DELETE /api/v1/pipes; otherwise collared destroy via the legacy
+// per-source path.
 func (d *Daemon) handlePipeDestroy(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	var req cliproto.PipeDestroyRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -573,6 +611,27 @@ func (d *Daemon) handlePipeDestroy(ctx context.Context, conn net.Conn, params js
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+
+	if req.Handle == "" && req.BareTarget != "" {
+		// Uncollared destroy.
+		if err := natsubj.ValidatePipe(req.BareTarget); err != nil {
+			writeIPCErr(conn, cliproto.New(cliproto.EInvalidPipe))
+			return
+		}
+		manifold := d.State.CurrentNamespace(req.Session)
+		q := url.Values{}
+		q.Set("name", req.BareTarget)
+		if manifold != "" {
+			q.Set("manifold", manifold)
+		}
+		if e := d.callServer(ctx, "DELETE", "/api/v1/pipes?"+q.Encode(), nil, nil); e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
+		writeIPC(conn, cliproto.PipeDestroyReply{Manifold: manifold, Name: req.BareTarget})
+		return
+	}
+
 	if err := natsubj.ValidateHandle(req.Handle); err != nil {
 		writeIPCErr(conn, cliproto.New(cliproto.EInvalidHandle))
 		return
@@ -633,8 +692,56 @@ func (d *Daemon) handleSwitch(ctx context.Context, conn net.Conn, params json.Ra
 	writeIPC(conn, cliproto.SwitchReply{Handle: req.Handle})
 }
 
-func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json.RawMessage) {
-	var req cliproto.BroadcastRequest
+// handleSetNamespace stores the per-session manifold. Phase 1.5 (locked
+// decision #20 — `ppz set namespace PATH`). Validates each dot-separated
+// segment via the existing handle regex; empty namespace is a no-op clear.
+func (d *Daemon) handleSetNamespace(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.SetNamespaceRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+	if _, ok := d.State.Credentials(); !ok {
+		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
+		return
+	}
+	// Empty namespace via `set` is treated as clear — same behaviour as
+	// `unset namespace`, so users can `set namespace ""` interchangeably.
+	if req.Namespace != "" {
+		for _, seg := range strings.Split(req.Namespace, ".") {
+			if err := natsubj.ValidateHandle(seg); err != nil {
+				writeIPCErr(conn, &cliproto.Error{Code: cliproto.EInvalidManifold, Message: "namespace segment invalid: " + seg})
+				return
+			}
+		}
+	}
+	if err := d.State.SetNamespace(req.Session, req.Namespace); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	writeIPC(conn, cliproto.SetNamespaceReply{Namespace: req.Namespace})
+}
+
+// handleUnsetNamespace clears the per-session manifold. Idempotent.
+func (d *Daemon) handleUnsetNamespace(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.UnsetNamespaceRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
+		return
+	}
+	if _, ok := d.State.Credentials(); !ok {
+		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
+		return
+	}
+	if err := d.State.ClearNamespace(req.Session); err != nil {
+		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	}
+	writeIPC(conn, cliproto.UnsetNamespaceReply{})
+}
+
+func (d *Daemon) handleSend(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.SendRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
@@ -643,13 +750,13 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 	// reserved for daemon-emitted protocol messages. CLI argument
 	// validation is belt; this is suspenders — any IPC client (custom
 	// scripts, third-party tools, harness adapters) hits this same path.
-	// Daemon-internal ack auto-emission (§4) bypasses handleBroadcast and
+	// Daemon-internal ack auto-emission (§4) bypasses handleSend and
 	// publishes envelopes directly, so this rule has no exception.
 	if strings.HasPrefix(req.MsgSubject, "ack:") {
 		writeIPCErr(conn, cliproto.New(cliproto.EInvalidSubject))
 		return
 	}
-	target, e := d.resolveBroadcastTarget(ctx, req.Handle, req.Channel, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -674,27 +781,27 @@ func (d *Daemon) handleBroadcast(ctx context.Context, conn net.Conn, params json
 	}
 	// Bytes counts the user-visible payload, not the encoded envelope —
 	// matches WIRE.md §8 ppz broadcast and the broadcast-from-* fixtures.
-	writeIPC(conn, cliproto.BroadcastReply{ID: env.ID, Subject: target.subject, Bytes: len(req.Payload)})
+	writeIPC(conn, cliproto.SendReply{ID: env.ID, Subject: target.subject, Bytes: len(req.Payload)})
 }
 
-// handleBroadcastBatch publishes N payloads in one IPC round-trip.
+// handleSendBatch publishes N payloads in one IPC round-trip.
 // Validation runs once for the whole batch; the daemon then issues N
 // async nc.Publish calls followed by a SINGLE nc.Flush. Same "bytes
-// confirmed at server" contract as handleBroadcast — just amortised
+// confirmed at server" contract as handleSend — just amortised
 // across the batch. Used by streaming producers (terminal share's
 // stdout drain, `ppz broadcast` line-streaming) where the per-call
 // flush cost dominates throughput under WAN latency.
-func (d *Daemon) handleBroadcastBatch(ctx context.Context, conn net.Conn, params json.RawMessage) {
-	var req cliproto.BroadcastBatchRequest
+func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.SendBatchRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
 	}
 	if len(req.Payloads) == 0 {
-		writeIPC(conn, cliproto.BroadcastBatchReply{})
+		writeIPC(conn, cliproto.SendBatchReply{})
 		return
 	}
-	target, e := d.resolveBroadcastTarget(ctx, req.Handle, req.Channel, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -724,45 +831,115 @@ func (d *Daemon) handleBroadcastBatch(ctx context.Context, conn net.Conn, params
 		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
 	}
-	writeIPC(conn, cliproto.BroadcastBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
+	writeIPC(conn, cliproto.SendBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
 }
 
-// broadcastTarget bundles the resolved facts a publish needs: the
+// shouldDispatchUncollared decides whether resolveSendTarget should take
+// the Phase 1.5 uncollared branch. Pure function so the decision is
+// unit-testable without standing up NATS / the daemon.
+//
+// Rule: take the uncollared path when the CLI signalled a bare target
+// (no dot) AND there's no current source identity from any layer
+// (explicit Handle from the request, PPZ_CURRENT_HANDLE env, or the
+// session's currently-set handle). The collared shortcut wins
+// whenever any handle is in play — preserves today's `ppz send X`
+// → `X.inbox` shorthand for cases where X is a known source.
+func shouldDispatchUncollared(bareTarget, reqHandle, envHandle, sessionHandle string) bool {
+	if bareTarget == "" {
+		return false
+	}
+	return reqHandle == "" && envHandle == "" && sessionHandle == ""
+}
+
+// uncollaredCursorKey is the per-session cursor key shape for uncollared
+// pipe reads. Phase 1.5: namespaced with the full subject so two
+// uncollared pipes named the same in different manifolds don't share a
+// cursor. Pinned by tests so handleRead (read.go) and uncollaredPipeInfo
+// (handlers.go) stay in sync.
+func uncollaredCursorKey(filterSubject string) string {
+	return "uncollared:" + filterSubject
+}
+
+// sendTarget bundles the resolved facts a publish needs: the
 // destination subject + the sender id we stamp into the envelope.
-type broadcastTarget struct {
+type sendTarget struct {
 	subject string
 	sender  string
 }
 
-// resolveBroadcastTarget runs the shared pre-flight for a broadcast:
+// resolveSendTarget runs the shared pre-flight for a broadcast:
 // login check, target resolution (request handle, env, session
 // current), pipe-name validation, server-side source existence (with
 // stale-current cleanup), JetStream stream existence, and ensureNATS.
 // Returns the destination subject + sender id on success. Used by
-// both handleBroadcast (single) and handleBroadcastBatch (N).
-func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChannel, session string) (broadcastTarget, *cliproto.Error) {
+// both handleSend (single) and handleSendBatch (N).
+func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, bareTarget, session string) (sendTarget, *cliproto.Error) {
 	if _, ok := d.State.Credentials(); !ok {
-		return broadcastTarget{}, cliproto.New(cliproto.ENotLoggedIn)
+		return sendTarget{}, cliproto.New(cliproto.ENotLoggedIn)
+	}
+	accountID, err := uuid.Parse(d.State.AccountID())
+	if err != nil {
+		return sendTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad account id"}
+	}
+	// Phase 1.5: bare target → try uncollared first if the user has no
+	// current handle. The CLI sends BareTarget=X when the user typed
+	// `ppz send X "msg"` without a dot. Resolution order:
+	//   1. If a current handle is set (req.Handle != "" from CLI's .inbox
+	//      sugar, but only when there's no other interpretation, OR via
+	//      PPZ_CURRENT_HANDLE / session current), fall through to the
+	//      legacy collared path (today's behaviour: bare X = X's inbox).
+	//   2. Otherwise treat BareTarget as an uncollared pipe at the
+	//      session's current_namespace. Stream existence is the
+	//      authoritative check — if the uncollared stream is there,
+	//      that's the destination.
+	if shouldDispatchUncollared(bareTarget, reqHandle, os.Getenv("PPZ_CURRENT_HANDLE"), d.State.Current(session)) {
+		if err := natsubj.ValidatePipe(bareTarget); err != nil {
+			return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
+		}
+		manifold := d.State.CurrentNamespace(session)
+		if d.NC == nil || !d.NC.IsConnected() {
+			if err := d.ensureNATS(ctx); err != nil {
+				return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+			}
+		}
+		if js, jsErr := jetstream.New(d.NC); jsErr == nil {
+			if _, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", bareTarget)); err != nil {
+				switch {
+				case errors.Is(err, jetstream.ErrStreamNotFound):
+					return sendTarget{}, cliproto.NewUncollaredPipeNotFound(bareTarget, manifold)
+				case errors.Is(err, context.DeadlineExceeded),
+					errors.Is(err, nats.ErrTimeout),
+					errors.Is(err, nats.ErrConnectionClosed),
+					errors.Is(err, nats.ErrNoServers):
+					return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+				default:
+					return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
+				}
+			}
+		}
+		return sendTarget{
+			subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
+			sender:  "", // uncollared publish — no sender identity
+		}, nil
 	}
 	// Resolve target. Explicit handle from the request wins (used by
-	// `ppz send` and by `ppz broadcast` when PPZ_CURRENT_HANDLE is
+	// `ppz send` and by terminal-share when PPZ_CURRENT_HANDLE is
 	// set); otherwise fall back to the calling session's current
-	// handle on .broadcast — different terminal windows have
-	// different "current"s.
+	// handle — different terminal windows have different "current"s.
 	fromCurrent := reqHandle == "" && os.Getenv("PPZ_CURRENT_HANDLE") == ""
 	current := reqHandle
 	if current == "" {
 		current = d.State.Current(session)
 	}
 	if current == "" {
-		return broadcastTarget{}, cliproto.New(cliproto.ENoCurrentSource)
+		return sendTarget{}, cliproto.New(cliproto.ENoCurrentSource)
 	}
 	pipe := reqChannel
 	if pipe == "" {
 		pipe = "broadcast"
 	}
 	if err := natsubj.ValidatePipe(pipe); err != nil {
-		return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+		return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
 	}
 	// Verify the handle is a real source in this org. NATS publish
 	// silently succeeds against any subject, so without this check a
@@ -779,7 +956,7 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 	if needRefresh {
 		var lr cliproto.ListSourcesReply
 		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
-			return broadcastTarget{}, e
+			return sendTarget{}, e
 		}
 		handles := make([]string, 0, len(lr.Sources))
 		for _, s := range lr.Sources {
@@ -789,18 +966,14 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 		if !d.State.KnowsPipe(current) {
 			if fromCurrent {
 				_ = d.State.ClearCurrent(session)
-				return broadcastTarget{}, cliproto.New(cliproto.ENoCurrentSource)
+				return sendTarget{}, cliproto.New(cliproto.ENoCurrentSource)
 			}
-			return broadcastTarget{}, cliproto.NewSourceNotFound(current)
+			return sendTarget{}, cliproto.NewSourceNotFound(current)
 		}
-	}
-	accountID, err := uuid.Parse(d.State.AccountID())
-	if err != nil {
-		return broadcastTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"}
 	}
 	if d.NC == nil || !d.NC.IsConnected() {
 		if err := d.ensureNATS(ctx); err != nil {
-			return broadcastTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+			return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
 		}
 	}
 	// Verify the JetStream stream exists before publishing. NATS-core
@@ -820,14 +993,14 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 		if _, err := js.Stream(ctx, natsubj.StreamName(accountID, current, pipe)); err != nil {
 			switch {
 			case errors.Is(err, jetstream.ErrStreamNotFound):
-				return broadcastTarget{}, cliproto.NewPipeNotFound(pipe, current)
+				return sendTarget{}, cliproto.NewPipeNotFound(pipe, current)
 			case errors.Is(err, context.DeadlineExceeded),
 				errors.Is(err, nats.ErrTimeout),
 				errors.Is(err, nats.ErrConnectionClosed),
 				errors.Is(err, nats.ErrNoServers):
-				return broadcastTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+				return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
 			default:
-				return broadcastTarget{}, cliproto.New(cliproto.EInvalidPipe)
+				return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
 			}
 		}
 	}
@@ -835,7 +1008,7 @@ func (d *Daemon) resolveBroadcastTarget(ctx context.Context, reqHandle, reqChann
 	// destination. Different when the request pins an explicit dest
 	// (`ppz send foo`, or PPZ_CURRENT_HANDLE inside `ppz terminal`).
 	// Empty when this session has never connected.
-	return broadcastTarget{
+	return sendTarget{
 		subject: natsubj.Subject(accountID, current, pipe),
 		sender:  d.State.Current(session),
 	}, nil
@@ -887,7 +1060,63 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
-	writeIPC(conn, cliproto.ListReply{Sources: enriched})
+	// Phase 1.5: append uncollared (sourceless) pipes. Walking sources
+	// alone misses them; the server's GET /api/v1/pipes lists them
+	// explicitly.
+	var ucReply cliproto.ListUncollaredPipesReply
+	if e := d.callServer(ctx, "GET", "/api/v1/pipes", nil, &ucReply); e != nil {
+		writeIPCErr(conn, e)
+		return
+	}
+	uncollared := make([]cliproto.UncollaredPipe, 0, len(ucReply.Pipes))
+	for _, p := range ucReply.Pipes {
+		info := uncollaredPipeInfo(ctx, js, accountID, p.Manifold, p.Name, req.Session, d.Cursors)
+		info.CreatedBy = p.CreatedBy
+		uncollared = append(uncollared, cliproto.UncollaredPipe{
+			Manifold: p.Manifold,
+			Name:     p.Name,
+			Info:     info,
+		})
+	}
+
+	writeIPC(conn, cliproto.ListReply{Sources: enriched, UncollaredPipes: uncollared})
+}
+
+// uncollaredPipeInfo gathers JetStream stats for one uncollared pipe.
+// Mirrors the per-pipe enrichment in enrichSourcesWithPipeInfo but
+// scoped to a sourceless stream. Phase 1.5.
+func uncollaredPipeInfo(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, name, session string, cursors *cursors) cliproto.PipeInfo {
+	info := cliproto.PipeInfo{Pipe: cliproto.FormatPipePath(manifold, "", name)}
+	stream, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", name))
+	if err != nil {
+		return info
+	}
+	sInfo, err := stream.Info(ctx)
+	if err != nil {
+		return info
+	}
+	info.Total = sInfo.State.Msgs
+	info.LastSeq = sInfo.State.LastSeq
+	// Cursor key matches handleRead's uncollared form.
+	cursorKey := uncollaredCursorKey(natsubj.BuildSubject(accountID, manifold, "", name))
+	cursor := cursors.Get(session, cursorKey)
+	if sInfo.State.LastSeq > cursor {
+		info.Unread = sInfo.State.LastSeq - cursor
+	}
+	// Best-effort preview/last-payload: fetch the last message if any.
+	if sInfo.State.LastSeq > 0 {
+		if rawMsg, err := stream.GetMsg(ctx, sInfo.State.LastSeq); err == nil && rawMsg != nil {
+			if env, perr := envelope.Unmarshal(rawMsg.Data); perr == nil {
+				info.Payload = env.Payload
+				info.Preview = cliproto.TruncatePayload(env.Payload)
+				if !rawMsg.Time.IsZero() {
+					t := rawMsg.Time
+					info.LastAt = &t
+				}
+			}
+		}
+	}
+	return info
 }
 
 // pipesForKind mirrors db.Source.Pipes() at the daemon level so we don't

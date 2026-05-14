@@ -33,8 +33,14 @@ func cmdSet(args []string) error {
 			os.Exit(2)
 		}
 		return setHandle(args[1])
+	case "namespace":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "usage: ppz set namespace PATH")
+			os.Exit(2)
+		}
+		return setNamespace(args[1])
 	}
-	fmt.Fprintf(os.Stderr, "ppz set: unknown key %q (try: handle)\n", key)
+	fmt.Fprintf(os.Stderr, "ppz set: unknown key %q (try: handle, namespace)\n", key)
 	os.Exit(2)
 	return nil
 }
@@ -54,8 +60,10 @@ func cmdUnset(args []string) error {
 	switch key {
 	case "handle":
 		return unsetHandle()
+	case "namespace":
+		return unsetNamespace()
 	}
-	fmt.Fprintf(os.Stderr, "ppz unset: unknown key %q (try: handle)\n", key)
+	fmt.Fprintf(os.Stderr, "ppz unset: unknown key %q (try: handle, namespace)\n", key)
 	os.Exit(2)
 	return nil
 }
@@ -122,6 +130,30 @@ func getHandle() error {
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stdout, reply.Current)
+	return nil
+}
+
+// setNamespace wires `ppz set namespace PATH` to the daemon's
+// IPCSetNamespace verb. Persists the per-session manifold so subsequent
+// `ppz pipe create LEAF` calls inherit it (Phase 1.5).
+func setNamespace(path string) error {
+	var reply cliproto.SetNamespaceReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCSetNamespace,
+		cliproto.SetNamespaceRequest{Namespace: path, Session: sessionID()}, &reply); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "namespace=%s\n", reply.Namespace)
+	return nil
+}
+
+// unsetNamespace clears the daemon's namespace for this session.
+func unsetNamespace() error {
+	var reply cliproto.UnsetNamespaceReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCUnsetNamespace,
+		cliproto.UnsetNamespaceRequest{Session: sessionID()}, &reply); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stdout, "unset")
 	return nil
 }
 

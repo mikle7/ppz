@@ -188,11 +188,11 @@ func handleTerminalShareEchoDaemonConn(conn net.Conn) {
 				Pipes:   []string{"broadcast", "stdin", "stdout", "stdctrl", "inbox"},
 			},
 		})
-	case cliproto.IPCBroadcast:
-		var br cliproto.BroadcastRequest
+	case cliproto.IPCSend:
+		var br cliproto.SendRequest
 		_ = json.Unmarshal(req.Params, &br)
 		_ = enc.Encode(map[string]any{
-			"result": cliproto.BroadcastReply{
+			"result": cliproto.SendReply{
 				ID:      "test-id",
 				Subject: "test." + br.Handle + "." + br.Channel,
 				Bytes:   len(br.Payload),

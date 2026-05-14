@@ -27,24 +27,35 @@ A target on the wire is `<source-handle>.<pipe-name>`.
 
 ## 1. Subject grammar (NATS)
 
+Phase 1.5 adopts the four-role form (locked decision #18):
+
 ```
-<account_id>.<handle>.<pipe>
+<account_id>.<manifold?>.<source?>.<pipe>
 ```
 
-- `account_id` — UUID of the account (lowercase, hyphenated form).
-- `handle` — source handle, regex `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, max 32.
-- `pipe` — pipe name. Built-in: `inbox`, `stdin` (pty only), `stdout` (pty
-  only), `stdctrl` (pty only). Reserved: `system`, `db` (rejected if user
-  attempts to create).
+- `account_id` — UUID of the account (lowercase, hyphenated form). Hard tenancy boundary.
+- `manifold` — **optional**, 0+ dot-separated segments. Hierarchical-grouping path. Empty (the bare `<account_id>.…` form) = root namespace. Each segment matches the handle regex.
+- `source` — **optional**, 0 or 1 segment. Actor identity (the "collar"). Present = collared pipe (role-asymmetric semantics anchored on the source identity); absent = uncollared (symmetric many-to-many).
+- `pipe` — pipe leaf. Built-in: `inbox`, `stdin` (pty only), `stdout` (pty only), `stdctrl` (pty only). Reserved: `system`, `db`.
 
-Reserved source handles (rejected at create): `system`, `db`.
+Wire-level the manifold-only and source-only shapes are **indistinguishable** (`<acct>.X.<pipe>` could be either). That's by design — disambiguation happens by DB row at create time, not by the broker. Clients send unambiguous create requests with explicit `manifold` + `source_handle` fields; the broker just does prefix-based ACL.
+
+Handle / source segment regex: `^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`, max 32. Reserved handles (rejected at create): `system`, `db`.
+
+Four wire shapes:
+- `<acct>.<pipe>` — root manifold, uncollared
+- `<acct>.<source>.<pipe>` — root manifold, collared
+- `<acct>.<manifold-segments>.<pipe>` — namespaced, uncollared
+- `<acct>.<manifold-segments>.<source>.<pipe>` — namespaced, collared
 
 ## 2. JetStream stream config (per pipe)
 
+Stream names use the four-role builder (Phase 1.5). Dots in manifold segments become underscores (NATS forbids dots in stream names); empty manifold/source slots are omitted entirely.
+
 | Field | Default |
 |---|---|
-| Name | `source_<orgshort>_<handle>_<pipe>` (orgshort = first 8 hex chars of org UUID, hyphens stripped) |
-| Subjects | `<org_id>.<handle>.<pipe>` |
+| Name | `pipe_<orgshort>[_<manifold-underscored>][_<source>]_<name>` (orgshort = first 8 hex chars of account UUID, hyphens stripped). Pre-Phase-1.5 collared shortcut endpoint still emits `source_<orgshort>_<handle>_<pipe>` for back-compat. |
+| Subjects | `<account_id>[.<manifold>][.<source>].<pipe>` per §1 |
 | Retention | Limits |
 | MaxAge | 24h |
 | MaxMsgs | 5000 |

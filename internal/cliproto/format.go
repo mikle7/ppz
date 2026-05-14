@@ -147,6 +147,13 @@ func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, cur
 	default:
 		fmt.Fprintf(w, "current source: %s\n", c.dim("-"))
 	}
+
+	// Phase 1.5: namespace line. Only rendered when set — omitting when
+	// empty keeps `ppz status` output tight for the common OSS-default
+	// case (no namespace).
+	if s.CurrentNamespace != "" {
+		fmt.Fprintf(w, "namespace: %s\n", c.green(s.CurrentNamespace))
+	}
 }
 
 func daemonVersionSuffix(c statusColors, daemonVersion, cliVersion string) string {
@@ -227,7 +234,7 @@ func PrintSwitch(w io.Writer, r SwitchReply) {
 	fmt.Fprintf(w, "current handle=%s\n", r.Handle)
 }
 
-func PrintBroadcast(w io.Writer, r BroadcastReply) {
+func PrintBroadcast(w io.Writer, r SendReply) {
 	fmt.Fprintf(w, "sent id=%s subject=%s bytes=%d\n", r.ID, r.Subject, r.Bytes)
 }
 
@@ -241,18 +248,39 @@ func PrintDisconnect(w io.Writer) {
 
 // PrintPipeCreate prints the pinned line:
 //
-//	created pipe=<H>.<N> retention=ttl=<dur>,msgs=<n>,bytes=<b>
+//	created pipe=<PATH> retention=ttl=<dur>,msgs=<n>,bytes=<b>
+//
+// PATH is the four-role path with empty slots omitted (Phase 1.5):
+//   - Collared root:        cindy.archive
+//   - Collared with manifold: team1.cindy.archive
+//   - Uncollared root:      room
+//   - Uncollared manifold:  team1.room
 //
 // `dur` is rendered via time.Duration's String() so 24h/168h round-trip
 // without manual zero-pad. `bytes` is the raw integer.
 func PrintPipeCreate(w io.Writer, r PipeCreateReply) {
 	dur := time.Duration(r.TTLSeconds) * time.Second
-	fmt.Fprintf(w, "created pipe=%s.%s retention=ttl=%s,msgs=%d,bytes=%d\n",
-		r.Handle, r.Name, dur.String(), r.MaxMsgs, r.MaxBytes)
+	fmt.Fprintf(w, "created pipe=%s retention=ttl=%s,msgs=%d,bytes=%d\n",
+		FormatPipePath(r.Manifold, r.Handle, r.Name), dur.String(), r.MaxMsgs, r.MaxBytes)
+}
+
+// FormatPipePath renders the four-role pipe path for user display, with
+// empty slots omitted. Used by PrintPipeCreate, PrintPipeDestroy, and the
+// `to=` field of send output.
+func FormatPipePath(manifold, source, name string) string {
+	parts := make([]string, 0, 3)
+	if manifold != "" {
+		parts = append(parts, manifold)
+	}
+	if source != "" {
+		parts = append(parts, source)
+	}
+	parts = append(parts, name)
+	return strings.Join(parts, ".")
 }
 
 func PrintPipeDestroy(w io.Writer, r PipeDestroyReply) {
-	fmt.Fprintf(w, "destroyed pipe=%s.%s\n", r.Handle, r.Name)
+	fmt.Fprintf(w, "destroyed pipe=%s\n", FormatPipePath("", r.Handle, r.Name))
 }
 
 func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {
@@ -293,6 +321,12 @@ type listRow struct {
 // trailing un-padded, but CREATOR now needs vertical alignment so PAYLOAD
 // pads to its widest preview — bounded at 60 chars by TruncatePayload).
 func PrintList(w io.Writer, sources []Source, iso bool) {
+	PrintListWithUncollared(w, sources, nil, iso)
+}
+
+// PrintListWithUncollared renders the same table as PrintList but also
+// includes uncollared (sourceless) pipes. Phase 1.5.
+func PrintListWithUncollared(w io.Writer, sources []Source, uncollared []UncollaredPipe, iso bool) {
 	now := timeNow()
 	rows := make([]listRow, 0)
 	for _, s := range sources {
@@ -307,6 +341,16 @@ func PrintList(w io.Writer, sources []Source, iso bool) {
 			})
 		}
 	}
+	for _, p := range uncollared {
+		rows = append(rows, listRow{
+			pipeColumn: FormatPipePath(p.Manifold, "", p.Name),
+			unread:     p.Info.Unread,
+			buffered:   p.Info.Total,
+			last:       lastColumn(p.Info.LastAt, now, iso),
+			payload:    payloadColumn(p.Info.Preview),
+			creator:    p.Info.CreatedBy,
+		})
+	}
 	writeListTable(w, rows)
 }
 
@@ -318,6 +362,12 @@ func PrintList(w io.Writer, sources []Source, iso bool) {
 // `creator` carries the same username the table shows: pipe-level if set,
 // otherwise the source's creator (auto-pipe inheritance).
 func PrintListJSON(w io.Writer, sources []Source) {
+	PrintListJSONWithUncollared(w, sources, nil)
+}
+
+// PrintListJSONWithUncollared is the JSON variant including uncollared
+// pipes. Phase 1.5.
+func PrintListJSONWithUncollared(w io.Writer, sources []Source, uncollared []UncollaredPipe) {
 	for _, s := range sources {
 		for _, p := range s.PipeInfos {
 			obj := map[string]any{
@@ -326,7 +376,7 @@ func PrintListJSON(w io.Writer, sources []Source) {
 				"total":   p.Total,
 				"unread":  p.Unread,
 				"payload": p.Payload,
-				"creator":   humanColumn(p.CreatedBy, s.CreatedBy),
+				"creator": humanColumn(p.CreatedBy, s.CreatedBy),
 			}
 			if p.LastAt != nil {
 				obj["last_at"] = p.LastAt.UTC().Format(time.RFC3339)
@@ -336,6 +386,24 @@ func PrintListJSON(w io.Writer, sources []Source) {
 			line, _ := json.Marshal(obj)
 			fmt.Fprintln(w, string(line))
 		}
+	}
+	for _, p := range uncollared {
+		obj := map[string]any{
+			"handle":   "",
+			"manifold": p.Manifold,
+			"pipe":     p.Name,
+			"total":    p.Info.Total,
+			"unread":   p.Info.Unread,
+			"payload":  p.Info.Payload,
+			"creator":  p.Info.CreatedBy,
+		}
+		if p.Info.LastAt != nil {
+			obj["last_at"] = p.Info.LastAt.UTC().Format(time.RFC3339)
+		} else {
+			obj["last_at"] = nil
+		}
+		line, _ := json.Marshal(obj)
+		fmt.Fprintln(w, string(line))
 	}
 }
 

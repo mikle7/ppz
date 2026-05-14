@@ -74,11 +74,15 @@ func cmdSend(args []string) error {
 		return cliproto.New(cliproto.EInvalidSubject)
 	}
 
-	idx := strings.LastIndex(target, ".")
-	if idx == -1 {
+	// Phase 1.5: capture the raw bare target before the .inbox sugar.
+	// The daemon uses BareTarget to fall back to uncollared pipe
+	// resolution when the source-handle lookup misses.
+	bareTarget := ""
+	if !strings.Contains(target, ".") {
+		bareTarget = target
 		target += ".inbox"
-		idx = strings.LastIndex(target, ".")
 	}
+	idx := strings.LastIndex(target, ".")
 	if idx <= 0 || idx == len(target)-1 {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
@@ -95,11 +99,12 @@ func cmdSend(args []string) error {
 		}
 	}
 
-	var reply cliproto.BroadcastReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCBroadcast,
-		cliproto.BroadcastRequest{
+	var reply cliproto.SendReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCSend,
+		cliproto.SendRequest{
 			Handle:       handle,
 			Channel:      channel,
+			BareTarget:   bareTarget,
 			Payload:      payload,
 			MsgSubject:   *subject,
 			InReplyTo:    *inReplyTo,
@@ -128,7 +133,7 @@ func cmdSend(args []string) error {
 // The `id` shown is the last 8 hex chars of the UUID for visual brevity;
 // the full UUID stays in the message envelope (and in --json output if a
 // future verb adds one).
-func printSendSuccess(w io.Writer, r cliproto.BroadcastReply, target string, ackRequested bool) {
+func printSendSuccess(w io.Writer, r cliproto.SendReply, target string, ackRequested bool) {
 	id8 := lastHex8(r.ID)
 	if ackRequested {
 		fmt.Fprintf(w, "sent id=%s to=%s bytes=%d ack=requested\n", id8, target, r.Bytes)

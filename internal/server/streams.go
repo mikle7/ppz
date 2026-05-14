@@ -76,6 +76,44 @@ func deletePipeStream(ctx context.Context, js jetstream.JetStream, accountID uui
 	return nil
 }
 
+// deleteUncollaredPipeStream removes the JetStream stream backing an
+// uncollared pipe (source="" — sourceless). Idempotent. Phase 1.5.
+func deleteUncollaredPipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, name string) error {
+	streamName := natsubj.BuildStreamName(accountID, manifold, "", name)
+	if err := js.DeleteStream(ctx, streamName); err != nil {
+		if errors.Is(err, jetstream.ErrStreamNotFound) {
+			return nil
+		}
+		return fmt.Errorf("delete stream %s: %w", streamName, err)
+	}
+	return nil
+}
+
+// ensurePipeStreamPhase15 is the four-role variant — used by the new
+// POST /api/v1/pipes endpoint for sourceless (and future manifold-
+// aware) pipes. source="" means uncollared. manifold="" means root.
+func ensurePipeStreamPhase15(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, source, name string, maxAge time.Duration, maxMsgs int, maxBytes int64) error {
+	cfg := jetstream.StreamConfig{
+		Name:      natsubj.BuildStreamName(accountID, manifold, source, name),
+		Subjects:  []string{natsubj.BuildSubject(accountID, manifold, source, name)},
+		Retention: jetstream.LimitsPolicy,
+		MaxAge:    maxAge,
+		MaxMsgs:   int64(maxMsgs),
+		MaxBytes:  maxBytes,
+		Storage:   jetstream.FileStorage,
+		Discard:   jetstream.DiscardOld,
+		Replicas:  1,
+	}
+	_, err := js.CreateStream(ctx, cfg)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
+			return nil
+		}
+		return fmt.Errorf("create stream %s: %w", cfg.Name, err)
+	}
+	return nil
+}
+
 // jsFor returns a JetStream context bound to the server's NATS connection.
 func jsFor(nc *nats.Conn) (jetstream.JetStream, error) {
 	return jetstream.New(nc)

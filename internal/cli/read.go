@@ -91,16 +91,25 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 		}
 		target = resolved
 	}
-	idx := strings.LastIndex(target, ".")
-	if idx <= 0 || idx == len(target)-1 {
-		// Bare handle ("foo") or empty pipe ("foo.") — both rejected.
-		return cliproto.New(cliproto.EInvalidPipe)
+	// Phase 1.5: bare names ("room", "team1.room"... wait, the second has
+	// a dot) — bare = NO dot. Sent as BareTarget; daemon resolves as
+	// uncollared pipe at current_namespace. Dotted form keeps today's
+	// handle.pipe semantics.
+	var handle, channel, bareTarget string
+	if !strings.Contains(target, ".") {
+		bareTarget = target
+	} else {
+		idx := strings.LastIndex(target, ".")
+		if idx <= 0 || idx == len(target)-1 {
+			return cliproto.New(cliproto.EInvalidPipe)
+		}
+		handle, channel = target[:idx], target[idx+1:]
 	}
-	handle, channel := target[:idx], target[idx+1:]
 
 	req := cliproto.ReadRequest{
-		Handle:  handle,
-		Channel: channel,
+		Handle:     handle,
+		Channel:    channel,
+		BareTarget: bareTarget,
 		Limit:   limit,
 		Skip:    skip,
 		SinceMS: sinceMS,

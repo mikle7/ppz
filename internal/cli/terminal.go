@@ -433,7 +433,7 @@ func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer)
 		defer wg.Done()
 		// Drain into batches: block for the first message, then sweep
 		// up everything else that's already buffered before going back
-		// to the daemon. Each batch is one IPCBroadcastBatch — the
+		// to the daemon. Each batch is one IPCSendBatch — the
 		// daemon issues N async publishes plus a single Flush, so a
 		// burst of PTY output collapses to ~1 round-trip total instead
 		// of N. Without this, under WAN latency the per-call Flush
@@ -509,9 +509,9 @@ func publishAndDisplayStdout(handle string, master io.Reader, display io.Writer)
 // Errors are swallowed — the publisher loop is best-effort and shouldn't
 // abort the whole terminal session if NATS hiccups.
 func sendStreamLine(handle, channel, payload string) error {
-	var reply cliproto.BroadcastReply
-	return daemon.Call(ipcSocket(), cliproto.IPCBroadcast,
-		cliproto.BroadcastRequest{
+	var reply cliproto.SendReply
+	return daemon.Call(ipcSocket(), cliproto.IPCSend,
+		cliproto.SendRequest{
 			Handle:  handle,
 			Channel: channel,
 			Payload: payload,
@@ -528,16 +528,16 @@ func sendStreamBatch(handle, channel string, payloads []string) error {
 	if len(payloads) == 0 {
 		return nil
 	}
-	var reply cliproto.BroadcastBatchReply
-	return daemon.Call(ipcSocket(), cliproto.IPCBroadcastBatch,
-		cliproto.BroadcastBatchRequest{
+	var reply cliproto.SendBatchReply
+	return daemon.Call(ipcSocket(), cliproto.IPCSendBatch,
+		cliproto.SendBatchRequest{
 			Handle:   handle,
 			Channel:  channel,
 			Payloads: payloads,
 			// Forward session id so the daemon resolves
 			// envelope.sender = d.State.Current(req.Session) against
 			// this tty's current source — same contract as the single-
-			// IPCBroadcast path. Without this, a wrapped pty's stdout
+			// IPCSend path. Without this, a wrapped pty's stdout
 			// stream lands sender="" and the receiver can't tell who
 			// spoke. Pinned by tests/terminal/terminal-share-uses-
 			// current-source.

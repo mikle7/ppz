@@ -100,11 +100,11 @@ func handleTerminalCurrentDaemonConn(conn net.Conn, current string, requests *te
 		_ = enc.Encode(map[string]any{
 			"result": cliproto.PipeCreateReply{Handle: pc.Handle, Name: pc.Name},
 		})
-	case cliproto.IPCBroadcast:
-		var br cliproto.BroadcastRequest
+	case cliproto.IPCSend:
+		var br cliproto.SendRequest
 		_ = json.Unmarshal(req.Params, &br)
 		_ = enc.Encode(map[string]any{
-			"result": cliproto.BroadcastReply{
+			"result": cliproto.SendReply{
 				ID:      "test-id",
 				Subject: "test." + br.Handle + "." + br.Channel,
 				Bytes:   len(br.Payload),

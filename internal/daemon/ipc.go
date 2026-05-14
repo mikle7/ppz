@@ -69,10 +69,10 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.ipcCreate(ctx, conn, req.Params)
 	case cliproto.IPCSwitch:
 		d.ipcSwitch(ctx, conn, req.Params)
-	case cliproto.IPCBroadcast:
-		d.ipcBroadcast(ctx, conn, req.Params)
-	case cliproto.IPCBroadcastBatch:
-		d.handleBroadcastBatch(ctx, conn, req.Params)
+	case cliproto.IPCSend:
+		d.ipcSend(ctx, conn, req.Params)
+	case cliproto.IPCSendBatch:
+		d.handleSendBatch(ctx, conn, req.Params)
 	case cliproto.IPCList:
 		d.ipcList(ctx, conn, req.Params)
 	case cliproto.IPCListWatch:
@@ -91,6 +91,10 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handlePipeDestroy(ctx, conn, req.Params)
 	case cliproto.IPCSourceDestroy:
 		d.handleSourceDestroy(ctx, conn, req.Params)
+	case cliproto.IPCSetNamespace:
+		d.handleSetNamespace(ctx, conn, req.Params)
+	case cliproto.IPCUnsetNamespace:
+		d.handleUnsetNamespace(ctx, conn, req.Params)
 	case cliproto.IPCDiag:
 		d.handleDiag(ctx, conn, req.Params)
 	default:
@@ -148,6 +152,7 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		reply.LoginCheck = check
 	}
 	reply.Current = d.State.Current(req.Session)
+	reply.CurrentNamespace = d.State.CurrentNamespace(req.Session)
 	reply.CurrentPath = filepath.Join(d.State.Home(), fileCurrent)
 	writeIPC(conn, reply)
 }
@@ -164,8 +169,8 @@ func (d *Daemon) ipcCreate(ctx context.Context, conn net.Conn, params json.RawMe
 func (d *Daemon) ipcSwitch(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	d.handleSwitch(ctx, conn, params)
 }
-func (d *Daemon) ipcBroadcast(ctx context.Context, conn net.Conn, params json.RawMessage) {
-	d.handleBroadcast(ctx, conn, params)
+func (d *Daemon) ipcSend(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	d.handleSend(ctx, conn, params)
 }
 func (d *Daemon) ipcList(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	d.handleList(ctx, conn, params)

@@ -8,16 +8,13 @@ const (
 	IPCLogin       = "Login"
 	IPCCreate      = "Create"
 	IPCSwitch      = "Switch"
-	// IPCBroadcast / IPCBroadcastBatch are the publish-IPC verbs. The
-	// `ppz broadcast` CLI verb was removed in Phase 1 (locked
-	// decision #16); `ppz send` (and `ppz command`, terminal stdin
-	// forwarding, etc.) keep using these names internally because
-	// renaming to IPCSend/IPCSendBatch would cascade through
-	// BroadcastRequest / handleBroadcast / resolveBroadcastTarget
-	// etc. with no behavioural change. Wire strings retained so
-	// older daemon binaries don't break during mid-rollout testing.
-	IPCBroadcast      = "Broadcast"
-	IPCBroadcastBatch = "BroadcastBatch"
+	// IPCSend / IPCSendBatch — the publish-IPC verbs used by
+	// `ppz send`, `ppz command`, terminal stdin forwarding, etc.
+	// Renamed from IPCBroadcast/IPCBroadcastBatch in Phase 1.5 to
+	// match the surviving user-facing verb (`ppz broadcast` itself
+	// was removed in Phase 1 — locked decision #16).
+	IPCSend      = "Send"
+	IPCSendBatch = "SendBatch"
 
 	IPCList        = "List"
 	IPCListWatch   = "ListWatch"
@@ -28,6 +25,12 @@ const (
 	IPCPipeCreate    = "PipeCreate"
 	IPCPipeDestroy   = "PipeDestroy"
 	IPCSourceDestroy = "SourceDestroy"
+
+	// Phase 1.5 namespace (manifold) state verbs. `ppz set namespace
+	// PATH` / `ppz unset namespace` — symmetric with handle. No
+	// IPCGetNamespace: `ppz status` carries it in StatusReply.
+	IPCSetNamespace   = "SetNamespace"
+	IPCUnsetNamespace = "UnsetNamespace"
 
 	// Diag verb (Phase 0 — agent hardening). Returns the daemon's
 	// recent NATS connection-state events for `ppz diag`. Works
@@ -62,6 +65,12 @@ type ReadRequest struct {
 	Session   string `json:"session,omitempty"`    // cursor key — defaults to "default" daemon-side
 	NoAdvance bool   `json:"no_advance,omitempty"` // observational reads (terminal view) skip cursor advance
 	All       bool   `json:"all,omitempty"`        // forensic mode (`reread`): ignore the cursor (deliver everything) and don't advance it. Implies NoAdvance.
+
+	// Phase 1.5: BareTarget carries the raw user input when `ppz
+	// read/reread LEAF` was bare. The daemon resolves it as an
+	// uncollared pipe at the session's current_namespace. Handle and
+	// Channel are empty in this case.
+	BareTarget string `json:"bare_target,omitempty"`
 }
 
 // ReadEvent is the wire format of one streamed line in a Read response.
@@ -130,6 +139,10 @@ type StatusReply struct {
 	// case so the user always sees the truth.
 	LoginCheck string `json:"login_check,omitempty"`
 	Current    string `json:"current,omitempty"`
+	// CurrentNamespace is the per-session manifold (Phase 1.5). Empty
+	// when unset = root namespace. Rendered as a `namespace: …` line by
+	// `ppz status`.
+	CurrentNamespace string `json:"current_namespace,omitempty"`
 	// CurrentPath is the daemon-side path to current.json — surfaced so
 	// `ppz status`'s env/daemon-disagree warning can point users at the
 	// actual file (which lives in the daemon's home, not the CLI's, when
@@ -185,6 +198,23 @@ type SwitchReply struct {
 	Handle string `json:"handle"`
 }
 
+// Phase 1.5: namespace (manifold) per-session state.
+
+type SetNamespaceRequest struct {
+	Namespace string `json:"namespace"` // dot-separated path; '' = root (clear)
+	Session   string `json:"session,omitempty"`
+}
+
+type SetNamespaceReply struct {
+	Namespace string `json:"namespace"`
+}
+
+type UnsetNamespaceRequest struct {
+	Session string `json:"session,omitempty"`
+}
+
+type UnsetNamespaceReply struct{}
+
 // ConnectRequest is the input to `ppz connect <handle>`. The daemon ensures
 // the source exists (idempotent — pre-existing source is fine), then sets
 // it as `current`.
@@ -207,7 +237,7 @@ type DisconnectRequest struct {
 // being cleared on the daemon side. Returns no fields.
 type DisconnectReply struct{}
 
-type BroadcastRequest struct {
+type SendRequest struct {
 	// Optional explicit target. If both empty, daemon publishes to its
 	// current source on .broadcast. If Handle is set, publishes to
 	// <Handle>.<Channel|"broadcast">. Used by `ppz send` and by
@@ -222,7 +252,7 @@ type BroadcastRequest struct {
 	// MsgSubject is an optional envelope-level subject (header-line). Free-
 	// form for users (set via `ppz send --subject`); subjects starting with
 	// `ack:` are reserved for daemon-internal protocol messages (ack
-	// emission) and rejected at the IPC trust boundary in handleBroadcast.
+	// emission) and rejected at the IPC trust boundary in handleSend.
 	MsgSubject string `json:"msg_subject,omitempty"`
 	// InReplyTo / AckRequested mirror the new envelope fields (v0.25.0).
 	// JSON tags align with the envelope (`in_reply_to`, `ack_requested`)
@@ -233,34 +263,44 @@ type BroadcastRequest struct {
 	// Session keys the per-session current-source fallback when neither
 	// Handle nor PPZ_CURRENT_HANDLE is set.
 	Session string `json:"session,omitempty"`
+
+	// Phase 1.5: BareTarget carries the raw target string when the user
+	// typed `ppz send LEAF` without a dot. The CLI mangles the bare form
+	// to {Handle: LEAF, Channel: "inbox"} for backward compat with the
+	// collared recipient.inbox shorthand; BareTarget lets the daemon
+	// recognise the original bare form and fall back to uncollared pipe
+	// resolution if the source handle lookup misses. Empty when the user
+	// typed an explicit `<H>.<P>` form.
+	BareTarget string `json:"bare_target,omitempty"`
 }
 
-type BroadcastReply struct {
+type SendReply struct {
 	ID      string `json:"id"`
 	Subject string `json:"subject"`
 	Bytes   int    `json:"bytes"`
 }
 
-// BroadcastBatchRequest publishes N payloads in one IPC round-trip.
+// SendBatchRequest publishes N payloads in one IPC round-trip.
 // Used by streaming producers (terminal share's stdout drain,
 // `ppz broadcast` line-streaming) where the per-call NATS round-
 // trip cost dominates throughput under WAN. Validation runs once
 // for the whole batch; the daemon issues N async nc.Publish calls
 // followed by ONE nc.Flush, then replies with N ids — preserving
 // the same "bytes confirmed at server" contract as the single
-// IPCBroadcast call, just amortised across the batch.
-type BroadcastBatchRequest struct {
-	Handle   string   `json:"handle,omitempty"`
-	Channel  string   `json:"channel,omitempty"`
-	Payloads []string `json:"payloads"`
-	Session  string   `json:"session,omitempty"`
+// IPCSend call, just amortised across the batch.
+type SendBatchRequest struct {
+	Handle     string   `json:"handle,omitempty"`
+	Channel    string   `json:"channel,omitempty"`
+	BareTarget string   `json:"bare_target,omitempty"` // Phase 1.5: see SendRequest.BareTarget
+	Payloads   []string `json:"payloads"`
+	Session    string   `json:"session,omitempty"`
 }
 
-// BroadcastBatchReply mirrors BroadcastReply but as parallel arrays,
+// SendBatchReply mirrors SendReply but as parallel arrays,
 // one entry per published payload. IDs[i] / Bytes[i] correspond to
 // Payloads[i] in the request. Subject is shared across the batch
 // (all messages land on the same handle.pipe).
-type BroadcastBatchReply struct {
+type SendBatchReply struct {
 	IDs     []string `json:"ids"`
 	Subject string   `json:"subject"`
 	Bytes   []int    `json:"bytes"`
@@ -327,6 +367,31 @@ type ListWatchRequest struct {
 
 type ListReply struct {
 	Sources []Source `json:"sources"`
+	// Phase 1.5: uncollared (sourceless) pipes — pipes with source_id IS
+	// NULL. Walking sources alone misses them. The daemon enriches each
+	// row with JetStream stats the same way it does PipeInfos.
+	UncollaredPipes []UncollaredPipe `json:"uncollared_pipes,omitempty"`
+}
+
+// UncollaredPipe is the wire projection of a sourceless pipe row + its
+// JetStream stats. Phase 1.5.
+type UncollaredPipe struct {
+	Manifold string `json:"manifold,omitempty"` // '' = root namespace
+	Name     string `json:"name"`
+	Info     PipeInfo `json:"info"`
+}
+
+// ListUncollaredPipesReply is the server response for GET /api/v1/pipes
+// (uncollared listing). One entry per sourceless pipe in the account.
+// Phase 1.5.
+type ListUncollaredPipesReply struct {
+	Pipes []UncollaredPipeListEntry `json:"pipes"`
+}
+
+type UncollaredPipeListEntry struct {
+	Manifold  string `json:"manifold,omitempty"`
+	Name      string `json:"name"`
+	CreatedBy string `json:"created_by,omitempty"`
 }
 
 // Server HTTP types.
@@ -403,20 +468,36 @@ type ListSourcesReply struct {
 }
 
 // PipeCreateRequest is the input to `ppz pipe create <name>` — and the body
-// of POST /api/v1/sources/{handle}/pipes. Retention overrides are pointers
-// so "absent" (= use default) is distinguishable from "explicitly zero".
+// of POST /api/v1/sources/{handle}/pipes and POST /api/v1/pipes (Phase 1.5
+// sourceless form). Retention overrides are pointers so "absent" (= use
+// default) is distinguishable from "explicitly zero".
+//
+// Phase 1.5 fields per locked decision #18 four-role grammar:
+//   - Manifold:     hierarchical-grouping segment string ('' = root)
+//   - SourceHandle: actor identity name; nil = uncollared (sourceless)
+//
+// Handle is retained as a backward-compat alias for SourceHandle until
+// Cycle B finishes threading the new fields through the daemon and CLI;
+// Cycle E's docs commit removes it.
 type PipeCreateRequest struct {
-	Handle     string `json:"handle"`
-	Name       string `json:"name"`
-	TTLSeconds *int   `json:"ttl_seconds,omitempty"`
-	MaxMsgs    *int   `json:"max_msgs,omitempty"`
-	MaxBytes   *int64 `json:"max_bytes,omitempty"`
+	Handle       string  `json:"handle"`
+	Manifold     string  `json:"manifold,omitempty"`
+	SourceHandle *string `json:"source_handle,omitempty"`
+	Name         string  `json:"name"`
+	TTLSeconds   *int    `json:"ttl_seconds,omitempty"`
+	MaxMsgs      *int    `json:"max_msgs,omitempty"`
+	MaxBytes     *int64  `json:"max_bytes,omitempty"`
+
+	// Session is set by the CLI for daemon-side manifold lookup; the IPC
+	// transport drops it before forwarding to the server. Phase 1.5.
+	Session string `json:"session,omitempty"`
 }
 
 // PipeCreateReply mirrors the server's resolved retention (after defaults
 // are filled in) so the CLI prints exactly what was provisioned.
 type PipeCreateReply struct {
 	Handle     string `json:"handle"`
+	Manifold   string `json:"manifold,omitempty"` // Phase 1.5
 	Name       string `json:"name"`
 	StreamName string `json:"stream_name"`
 	TTLSeconds int    `json:"ttl_seconds"`
@@ -427,11 +508,17 @@ type PipeCreateReply struct {
 type PipeDestroyRequest struct {
 	Handle string `json:"handle"`
 	Name   string `json:"name"`
+	// Phase 1.5: BareTarget set by the CLI when the user typed
+	// `ppz pipe destroy LEAF` without a dot. Daemon resolves as an
+	// uncollared pipe at the session's current namespace.
+	BareTarget string `json:"bare_target,omitempty"`
+	Session    string `json:"session,omitempty"`
 }
 
 type PipeDestroyReply struct {
-	Handle string `json:"handle"`
-	Name   string `json:"name"`
+	Handle   string `json:"handle"`
+	Manifold string `json:"manifold,omitempty"` // Phase 1.5: present for uncollared destroys
+	Name     string `json:"name"`
 }
 
 type SourceDestroyRequest struct {

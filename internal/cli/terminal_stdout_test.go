@@ -204,8 +204,8 @@ func serveBlockingStdoutPublishDaemon(t *testing.T, sock string) (chan struct{},
 					return
 				}
 				switch req.Method {
-				case cliproto.IPCBroadcast:
-					var br cliproto.BroadcastRequest
+				case cliproto.IPCSend:
+					var br cliproto.SendRequest
 					if err := json.Unmarshal(req.Params, &br); err != nil {
 						return
 					}
@@ -214,10 +214,10 @@ func serveBlockingStdoutPublishDaemon(t *testing.T, sock string) (chan struct{},
 						<-release
 					}
 					_ = json.NewEncoder(conn).Encode(map[string]any{
-						"result": cliproto.BroadcastReply{ID: "id", Subject: "org.term.stdout", Bytes: len(br.Payload)},
+						"result": cliproto.SendReply{ID: "id", Subject: "org.term.stdout", Bytes: len(br.Payload)},
 					})
-				case cliproto.IPCBroadcastBatch:
-					var br cliproto.BroadcastBatchRequest
+				case cliproto.IPCSendBatch:
+					var br cliproto.SendBatchRequest
 					if err := json.Unmarshal(req.Params, &br); err != nil {
 						return
 					}
@@ -236,7 +236,7 @@ func serveBlockingStdoutPublishDaemon(t *testing.T, sock string) (chan struct{},
 						<-release
 					}
 					_ = json.NewEncoder(conn).Encode(map[string]any{
-						"result": cliproto.BroadcastBatchReply{IDs: ids, Subject: "org.term.stdout", Bytes: bytes},
+						"result": cliproto.SendBatchReply{IDs: ids, Subject: "org.term.stdout", Bytes: bytes},
 					})
 				default:
 					return

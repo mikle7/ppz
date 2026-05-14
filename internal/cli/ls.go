@@ -63,9 +63,9 @@ func cmdLs(args []string) error {
 	}
 
 	if *asJSON {
-		cliproto.PrintListJSON(os.Stdout, reply.Sources)
+		cliproto.PrintListJSONWithUncollared(os.Stdout, reply.Sources, reply.UncollaredPipes)
 	} else {
-		cliproto.PrintList(os.Stdout, reply.Sources, *iso)
+		cliproto.PrintListWithUncollared(os.Stdout, reply.Sources, reply.UncollaredPipes, *iso)
 	}
 	return nil
 }

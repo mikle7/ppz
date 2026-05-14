@@ -118,9 +118,37 @@ func ValidateUserPipeName(name string) error {
 // Removed in Phase B.
 func ValidateChannel(c string) error { return ValidatePipe(c) }
 
-// Subject builds <org>.<handle>.<pipe>.
+// Subject builds <account>.<handle>.<pipe>. Pre-Phase-1.5 three-role
+// builder; equivalent to BuildSubject(accountID, "", handle, pipe).
+// Retained for callers that haven't been threaded through manifold yet.
 func Subject(accountID uuid.UUID, handle, pipe string) string {
 	return fmt.Sprintf("%s.%s.%s", accountID.String(), handle, pipe)
+}
+
+// BuildSubject emits the four-role subject form per locked decision #18:
+//
+//	<account>.<manifold?>.<source?>.<pipe>
+//
+// where manifold is 0+ dot-separated segments ('' = root) and source
+// ("collar") is 0 or 1 segment ('' = uncollared). Wire-level the
+// manifold-only and source-only shapes are indistinguishable
+// (acct.X.pipe could be either) — that's by design; disambiguation
+// happens by DB row at create time. The builder just emits the
+// canonical dotted form.
+func BuildSubject(accountID uuid.UUID, manifold, source, pipe string) string {
+	var b strings.Builder
+	b.WriteString(accountID.String())
+	if manifold != "" {
+		b.WriteByte('.')
+		b.WriteString(manifold)
+	}
+	if source != "" {
+		b.WriteByte('.')
+		b.WriteString(source)
+	}
+	b.WriteByte('.')
+	b.WriteString(pipe)
+	return b.String()
 }
 
 // StreamName produces the JetStream stream name per WIRE.md §2:
@@ -128,12 +156,36 @@ func Subject(accountID uuid.UUID, handle, pipe string) string {
 //	source_<orgshort>_<handle>_<pipe>
 //
 // where orgshort is the first 8 hex chars of the org UUID, hyphens stripped.
+// Pre-Phase-1.5 three-role form; for the four-role form use BuildStreamName.
 func StreamName(accountID uuid.UUID, handle, pipe string) string {
 	hex := strings.ReplaceAll(accountID.String(), "-", "")
 	if len(hex) > 8 {
 		hex = hex[:8]
 	}
 	return "source_" + hex + "_" + handle + "_" + pipe
+}
+
+// BuildStreamName produces a JetStream stream name for the four-role pipe
+// shape. NATS stream names can't contain dots, so manifold dots are
+// replaced with underscores. Empty manifold/source slots are omitted
+// entirely — handle regex forbids underscores in segments so there's no
+// ambiguity.
+//
+//	pipe_<orgshort>[_<manifold-underscored>][_<source>]_<name>
+func BuildStreamName(accountID uuid.UUID, manifold, source, name string) string {
+	hex := strings.ReplaceAll(accountID.String(), "-", "")
+	if len(hex) > 8 {
+		hex = hex[:8]
+	}
+	parts := []string{"pipe", hex}
+	if manifold != "" {
+		parts = append(parts, strings.ReplaceAll(manifold, ".", "_"))
+	}
+	if source != "" {
+		parts = append(parts, source)
+	}
+	parts = append(parts, name)
+	return strings.Join(parts, "_")
 }
 
 // OrgSubscription is the wildcard subscription used by the server-side
