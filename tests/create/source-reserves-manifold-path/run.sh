@@ -13,5 +13,5 @@ ppz_a unset handle >/dev/null
 ppz_a source create team1 >/dev/null
 ppz_a unset handle >/dev/null
 ppz_a set namespace team1 >/dev/null
-ppz_a pipe create chat
+ppz_a pipe create chat 2>&1
 echo "exit2=$?"

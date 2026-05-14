@@ -17,5 +17,5 @@ echo "send-exit=$?"
 grep -oE '^sent id=[a-f0-9]{8} to=[^ ]+ bytes=[0-9]+$' "$err" | head -1 \
   | sed -E 's/id=[a-f0-9]{8}/id=ID8/; s/bytes=[0-9]+/bytes=N/'
 
-ppz_a reread foo.inbox -l 1
+ppz_a reread foo.inbox -l 1 --json | jq -r '.payload'
 rm -f "$err"

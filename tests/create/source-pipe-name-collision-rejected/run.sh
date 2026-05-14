@@ -14,5 +14,5 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a unset handle >/dev/null
 ppz_a source create foo >/dev/null
 ppz_a unset handle >/dev/null
-ppz_a pipe create foo
+ppz_a pipe create foo 2>&1
 echo "exit2=$?"

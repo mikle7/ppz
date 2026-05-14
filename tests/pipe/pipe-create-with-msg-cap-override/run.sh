@@ -6,7 +6,7 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a pipe create ring --max-msgs=5 >/dev/null
+ppz_a pipe create chat.ring --max-msgs=5 >/dev/null
 
 for i in 1 2 3 4 5 6 7 8; do
   ppz_a send chat.ring "msg-$i" >/dev/null

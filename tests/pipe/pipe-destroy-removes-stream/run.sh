@@ -5,12 +5,12 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a pipe create archive >/dev/null
+ppz_a pipe create chat.archive >/dev/null
 
 echo "--- before destroy ---"
 ppz_a ls | grep '^chat\.archive' | ls_normalize
 
-ppz_a pipe destroy archive
+ppz_a pipe destroy chat.archive
 
 echo "--- after destroy ---"
 ppz_a ls | grep '^chat\.archive' || echo "no archive row"

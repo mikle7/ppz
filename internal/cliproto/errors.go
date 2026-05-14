@@ -181,6 +181,16 @@ func NewUncollaredPipeNotFound(name, manifold string) *Error {
 	return &Error{Code: EPipeNotFound, Message: fmt.Sprintf("uncollared pipe '%s' not found at %s", name, location)}
 }
 
+// NewUncollaredPipeTaken: uncollared pipe 'archive' already exists at root
+// (or at manifold 'team-a'). Phase 1.5.1 — companion to NewUncollaredPipeNotFound.
+func NewUncollaredPipeTaken(name, manifold string) *Error {
+	location := "root"
+	if manifold != "" {
+		location = fmt.Sprintf("manifold '%s'", manifold)
+	}
+	return &Error{Code: EPipeTaken, Message: fmt.Sprintf("uncollared pipe '%s' already exists at %s", name, location)}
+}
+
 // NewNameTakenBySource: name 'foo' is already taken by source at root
 // (or at manifold 'team-a'). Phase 1.5.1 collision rule.
 func NewNameTakenBySource(name, manifold string) *Error {
@@ -204,12 +214,15 @@ func NewNameTakenByUncollaredPipe(name, manifold string) *Error {
 // NewManifoldReservedBySource: manifold path 'team1' is reserved by source 'team1'
 // at root. Phase 1.5.1 — source X at manifold M reserves the manifold-prefix
 // path M.X because the source's auto-pipes already live at those subjects.
-func NewManifoldReservedBySource(prefix, sourceManifold string) *Error {
+// `prefix` is the colliding manifold path (e.g. "team1.subteam"). `sourceHandle`
+// is the source's bare name (e.g. "subteam"). `sourceManifold` is where the
+// source lives (e.g. "team1", or "" for root).
+func NewManifoldReservedBySource(prefix, sourceHandle, sourceManifold string) *Error {
 	location := "root"
 	if sourceManifold != "" {
 		location = fmt.Sprintf("manifold '%s'", sourceManifold)
 	}
-	return &Error{Code: ENameTaken, Message: fmt.Sprintf("manifold path '%s' is reserved by source '%s' at %s", prefix, prefix, location)}
+	return &Error{Code: ENameTaken, Message: fmt.Sprintf("manifold path '%s' is reserved by source '%s' at %s", prefix, sourceHandle, location)}
 }
 
 // NewInvalidPipeReserved: pipe name 'system' is reserved

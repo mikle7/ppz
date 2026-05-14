@@ -220,7 +220,7 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	} else if anyPipe {
-		writeErr(w, cliproto.NewManifoldReservedBySource(req.Handle, req.Manifold))
+		writeErr(w, cliproto.NewManifoldReservedBySource(reservedPath, req.Handle, req.Manifold))
 		return
 	}
 
@@ -458,10 +458,7 @@ func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request
 	defer cancel()
 
 	// Phase 1.5.1 first-wins collision rule: reject if a source with the
-	// same name already exists at this manifold. (Source X at manifold M
-	// also reserves the prefix M.X via its auto-pipes; that's checked at
-	// source-create time, not here, since this endpoint only places one
-	// uncollared pipe at a leaf.)
+	// same name already exists at this manifold.
 	if exists, err := db.SourceExistsAtManifold(ctx, s.Pool, key.AccountID, req.Manifold, req.Name); err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -469,16 +466,33 @@ func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request
 		writeErr(w, cliproto.NewNameTakenBySource(req.Name, req.Manifold))
 		return
 	}
+	// Phase 1.5.1 first-wins collision rule: also reject if the manifold
+	// path itself collides with a reserved source-prefix. Source X at
+	// manifold M reserves the prefix M.X via its auto-pipes — so any pipe
+	// at manifold M.X (or M.X.<deeper>) would land on the source's
+	// subjects. Walk the segments and check each prefix.
+	if req.Manifold != "" {
+		segs := strings.Split(req.Manifold, ".")
+		for i, seg := range segs {
+			parent := strings.Join(segs[:i], ".")
+			reserved, err := db.SourceExistsAtManifold(ctx, s.Pool, key.AccountID, parent, seg)
+			if err != nil {
+				writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+				return
+			}
+			if reserved {
+				prefix := strings.Join(segs[:i+1], ".")
+				writeErr(w, cliproto.NewManifoldReservedBySource(prefix, seg, parent))
+				return
+			}
+		}
+	}
 
 	pipe, err := db.InsertPipe(ctx, s.Pool, key.AccountID, req.Manifold, nil, key.CreatedByUserID, req.Name,
 		req.TTLSeconds, req.MaxMsgs, req.MaxBytes)
 	if err != nil {
 		if errors.Is(err, db.ErrPipeNameTaken) {
-			target := req.Name
-			if req.Manifold != "" {
-				target = req.Manifold + "." + req.Name
-			}
-			writeErr(w, cliproto.NewPipeTaken(req.Name, target))
+			writeErr(w, cliproto.NewUncollaredPipeTaken(req.Name, req.Manifold))
 			return
 		}
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})

@@ -8,7 +8,7 @@ auth_as_foo
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a terminal create foo >/dev/null
-ppz_a pipe create archive >/dev/null
+ppz_a pipe create foo.archive >/dev/null
 ppz_a send foo.inbox "hello-inbox" >/dev/null
 ppz_a send foo.archive "hello-archive" >/dev/null
 wait_for 20 "ppz_a ls | grep -q hello-archive" >/dev/null

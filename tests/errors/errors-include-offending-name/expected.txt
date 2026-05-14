@@ -1,7 +1,7 @@
 --- E_SOURCE_NOT_FOUND ---
 error: E_SOURCE_NOT_FOUND: source 'missingsrc' not found
 --- E_PIPE_TAKEN ---
-error: E_PIPE_TAKEN: pipe 'archive' already exists on source 'foo'
+error: E_PIPE_TAKEN: uncollared pipe 'archive' already exists at root
 --- E_SOURCE_TAKEN ---
 error: E_SOURCE_TAKEN: source 'foo' already exists in this account
 --- E_INVALID_PIPE (reserved name) ---

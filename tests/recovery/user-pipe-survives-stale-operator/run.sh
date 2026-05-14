@@ -14,7 +14,7 @@ KEY=$(key_alpha)
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$KEY" >/dev/null
 ppz_a source create "$HANDLE" >/dev/null 2>&1 || true
 ppz_a set handle "$HANDLE" >/dev/null
-ppz_a pipe create "$PIPE" >/dev/null
+ppz_a pipe create "$HANDLE.$PIPE" >/dev/null
 out1=$(ppz_a send "$HANDLE.$PIPE" "before" 2>&1)
 echo "before=$(echo "$out1" | grep -oE '^sent\b|^error: E_[A-Z_]+' | head -1)"
 
