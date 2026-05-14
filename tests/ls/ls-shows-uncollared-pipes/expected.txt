@@ -1,0 +1,4 @@
+alice.notes 0 0 - - foo
+plaza 0 0 - - foo
+team-a.chat 0 0 - - foo
+exit=0

@@ -1,0 +1,2 @@
+destroyed pipe=plaza
+exit=0
