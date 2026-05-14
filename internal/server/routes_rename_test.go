@@ -108,16 +108,25 @@ func TestTemplates_AccountHTMLPresent(t *testing.T) {
 }
 
 // TestTemplates_NoOrganisationStrings — rendered templates and template
-// source must not contain "Organisation"/"organisation" visible text.
-// Cheap textual scan over the embedded set. Allowed: route paths that
-// are *test fixtures* (none) — production templates should be clean.
+// source must not contain "Organisation"/"organisation" visible text or
+// `/orgs` URL paths. Cheap textual scan over the embedded set.
+//
+// landing.html is exempt: it's OSS marketing content that demos
+// pipescloud-hosted product URLs (`ppz.cloud/orgs/...`), and pipescloud
+// retains "organisation" as its customer-facing concept per strategy
+// doc decisions #7 and #11. Only the admin GUI templates (which describe
+// OSS routes) are subject to the rename.
 func TestTemplates_NoOrganisationStrings(t *testing.T) {
 	files, err := templateFS.ReadDir("templates")
 	if err != nil {
 		t.Fatalf("templateFS.ReadDir: %v", err)
 	}
+	exempt := map[string]bool{"landing.html": true}
 	forbidden := []string{"Organisation", "organisation", "/orgs", "OrganisationName"}
 	for _, f := range files {
+		if exempt[f.Name()] {
+			continue
+		}
 		data, err := templateFS.ReadFile("templates/" + f.Name())
 		if err != nil {
 			t.Fatalf("read %s: %v", f.Name(), err)
