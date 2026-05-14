@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.31.1 — Strict bare rule + first-wins collisions (Phase 1.5.1)
+
+**Breaking release.** Wire-level stream naming changed — cutover via Reset Database action then redeploy.
+
+Tightens the four-role data model shipped in v0.31.0. Locks the design questions left open at v0.31.0: how bare names resolve at create-time, how collisions are reconciled across the source/pipe/manifold namespaces, and what `ppz send LEAF` does when LEAF could mean an uncollared pipe or a source's `.inbox`. Also fixes the v0.31.0 regression where `ppz send LEAF` failed with `E_SOURCE_NOT_FOUND` for uncollared pipes (reported on pipescloud.io).
+
+### New
+
+- **Strict bare-name rule.** `ppz pipe create LEAF` and `ppz pipe destroy LEAF` no longer auto-collar under the current handle. Bare names always resolve to an uncollared pipe at the current namespace. To create a collared pipe you must say so explicitly: `ppz pipe create <source>.<pipe>`. Resolves an ambiguity where `set namespace X` + `set handle Y` + `pipe create Z` had two equally plausible interpretations.
+- **First-wins collision rule.** Within a manifold, source-handles and uncollared-pipe-names share a single namespace — you cannot create a resource that conflicts with an existing one. New error code **`E_NAME_TAKEN`** (exit 21) with three constructor forms:
+  - `name 'X' is already taken by source at <root|manifold M>`
+  - `name 'X' is already taken by uncollared pipe at <root|manifold M>`
+  - `manifold path 'M.X' is reserved by source 'X' at <root|manifold M>`
+- **Manifold-prefix reservation.** A source `X` at manifold `M` reserves the manifold path `M.X` because its auto-pipes (`inbox`/`stdin`/`stdout`/`stdctrl`) already publish at those subjects. Creating an uncollared pipe at `M.X` (or any deeper sub-path) is rejected — would otherwise collide on the wire.
+- **Send shorthand fallback.** `ppz send LEAF "msg"` now tries the uncollared pipe `LEAF` first and falls back to the source shorthand `LEAF.inbox` if `LEAF` is a source. With the collision rule preventing both shapes from coexisting at the same manifold, the fallback is unambiguous. Fixes the v0.31.0 regression.
+- **Namespace-aware source creation.** `ppz set namespace M` then `ppz source create X` creates the source at manifold `M` (was: always root). The session's `current_namespace` and `current_handle` are independent slots.
+- **`E_PIPE_TAKEN` for uncollared pipes** now renders `uncollared pipe 'X' already exists at <root|manifold M>` instead of the collared `on source X` form (which made no sense for sourceless pipes).
+
+### Wire-level changes
+
+- **JetStream stream naming format changed**: `source_<orgshort>_<handle>_<pipe>` → `pipe_<orgshort>[_<manifold>][_<source>]_<name>`. All existing streams under the old name are orphaned (the new code neither reads nor writes them). Subject grammar is unchanged for root-collared shape — only the stream container name moved.
+- 17 server + daemon callsites threaded through `natsubj.BuildSubject` / `natsubj.BuildStreamName` (replacing the pre-Phase-1.5 three-role `Subject` / `StreamName`).
+
+### Cutover
+
+Same sequence as v0.31.0:
+
+1. Reset Database action — drops + recreates the production DB, leaves ppz-server stopped. Also clears the orphaned JetStream streams.
+2. Deploy v0.31.1 — `systemctl restart` brings up the new binary against the empty DB; baseline 0001 + 0002 migrations run cleanly.
+3. Smoke-test the live deployment.
+
 ## v0.31.0 — Data model under the new CLI surface (Phase 1.5)
 
 **Breaking release.** Pre-launch schema bump — cutover via Reset Database action then redeploy.

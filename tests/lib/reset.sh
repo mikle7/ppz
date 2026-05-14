@@ -100,13 +100,14 @@ reset_daemon_home() {
     : > "$home/credentials" 2>/dev/null || true
   fi
   # `current` is the legacy plain-text file (pre-per-session); `current.json`
-  # is the per-session map. Truncate (not unlink) for the same reason.
-  for f in "$home/current" "$home/current.json"; do
+  # is the per-session map. `namespace.json` is Phase 1.5's per-session
+  # manifold map. Truncate (not unlink) for the same reason.
+  for f in "$home/current" "$home/current.json" "$home/namespace.json"; do
     if [[ -f "$f" ]]; then
       : > "$f" 2>/dev/null || true
     fi
   done
-  rm -f "$home/current.json.tmp" 2>/dev/null || true
+  rm -f "$home/current.json.tmp" "$home/namespace.json.tmp" 2>/dev/null || true
   rm -rf "$home/cursors" 2>/dev/null || true
 }
 reset_daemon_home "${PPZ_DAEMON_A_HOME:-/tmp/a}"

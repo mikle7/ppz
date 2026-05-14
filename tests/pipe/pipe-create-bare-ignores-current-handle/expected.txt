@@ -1,0 +1,2 @@
+created pipe=room retention=ttl=24h0m0s,msgs=5000,bytes=16777216
+exit=0

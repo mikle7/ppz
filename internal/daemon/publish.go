@@ -41,7 +41,10 @@ func (d *Daemon) publishEnvelope(accountID uuid.UUID, dest, pipe string, env env
 	if err != nil {
 		return err
 	}
-	subject := natsubj.Subject(accountID, dest, pipe)
+	// Phase 1.5.1: look up the destination handle's manifold so the
+	// subject lands at the right path. Empty for handles cached at
+	// root (the common case).
+	subject := natsubj.BuildSubject(accountID, d.State.HandleManifold(dest), dest, pipe)
 	if err := d.NC.Publish(subject, data); err != nil {
 		return err
 	}

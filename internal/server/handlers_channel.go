@@ -43,8 +43,8 @@ func (s *Server) handleGUIPipePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subject := natsubj.Subject(org.ID, src.Handle, pipeName)
-	streamName := natsubj.StreamName(org.ID, src.Handle, pipeName)
+	subject := natsubj.BuildSubject(org.ID, src.Manifold, src.Handle, pipeName)
+	streamName := natsubj.BuildStreamName(org.ID, src.Manifold, src.Handle, pipeName)
 
 	type messageView struct {
 		ID        string

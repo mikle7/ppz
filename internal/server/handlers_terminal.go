@@ -85,7 +85,7 @@ func (s *Server) handleGUITerminalWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "org account: "+err.Error(), 500)
 		return
 	}
-	stdoutStream, err := js.Stream(ctx, natsubj.StreamName(org.ID, src.Handle, "stdout"))
+	stdoutStream, err := js.Stream(ctx, natsubj.BuildStreamName(org.ID, src.Manifold, src.Handle, "stdout"))
 	if err != nil {
 		http.Error(w, "no stdout stream for this source (has it been shared yet?)", 404)
 		return
@@ -94,7 +94,7 @@ func (s *Server) handleGUITerminalWS(w http.ResponseWriter, r *http.Request) {
 	// older shares. A nil stdctrlStream just skips the resize plumbing —
 	// xterm.js falls back to its default size, which is wrong but not
 	// broken.
-	stdctrlStream, _ := js.Stream(ctx, natsubj.StreamName(org.ID, src.Handle, "stdctrl"))
+	stdctrlStream, _ := js.Stream(ctx, natsubj.BuildStreamName(org.ID, src.Manifold, src.Handle, "stdctrl"))
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// Same-origin only — there's no use case for cross-origin terminal
@@ -152,7 +152,7 @@ func (s *Server) handleGUITerminalWS(w http.ResponseWriter, r *http.Request) {
 	// Follow branch — one OrderedConsumer each, both forward as frames
 	// and either ending tears down the conn.
 	stdoutConsumer, err := stdoutStream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
-		FilterSubjects: []string{natsubj.Subject(org.ID, src.Handle, "stdout")},
+		FilterSubjects: []string{natsubj.BuildSubject(org.ID, src.Manifold, src.Handle, "stdout")},
 		DeliverPolicy:  jetstream.DeliverByStartSequencePolicy,
 		OptStartSeq:    lastStdoutSeq + 1,
 	})
@@ -181,7 +181,7 @@ func (s *Server) handleGUITerminalWS(w http.ResponseWriter, r *http.Request) {
 
 	if stdctrlStream != nil {
 		stdctrlConsumer, cerr := stdctrlStream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
-			FilterSubjects: []string{natsubj.Subject(org.ID, src.Handle, "stdctrl")},
+			FilterSubjects: []string{natsubj.BuildSubject(org.ID, src.Manifold, src.Handle, "stdctrl")},
 			DeliverPolicy:  jetstream.DeliverByStartSequencePolicy,
 			OptStartSeq:    lastStdctrlSeq + 1,
 		})

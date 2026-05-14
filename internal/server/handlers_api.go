@@ -178,6 +178,14 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 		writeErr(w, cliproto.NewInvalidHandle(req.Handle))
 		return
 	}
+	if req.Manifold != "" {
+		for _, seg := range strings.Split(req.Manifold, ".") {
+			if err := natsubj.ValidateHandle(seg); err != nil {
+				writeErr(w, &cliproto.Error{Code: cliproto.EInvalidManifold, Message: "manifold segment invalid: " + seg})
+				return
+			}
+		}
+	}
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 
@@ -190,10 +198,33 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 		return
 	}
 
-	// Phase 1.5: manifold defaults to '' (root) until the request shape
-	// adds an explicit field in Cycle B. The DB column is NOT NULL with
-	// default ''.
-	src, err := db.InsertSource(ctx, s.Pool, key.AccountID, key.CreatedByUserID, "", req.Handle, kind)
+	// Phase 1.5.1 first-wins collision rule (both directions):
+	// (a) reject if an uncollared pipe with this name already exists at
+	//     this manifold;
+	// (b) reject if there's already at least one pipe (collared or
+	//     uncollared) under the manifold-prefix path the new source's
+	//     auto-pipes would occupy — i.e. manifold==req.Manifold+"."+
+	//     req.Handle (or req.Handle when req.Manifold is empty).
+	if taken, err := db.UncollaredPipeExists(ctx, s.Pool, key.AccountID, req.Manifold, req.Handle); err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	} else if taken {
+		writeErr(w, cliproto.NewNameTakenByUncollaredPipe(req.Handle, req.Manifold))
+		return
+	}
+	reservedPath := req.Handle
+	if req.Manifold != "" {
+		reservedPath = req.Manifold + "." + req.Handle
+	}
+	if anyPipe, err := db.PipesExistAtManifold(ctx, s.Pool, key.AccountID, reservedPath); err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	} else if anyPipe {
+		writeErr(w, cliproto.NewManifoldReservedBySource(reservedPath, req.Handle, req.Manifold))
+		return
+	}
+
+	src, err := db.InsertSource(ctx, s.Pool, key.AccountID, key.CreatedByUserID, req.Manifold, req.Handle, kind)
 	if err != nil {
 		if errors.Is(err, db.ErrHandleTaken) {
 			writeErr(w, cliproto.NewSourceTaken(req.Handle))
@@ -205,23 +236,26 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request, key 
 
 	js, err := s.JSFor(ctx, key.AccountID)
 	if err != nil {
-		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "org account: " + err.Error()})
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "account: " + err.Error()})
 		return
 	}
+	// Phase 1.5.1: auto-pipes provisioned at the source's manifold
+	// via the four-role builder. For root-manifold sources (the
+	// pre-1.5.1 case) the stream name is `pipe_<orgshort>_<handle>_<pipe>`
+	// — a wire-format change from the legacy `source_…` prefix that
+	// requires a Reset Database cutover.
 	for _, p := range src.Pipes() {
-		if err := ensurePipeStream(ctx, js, key.AccountID, src.Handle, p); err != nil {
+		if err := ensurePipeStream(ctx, js, key.AccountID, src.Manifold, src.Handle, p); err != nil {
 			writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 			return
 		}
 	}
-	// Surface a representative subject for the new handle. Broadcast is
-	// gone (locked decision #16); inbox is the post-Phase-1 default that
-	// every handle gets, regardless of kind.
-	subject := natsubj.Subject(key.AccountID, src.Handle, "inbox")
+	subject := natsubj.BuildSubject(key.AccountID, src.Manifold, src.Handle, "inbox")
 
 	writeJSON(w, http.StatusCreated, cliproto.CreateSourceReply{
 		ID:        src.ID.String(),
 		Handle:    src.Handle,
+		Manifold:  src.Manifold,
 		Kind:      string(src.Kind),
 		Subject:   subject,
 		CreatedAt: src.CreatedAt,
@@ -278,6 +312,7 @@ func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request, key d
 		}
 		out = append(out, cliproto.Source{
 			Handle:               src.Handle,
+			Manifold:             src.Manifold,
 			Kind:                 string(src.Kind),
 			Pipes:                names,
 			PipeInfos:            pipeInfos,
@@ -366,15 +401,16 @@ func (s *Server) handleCreatePipe(w http.ResponseWriter, r *http.Request, key db
 		return
 	}
 	if err := ensurePipeStreamWithRetention(ctx, js, key.AccountID,
-		src.Handle, pipe.Name, maxAge, maxMsgs, maxBytes); err != nil {
+		src.Manifold, src.Handle, pipe.Name, maxAge, maxMsgs, maxBytes); err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, cliproto.PipeCreateReply{
 		Handle:     src.Handle,
+		Manifold:   src.Manifold,
 		Name:       pipe.Name,
-		StreamName: natsubj.StreamName(key.AccountID, src.Handle, pipe.Name),
+		StreamName: natsubj.BuildStreamName(key.AccountID, src.Manifold, src.Handle, pipe.Name),
 		TTLSeconds: int(maxAge / time.Second),
 		MaxMsgs:    maxMsgs,
 		MaxBytes:   maxBytes,
@@ -421,15 +457,42 @@ func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 
+	// Phase 1.5.1 first-wins collision rule: reject if a source with the
+	// same name already exists at this manifold.
+	if exists, err := db.SourceExistsAtManifold(ctx, s.Pool, key.AccountID, req.Manifold, req.Name); err != nil {
+		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+		return
+	} else if exists {
+		writeErr(w, cliproto.NewNameTakenBySource(req.Name, req.Manifold))
+		return
+	}
+	// Phase 1.5.1 first-wins collision rule: also reject if the manifold
+	// path itself collides with a reserved source-prefix. Source X at
+	// manifold M reserves the prefix M.X via its auto-pipes — so any pipe
+	// at manifold M.X (or M.X.<deeper>) would land on the source's
+	// subjects. Walk the segments and check each prefix.
+	if req.Manifold != "" {
+		segs := strings.Split(req.Manifold, ".")
+		for i, seg := range segs {
+			parent := strings.Join(segs[:i], ".")
+			reserved, err := db.SourceExistsAtManifold(ctx, s.Pool, key.AccountID, parent, seg)
+			if err != nil {
+				writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+				return
+			}
+			if reserved {
+				prefix := strings.Join(segs[:i+1], ".")
+				writeErr(w, cliproto.NewManifoldReservedBySource(prefix, seg, parent))
+				return
+			}
+		}
+	}
+
 	pipe, err := db.InsertPipe(ctx, s.Pool, key.AccountID, req.Manifold, nil, key.CreatedByUserID, req.Name,
 		req.TTLSeconds, req.MaxMsgs, req.MaxBytes)
 	if err != nil {
 		if errors.Is(err, db.ErrPipeNameTaken) {
-			target := req.Name
-			if req.Manifold != "" {
-				target = req.Manifold + "." + req.Name
-			}
-			writeErr(w, cliproto.NewPipeTaken(req.Name, target))
+			writeErr(w, cliproto.NewUncollaredPipeTaken(req.Name, req.Manifold))
 			return
 		}
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
@@ -454,7 +517,7 @@ func (s *Server) handleCreatePipeFullPath(w http.ResponseWriter, r *http.Request
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "account: " + err.Error()})
 		return
 	}
-	if err := ensurePipeStreamPhase15(ctx, js, key.AccountID, req.Manifold, "", pipe.Name, maxAge, maxMsgs, maxBytes); err != nil {
+	if err := ensurePipeStreamWithRetention(ctx, js, key.AccountID, req.Manifold, "", pipe.Name, maxAge, maxMsgs, maxBytes); err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
@@ -598,10 +661,10 @@ func (s *Server) handleDestroySource(w http.ResponseWriter, r *http.Request, key
 	js, err := s.JSFor(ctx, key.AccountID)
 	if err == nil {
 		for _, p := range userPipes {
-			_ = deletePipeStream(ctx, js, key.AccountID, handle, p.Name)
+			_ = deletePipeStream(ctx, js, key.AccountID, p.Manifold, handle, p.Name)
 		}
 		for _, p := range src.Pipes() {
-			_ = deletePipeStream(ctx, js, key.AccountID, handle, p)
+			_ = deletePipeStream(ctx, js, key.AccountID, src.Manifold, handle, p)
 		}
 	}
 
@@ -653,7 +716,7 @@ func (s *Server) handleDestroyPipe(w http.ResponseWriter, r *http.Request, key d
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "org account: " + err.Error()})
 		return
 	}
-	if err := deletePipeStream(ctx, js, key.AccountID, src.Handle, name); err != nil {
+	if err := deletePipeStream(ctx, js, key.AccountID, src.Manifold, src.Handle, name); err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}

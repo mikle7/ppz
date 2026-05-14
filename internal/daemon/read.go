@@ -91,7 +91,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		manifold := d.State.CurrentNamespace(req.Session)
 		streamName = natsubj.BuildStreamName(accountID, manifold, "", req.BareTarget)
 	} else {
-		streamName = natsubj.StreamName(accountID, req.Handle, req.Channel)
+		streamName = natsubj.BuildStreamName(accountID, d.State.HandleManifold(req.Handle), req.Handle, req.Channel)
 	}
 
 	js, err := jetstream.New(d.NC)
@@ -148,7 +148,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// Uncollared pipes don't have stdctrl semantics (no source identity);
 	// skip the meta probe.
 	if !uncollared && req.Channel == "stdout" {
-		if cols, rows, ok := latestStdctrlResize(ctx, js, accountID, req.Handle); ok {
+		if cols, rows, ok := latestStdctrlResize(ctx, js, accountID, d.State.HandleManifold(req.Handle), req.Handle); ok {
 			_ = json.NewEncoder(conn).Encode(cliproto.ReadEvent{
 				Meta: &cliproto.ReadMeta{Cols: cols, Rows: rows},
 			})
@@ -163,7 +163,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		manifold := d.State.CurrentNamespace(req.Session)
 		filterSubject = natsubj.BuildSubject(accountID, manifold, "", req.BareTarget)
 	} else {
-		filterSubject = natsubj.Subject(accountID, req.Handle, req.Channel)
+		filterSubject = natsubj.BuildSubject(accountID, d.State.HandleManifold(req.Handle), req.Handle, req.Channel)
 	}
 
 	var (
@@ -406,8 +406,8 @@ type stdctrlResizePayload struct {
 //
 // Dimensions are clamped to [1, 1000] on each axis so a malformed or
 // runaway publisher can't pass nonsense to vt10x.
-func latestStdctrlResize(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle string) (cols, rows int, ok bool) {
-	streamName := natsubj.StreamName(accountID, handle, "stdctrl")
+func latestStdctrlResize(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, handle string) (cols, rows int, ok bool) {
+	streamName := natsubj.BuildStreamName(accountID, manifold, handle, "stdctrl")
 	stream, err := js.Stream(ctx, streamName)
 	if err != nil {
 		return 0, 0, false

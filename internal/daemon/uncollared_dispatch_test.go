@@ -8,58 +8,21 @@ import (
 	"github.com/pipescloud/ppz/internal/natsubj"
 )
 
-// Phase 1.5: shouldDispatchUncollared is the pure decision function that
-// resolveSendTarget uses to pick the uncollared branch. Pinned by table
-// to prevent silent regression of the bare-target shape contract.
+// Phase 1.5.1: shouldTryUncollaredFirst pins the runtime-fallback
+// dispatch contract. Any bare target triggers an uncollared
+// resolution attempt; the daemon falls back to legacy collared if
+// the uncollared stream doesn't exist (handled at the call site, not
+// in this pure helper).
 
-func TestShouldDispatchUncollared_BareTargetEmpty_AlwaysCollared(t *testing.T) {
-	// An empty bareTarget means the CLI did not signal a bare form;
-	// always collared (the legacy `<handle>.<pipe>` path or a request
-	// with an explicit handle).
-	cases := []struct {
-		name                  string
-		reqHandle, env, sess  string
-	}{
-		{"all empty", "", "", ""},
-		{"reqHandle set", "cindy", "", ""},
-		{"env set", "", "cindy", ""},
-		{"session current set", "", "", "cindy"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if shouldDispatchUncollared("", tc.reqHandle, tc.env, tc.sess) {
-				t.Errorf("shouldDispatchUncollared(\"\", %q, %q, %q) = true, want false (no bare target → collared)",
-					tc.reqHandle, tc.env, tc.sess)
-			}
-		})
+func TestShouldTryUncollaredFirst_BareTargetEmpty_False(t *testing.T) {
+	if shouldTryUncollaredFirst("") {
+		t.Error("shouldTryUncollaredFirst(\"\") = true, want false (no bare target → no uncollared attempt)")
 	}
 }
 
-func TestShouldDispatchUncollared_BareTargetWithNoHandle_Uncollared(t *testing.T) {
-	if !shouldDispatchUncollared("room", "", "", "") {
-		t.Error("shouldDispatchUncollared(\"room\", \"\", \"\", \"\") = false, want true (bare target + no handles anywhere → uncollared)")
-	}
-}
-
-func TestShouldDispatchUncollared_AnyHandlePresent_Collared(t *testing.T) {
-	// Legacy `ppz send X "msg"` shorthand (X = source handle) must keep
-	// working when any handle source is set, regardless of bareTarget.
-	cases := []struct {
-		name                 string
-		reqHandle, env, sess string
-	}{
-		{"reqHandle wins", "cindy", "", ""},
-		{"env wins", "", "alice", ""},
-		{"session wins", "", "", "bob"},
-		{"all three set", "cindy", "alice", "bob"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if shouldDispatchUncollared("room", tc.reqHandle, tc.env, tc.sess) {
-				t.Errorf("shouldDispatchUncollared(\"room\", %q, %q, %q) = true, want false (any handle present → collared shortcut wins)",
-					tc.reqHandle, tc.env, tc.sess)
-			}
-		})
+func TestShouldTryUncollaredFirst_BareTargetSet_True(t *testing.T) {
+	if !shouldTryUncollaredFirst("room") {
+		t.Error("shouldTryUncollaredFirst(\"room\") = false, want true (bare target → always attempt uncollared)")
 	}
 }
 

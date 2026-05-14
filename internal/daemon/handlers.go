@@ -441,14 +441,23 @@ func (d *Daemon) handleCreate(ctx context.Context, conn net.Conn, params json.Ra
 		writeIPCErr(conn, cliproto.NewInvalidHandle(req.Handle))
 		return
 	}
+	// Phase 1.5.1: source create is namespace-aware. If the request
+	// didn't pin a manifold explicitly (CLI doesn't), pull from the
+	// session's current namespace. Sources at non-root manifold are
+	// the basis for multi-team self-hosters + pipescloud's hierarchy.
+	manifold := req.Manifold
+	if manifold == "" {
+		manifold = d.State.CurrentNamespace(req.Session)
+	}
 	var reply cliproto.CreateSourceReply
-	if e := d.callServer(ctx, "POST", "/api/v1/sources", cliproto.CreateSourceRequest{Handle: req.Handle, Kind: req.Kind}, &reply); e != nil {
+	if e := d.callServer(ctx, "POST", "/api/v1/sources",
+		cliproto.CreateSourceRequest{Handle: req.Handle, Kind: req.Kind, Manifold: manifold}, &reply); e != nil {
 		writeIPCErr(conn, e)
 		return
 	}
 	d.State.RememberPipe(reply.Handle)
 	// PTY sources don't become the daemon's "current" — the user retains
-	// their existing current message source so `ppz broadcast` keeps working
+	// their existing current message source so `ppz send` keeps working
 	// the way they expect outside the terminal.
 	if req.Kind != string(cliproto.KindPTY) {
 		if err := d.State.SetCurrent(req.Session, reply.Handle); err != nil {
@@ -456,7 +465,7 @@ func (d *Daemon) handleCreate(ctx context.Context, conn net.Conn, params json.Ra
 			return
 		}
 	}
-	writeIPC(conn, cliproto.CreateReply{Handle: reply.Handle, Subject: reply.Subject})
+	writeIPC(conn, cliproto.CreateReply{Handle: reply.Handle, Manifold: reply.Manifold, Subject: reply.Subject})
 }
 
 // handleConnect is the daemon-side combo verb for `ppz connect <handle>`:
@@ -677,10 +686,12 @@ func (d *Daemon) handleSwitch(ctx context.Context, conn net.Conn, params json.Ra
 		return
 	}
 	handles := make([]string, 0, len(lr.Sources))
+		manifolds := make(map[string]string, len(lr.Sources))
 	for _, s := range lr.Sources {
 		handles = append(handles, s.Handle)
+		manifolds[s.Handle] = s.Manifold
 	}
-	d.State.ResetPipes(handles)
+	d.State.ResetSources(handles, manifolds)
 	if !d.State.KnowsPipe(req.Handle) {
 		writeIPCErr(conn, cliproto.NewSourceNotFound(req.Handle))
 		return
@@ -834,21 +845,23 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 	writeIPC(conn, cliproto.SendBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
 }
 
-// shouldDispatchUncollared decides whether resolveSendTarget should take
-// the Phase 1.5 uncollared branch. Pure function so the decision is
+// shouldTryUncollaredFirst reports whether the daemon should attempt
+// uncollared resolution before falling back to the legacy collared
+// `<bareTarget>.inbox` shorthand. Pure function so the decision is
 // unit-testable without standing up NATS / the daemon.
 //
-// Rule: take the uncollared path when the CLI signalled a bare target
-// (no dot) AND there's no current source identity from any layer
-// (explicit Handle from the request, PPZ_CURRENT_HANDLE env, or the
-// session's currently-set handle). The collared shortcut wins
-// whenever any handle is in play — preserves today's `ppz send X`
-// → `X.inbox` shorthand for cases where X is a known source.
-func shouldDispatchUncollared(bareTarget, reqHandle, envHandle, sessionHandle string) bool {
-	if bareTarget == "" {
-		return false
-	}
-	return reqHandle == "" && envHandle == "" && sessionHandle == ""
+// Rule (Phase 1.5.1): try uncollared first whenever the CLI signalled
+// a bare target. If the uncollared stream exists, publish there. If
+// not, fall back to the legacy interpretation (the CLI synthesises
+// reqHandle=bareTarget + channel=inbox for backward-compat with the
+// `ppz send foo` → `foo.inbox` messaging shorthand).
+//
+// The pre-1.5.1 rule additionally gated on "no current handle from
+// any source", which was wrong because the CLI's own .inbox sugar
+// always populates reqHandle for bare names — so the gate never
+// passed and uncollared sends always 404'd as E_SOURCE_NOT_FOUND.
+func shouldTryUncollaredFirst(bareTarget string) bool {
+	return bareTarget != ""
 }
 
 // uncollaredCursorKey is the per-session cursor key shape for uncollared
@@ -881,18 +894,22 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 	if err != nil {
 		return sendTarget{}, &cliproto.Error{Code: "E_INTERNAL", Message: "bad account id"}
 	}
-	// Phase 1.5: bare target → try uncollared first if the user has no
-	// current handle. The CLI sends BareTarget=X when the user typed
-	// `ppz send X "msg"` without a dot. Resolution order:
-	//   1. If a current handle is set (req.Handle != "" from CLI's .inbox
-	//      sugar, but only when there's no other interpretation, OR via
-	//      PPZ_CURRENT_HANDLE / session current), fall through to the
-	//      legacy collared path (today's behaviour: bare X = X's inbox).
-	//   2. Otherwise treat BareTarget as an uncollared pipe at the
-	//      session's current_namespace. Stream existence is the
-	//      authoritative check — if the uncollared stream is there,
-	//      that's the destination.
-	if shouldDispatchUncollared(bareTarget, reqHandle, os.Getenv("PPZ_CURRENT_HANDLE"), d.State.Current(session)) {
+	// Phase 1.5.1: try uncollared resolution first if the CLI signalled
+	// a bare target. If the uncollared stream exists in the session's
+	// current namespace, publish there. If not, fall through to the
+	// legacy collared interpretation (the CLI synthesised reqHandle =
+	// bareTarget + channel = "inbox" for back-compat with the messaging
+	// shorthand `ppz send foo` → `foo.inbox`).
+	//
+	// The first-wins collision rule at create time means uncollared X
+	// and source X can never coexist at the same manifold, so the
+	// runtime check is unambiguous: at most one shape is real, and the
+	// fall-through finds it.
+	//
+	// Sender for uncollared is empty per the Phase 1.5.1 design
+	// (uncollared has no actor identity); user account is implicit via
+	// account_id.
+	if shouldTryUncollaredFirst(bareTarget) {
 		if err := natsubj.ValidatePipe(bareTarget); err != nil {
 			return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
 		}
@@ -902,25 +919,26 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 				return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
 			}
 		}
-		if js, jsErr := jetstream.New(d.NC); jsErr == nil {
-			if _, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", bareTarget)); err != nil {
-				switch {
-				case errors.Is(err, jetstream.ErrStreamNotFound):
-					return sendTarget{}, cliproto.NewUncollaredPipeNotFound(bareTarget, manifold)
-				case errors.Is(err, context.DeadlineExceeded),
-					errors.Is(err, nats.ErrTimeout),
-					errors.Is(err, nats.ErrConnectionClosed),
-					errors.Is(err, nats.ErrNoServers):
-					return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
-				default:
-					return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
-				}
+		js, jsErr := jetstream.New(d.NC)
+		if jsErr == nil {
+			_, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", bareTarget))
+			switch {
+			case err == nil:
+				return sendTarget{
+					subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
+					sender:  "",
+				}, nil
+			case errors.Is(err, jetstream.ErrStreamNotFound):
+				// Fall through to the legacy collared interpretation.
+			case errors.Is(err, context.DeadlineExceeded),
+				errors.Is(err, nats.ErrTimeout),
+				errors.Is(err, nats.ErrConnectionClosed),
+				errors.Is(err, nats.ErrNoServers):
+				return sendTarget{}, cliproto.New(cliproto.ENATSUnreachable)
+			default:
+				return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
 			}
 		}
-		return sendTarget{
-			subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
-			sender:  "", // uncollared publish — no sender identity
-		}, nil
 	}
 	// Resolve target. Explicit handle from the request wins (used by
 	// `ppz send` and by terminal-share when PPZ_CURRENT_HANDLE is
@@ -959,10 +977,12 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 			return sendTarget{}, e
 		}
 		handles := make([]string, 0, len(lr.Sources))
+		manifolds := make(map[string]string, len(lr.Sources))
 		for _, s := range lr.Sources {
 			handles = append(handles, s.Handle)
+		manifolds[s.Handle] = s.Manifold
 		}
-		d.State.ResetPipes(handles)
+		d.State.ResetSources(handles, manifolds)
 		if !d.State.KnowsPipe(current) {
 			if fromCurrent {
 				_ = d.State.ClearCurrent(session)
@@ -989,8 +1009,9 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 	//     repro in MoltHub agent feedback); attributing the failure to
 	//     pipe invalidity misled agents away from the real cause.
 	//   - any other error → E_INVALID_PIPE catch-all. Truly unexpected.
+	currentManifold := d.State.HandleManifold(current)
 	if js, err := jetstream.New(d.NC); err == nil {
-		if _, err := js.Stream(ctx, natsubj.StreamName(accountID, current, pipe)); err != nil {
+		if _, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, currentManifold, current, pipe)); err != nil {
 			switch {
 			case errors.Is(err, jetstream.ErrStreamNotFound):
 				return sendTarget{}, cliproto.NewPipeNotFound(pipe, current)
@@ -1004,12 +1025,8 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 			}
 		}
 	}
-	// Sender is the broadcaster's own current source — *not* the
-	// destination. Different when the request pins an explicit dest
-	// (`ppz send foo`, or PPZ_CURRENT_HANDLE inside `ppz terminal`).
-	// Empty when this session has never connected.
 	return sendTarget{
-		subject: natsubj.Subject(accountID, current, pipe),
+		subject: natsubj.BuildSubject(accountID, currentManifold, current, pipe),
 		sender:  d.State.Current(session),
 	}, nil
 }
@@ -1028,10 +1045,12 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 	handles := make([]string, 0, len(lr.Sources))
+		manifolds := make(map[string]string, len(lr.Sources))
 	for _, s := range lr.Sources {
 		handles = append(handles, s.Handle)
+		manifolds[s.Handle] = s.Manifold
 	}
-	d.State.ResetPipes(handles)
+	d.State.ResetSources(handles, manifolds)
 
 	// Aggregate per-pipe info from JetStream (route B). List stream metadata
 	// once, then fetch latest payload previews only for non-empty streams.

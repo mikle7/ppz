@@ -280,7 +280,7 @@ func FormatPipePath(manifold, source, name string) string {
 }
 
 func PrintPipeDestroy(w io.Writer, r PipeDestroyReply) {
-	fmt.Fprintf(w, "destroyed pipe=%s\n", FormatPipePath("", r.Handle, r.Name))
+	fmt.Fprintf(w, "destroyed pipe=%s\n", FormatPipePath(r.Manifold, r.Handle, r.Name))
 }
 
 func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {
@@ -332,7 +332,7 @@ func PrintListWithUncollared(w io.Writer, sources []Source, uncollared []Uncolla
 	for _, s := range sources {
 		for _, p := range s.PipeInfos {
 			rows = append(rows, listRow{
-				pipeColumn: s.Handle + "." + p.Pipe,
+				pipeColumn: FormatPipePath(s.Manifold, s.Handle, p.Pipe),
 				unread:     p.Unread,
 				buffered:   p.Total,
 				last:       lastColumn(p.LastAt, now, iso),

@@ -7,4 +7,4 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create chat >/dev/null
-ppz_a pipe create archive --ttl=168h
+ppz_a pipe create chat.archive --ttl=168h

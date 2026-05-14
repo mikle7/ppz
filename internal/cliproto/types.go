@@ -178,15 +178,17 @@ type LoginReply struct {
 }
 
 type CreateRequest struct {
-	Handle  string `json:"handle"`
-	Kind    string `json:"kind,omitempty"`    // "message" (default) or "pty"
-	Session string `json:"session,omitempty"` // sets per-session current after create
+	Handle   string `json:"handle"`
+	Kind     string `json:"kind,omitempty"`     // "message" (default) or "pty"
+	Manifold string `json:"manifold,omitempty"` // Phase 1.5.1: namespace-aware source create
+	Session  string `json:"session,omitempty"`  // sets per-session current after create
 }
 
 type CreateReply struct {
-	Handle  string   `json:"handle"`
-	Subject string   `json:"subject"`
-	Pipes   []string `json:"pipes,omitempty"` // pipe names provisioned for this source
+	Handle   string   `json:"handle"`
+	Manifold string   `json:"manifold,omitempty"` // Phase 1.5.1
+	Subject  string   `json:"subject"`
+	Pipes    []string `json:"pipes,omitempty"` // pipe names provisioned for this source
 }
 
 type SwitchRequest struct {
@@ -331,8 +333,9 @@ type PipeInfo struct {
 // username of the user who created the source; populated server-side by
 // joining sources.created_by_user_id to users.username.
 type Source struct {
-	Handle string `json:"handle"`
-	Kind   string `json:"kind,omitempty"`
+	Handle   string `json:"handle"`
+	Manifold string `json:"manifold,omitempty"` // Phase 1.5.1
+	Kind     string `json:"kind,omitempty"`
 	// Pipes is the list of user-created pipe names on this source (NOT the
 	// auto-provisioned set — derive those from Kind). Set by the server's
 	// /api/v1/sources response.
@@ -451,13 +454,15 @@ type AuthExchangeReply struct {
 }
 
 type CreateSourceRequest struct {
-	Handle string `json:"handle"`
-	Kind   string `json:"kind,omitempty"` // "message" (default) or "pty"
+	Handle   string `json:"handle"`
+	Kind     string `json:"kind,omitempty"`     // "message" (default) or "pty"
+	Manifold string `json:"manifold,omitempty"` // Phase 1.5.1: source lives at this manifold
 }
 
 type CreateSourceReply struct {
 	ID        string    `json:"id"`
 	Handle    string    `json:"handle"`
+	Manifold  string    `json:"manifold,omitempty"` // Phase 1.5.1
 	Kind      string    `json:"kind"`
 	Subject   string    `json:"subject"`
 	CreatedAt time.Time `json:"created_at"`

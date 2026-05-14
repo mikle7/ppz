@@ -198,7 +198,7 @@ func (p *AccountPool) ensureStreamsForOrg(ctx context.Context, oa *OrgAccount) e
 		// Auto-provisioned pipes (kind-derived: broadcast / stdin /
 		// stdout / stdctrl).
 		for _, pipe := range src.Pipes() {
-			if err := ensurePipeStream(ctx, oa.JS, oa.AccountID, src.Handle, pipe); err != nil {
+			if err := ensurePipeStream(ctx, oa.JS, oa.AccountID, src.Manifold, src.Handle, pipe); err != nil {
 				return fmt.Errorf("ensure auto stream %s.%s: %w", src.Handle, pipe, err)
 			}
 		}
@@ -210,7 +210,7 @@ func (p *AccountPool) ensureStreamsForOrg(ctx context.Context, oa *OrgAccount) e
 		}
 		for _, up := range userPipes {
 			age, msgs, bytes := pipeRetention(up)
-			if err := ensurePipeStreamWithRetention(ctx, oa.JS, oa.AccountID, src.Handle, up.Name, age, msgs, bytes); err != nil {
+			if err := ensurePipeStreamWithRetention(ctx, oa.JS, oa.AccountID, up.Manifold, src.Handle, up.Name, age, msgs, bytes); err != nil {
 				return fmt.Errorf("ensure user stream %s.%s: %w", src.Handle, up.Name, err)
 			}
 		}
