@@ -6,5 +6,5 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a terminal create chat >/dev/null
-ppz_a pipe create archive
+ppz_a pipe create chat.archive
 ppz_a ls | grep '^chat\.' | ls_normalize

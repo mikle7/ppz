@@ -10,7 +10,14 @@ import (
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
-func TestCmdPipeCreate_BareNamePrefersEnvCurrentHandle(t *testing.T) {
+// Phase 1.5.1: bare LEAF in `ppz pipe create` / `ppz pipe destroy` no
+// longer auto-collars under the current handle. The CLI forwards
+// handle="" so the daemon takes the uncollared path at the session's
+// current namespace. Renamed from BareNamePrefersEnvCurrentHandle —
+// the pre-1.5.1 behaviour the original name pinned is intentionally
+// gone (see PHASE-1.5-IMPLEMENTATION-PLAN.md in pipes-internal).
+
+func TestCmdPipeCreate_BareNameSkipsCurrentHandle(t *testing.T) {
 	t.Setenv("PPZ_SESSION", "pipe-current-test")
 	t.Setenv("PPZ_CURRENT_HANDLE", "env-current")
 	sock := pipeCurrentTestSocket(t)
@@ -24,12 +31,12 @@ func TestCmdPipeCreate_BareNamePrefersEnvCurrentHandle(t *testing.T) {
 		t.Fatalf("pipe create request count = %d, want 1", len(requests.creates))
 	}
 	got := requests.creates[0]
-	if got.Handle != "env-current" || got.Name != "alerts" {
-		t.Fatalf("pipe create resolved to handle=%q name=%q, want env-current alerts", got.Handle, got.Name)
+	if got.Handle != "" || got.Name != "alerts" {
+		t.Fatalf("pipe create resolved to handle=%q name=%q, want empty handle + name=alerts (Phase 1.5.1 rule: bare LEAF goes uncollared regardless of current handle)", got.Handle, got.Name)
 	}
 }
 
-func TestCmdPipeDestroy_BareNamePrefersEnvCurrentHandle(t *testing.T) {
+func TestCmdPipeDestroy_BareNameSkipsCurrentHandle(t *testing.T) {
 	t.Setenv("PPZ_SESSION", "pipe-current-test")
 	t.Setenv("PPZ_CURRENT_HANDLE", "env-current")
 	sock := pipeCurrentTestSocket(t)
@@ -43,8 +50,8 @@ func TestCmdPipeDestroy_BareNamePrefersEnvCurrentHandle(t *testing.T) {
 		t.Fatalf("pipe destroy request count = %d, want 1", len(requests.destroys))
 	}
 	got := requests.destroys[0]
-	if got.Handle != "env-current" || got.Name != "alerts" {
-		t.Fatalf("pipe destroy resolved to handle=%q name=%q, want env-current alerts", got.Handle, got.Name)
+	if got.Handle != "" || got.BareTarget != "alerts" {
+		t.Fatalf("pipe destroy resolved to handle=%q bareTarget=%q, want empty handle + bareTarget=alerts (Phase 1.5.1 rule: bare LEAF destroys uncollared)", got.Handle, got.BareTarget)
 	}
 }
 

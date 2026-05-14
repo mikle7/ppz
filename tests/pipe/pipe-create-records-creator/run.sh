@@ -6,6 +6,6 @@
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a terminal create chat >/dev/null
-ppz_a pipe create archive >/dev/null
+ppz_a pipe create chat.archive >/dev/null
 
 ppz_a ls --json | jq -c '{handle, pipe, creator}'

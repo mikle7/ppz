@@ -57,17 +57,10 @@ func cmdPipeCreate(args []string) error {
 	if err != nil {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
-	if handle == "" {
-		// Phase 1.5: bare name with no explicit handle. Try the effective
-		// current handle from daemon state; if there isn't one, fall
-		// through with handle="" — the daemon then routes to the
-		// sourceless endpoint (uncollared pipe at the root manifold).
-		// Pre-Phase-1.5 this errored as "no current source set".
-		resolved, err := effectiveCurrentHandle()
-		if err == nil {
-			handle = resolved
-		}
-	}
+	// Phase 1.5.1: bare LEAF always creates uncollared at the current
+	// namespace. Current handle plays no role in create destination —
+	// that's a sender-identity concept used only by sends. To create
+	// a collared pipe, user types the explicit dotted form HANDLE.LEAF.
 
 	req := cliproto.PipeCreateRequest{Handle: handle, Name: name, Session: sessionID()}
 	if *ttl > 0 {
@@ -128,21 +121,14 @@ func cmdPipeDestroy(args []string) error {
 		return nil
 	}
 
-	// Phase 1.5: branch on dotted-vs-bare. Bare names with no current
-	// handle resolve as uncollared at the session's current namespace
-	// (daemon-side); the CLI just forwards the raw name as BareTarget.
+	// Phase 1.5.1: bare LEAF always destroys uncollared at the
+	// current namespace (symmetric with create — current_handle
+	// plays no role in destination routing). Dotted form is the
+	// explicit collared destroy.
 	target := rest[0]
 	var handle, name, bareTarget string
 	if !strings.Contains(target, ".") {
 		bareTarget = target
-		// Legacy collared path still works when a current handle is set;
-		// best-effort resolve so the daemon doesn't have to guess. If
-		// no current handle, leave handle empty and the daemon takes
-		// the uncollared path.
-		if resolved, err := effectiveCurrentHandle(); err == nil {
-			handle = resolved
-			name = target
-		}
 	} else {
 		h, n, err := splitHandleName(target)
 		if err != nil {

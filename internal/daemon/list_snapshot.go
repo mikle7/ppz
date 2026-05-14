@@ -75,7 +75,7 @@ func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sour
 			}
 
 			info := cliproto.PipeInfo{Pipe: p, CreatedBy: pipeCreator[p]}
-			streamName := natsubj.StreamName(accountID, s.Handle, p)
+			streamName := natsubj.BuildStreamName(accountID, s.Manifold, s.Handle, p)
 			if si := streamInfos[streamName]; si != nil {
 				info.Total = si.State.Msgs
 				info.LastSeq = si.State.LastSeq

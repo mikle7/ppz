@@ -133,6 +133,61 @@ func DeleteUncollaredPipe(ctx context.Context, p *Pool, accountID uuid.UUID, man
 	return nil
 }
 
+// UncollaredPipeExists reports whether a sourceless pipe with the given
+// (account, manifold, name) already exists. Phase 1.5.1 collision check —
+// source creation rejects when an uncollared pipe shares the source's
+// proposed name at the same manifold.
+func UncollaredPipeExists(ctx context.Context, p *Pool, accountID uuid.UUID, manifold, name string) (bool, error) {
+	var n int
+	err := p.QueryRow(ctx,
+		`SELECT 1 FROM pipes WHERE account_id = $1 AND manifold = $2 AND name = $3 AND source_id IS NULL LIMIT 1`,
+		accountID, manifold, name).Scan(&n)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// PipesExistAtManifold reports whether ANY pipe (collared or uncollared)
+// exists at the given manifold prefix. Phase 1.5.1 collision check — a
+// new source's handle at manifold M reserves the prefix path M.<handle>
+// (or just <handle> if M is empty), so source creation rejects when
+// pipes already live there.
+func PipesExistAtManifold(ctx context.Context, p *Pool, accountID uuid.UUID, manifold string) (bool, error) {
+	var n int
+	err := p.QueryRow(ctx,
+		`SELECT 1 FROM pipes WHERE account_id = $1 AND manifold = $2 LIMIT 1`,
+		accountID, manifold).Scan(&n)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// SourceExistsAtManifold reports whether a source with the given handle
+// exists at the manifold. Phase 1.5.1 collision check — uncollared pipe
+// creation rejects when a source shares the proposed name at the same
+// manifold.
+func SourceExistsAtManifold(ctx context.Context, p *Pool, accountID uuid.UUID, manifold, handle string) (bool, error) {
+	var n int
+	err := p.QueryRow(ctx,
+		`SELECT 1 FROM sources WHERE account_id = $1 AND manifold = $2 AND handle = $3 LIMIT 1`,
+		accountID, manifold, handle).Scan(&n)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // ListUncollaredPipesForAccount returns every uncollared pipe row in the
 // account, sorted (manifold, name). Used by `ppz ls` to surface the
 // sourceless rows that walking sources alone misses. Phase 1.5.

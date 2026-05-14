@@ -29,22 +29,22 @@ const (
 	defaultStreamMaxBytes = 16 * 1024 * 1024 // 16 MiB
 )
 
-// ensurePipeStream creates a JetStream stream backing one (source, pipe)
-// pair (source_<orgshort>_<handle>_<pipe>) with the default retention.
-// Idempotent on duplicate creation.
-func ensurePipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle, pipe string) error {
-	return ensurePipeStreamWithRetention(ctx, js, accountID, handle, pipe,
+// ensurePipeStream creates a JetStream stream backing one (manifold, source, pipe)
+// triple with the default retention. Phase 1.5.1: manifold parameter
+// added so sources at non-root manifold provision streams at the right
+// wire path. Idempotent on duplicate creation.
+func ensurePipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, handle, pipe string) error {
+	return ensurePipeStreamWithRetention(ctx, js, accountID, manifold, handle, pipe,
 		defaultStreamMaxAge, defaultStreamMaxMsgs, defaultStreamMaxBytes)
 }
 
 // ensurePipeStreamWithRetention is the override-aware variant. Used by
-// `pipe create` to honour --ttl / --max-msgs / --max-bytes flags. Every
-// arg is mandatory (the caller fills in defaults for any flag the user
-// didn't pass) so the resulting stream config is fully deterministic.
-func ensurePipeStreamWithRetention(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle, pipe string, maxAge time.Duration, maxMsgs int, maxBytes int64) error {
+// `pipe create` to honour --ttl / --max-msgs / --max-bytes flags.
+// Phase 1.5.1 manifold-aware.
+func ensurePipeStreamWithRetention(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, handle, pipe string, maxAge time.Duration, maxMsgs int, maxBytes int64) error {
 	cfg := jetstream.StreamConfig{
-		Name:      natsubj.StreamName(accountID, handle, pipe),
-		Subjects:  []string{natsubj.Subject(accountID, handle, pipe)},
+		Name:      natsubj.BuildStreamName(accountID, manifold, handle, pipe),
+		Subjects:  []string{natsubj.BuildSubject(accountID, manifold, handle, pipe)},
 		Retention: jetstream.LimitsPolicy,
 		MaxAge:    maxAge,
 		MaxMsgs:   int64(maxMsgs),
@@ -63,10 +63,10 @@ func ensurePipeStreamWithRetention(ctx context.Context, js jetstream.JetStream, 
 	return nil
 }
 
-// deletePipeStream removes the JetStream stream backing one (source, pipe).
-// Idempotent — already-absent stream is a success.
-func deletePipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, handle, pipe string) error {
-	name := natsubj.StreamName(accountID, handle, pipe)
+// deletePipeStream removes the JetStream stream backing one (manifold,
+// source, pipe). Phase 1.5.1 manifold-aware. Idempotent on missing stream.
+func deletePipeStream(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, handle, pipe string) error {
+	name := natsubj.BuildStreamName(accountID, manifold, handle, pipe)
 	if err := js.DeleteStream(ctx, name); err != nil {
 		if errors.Is(err, jetstream.ErrStreamNotFound) {
 			return nil
@@ -89,30 +89,9 @@ func deleteUncollaredPipeStream(ctx context.Context, js jetstream.JetStream, acc
 	return nil
 }
 
-// ensurePipeStreamPhase15 is the four-role variant — used by the new
-// POST /api/v1/pipes endpoint for sourceless (and future manifold-
-// aware) pipes. source="" means uncollared. manifold="" means root.
-func ensurePipeStreamPhase15(ctx context.Context, js jetstream.JetStream, accountID uuid.UUID, manifold, source, name string, maxAge time.Duration, maxMsgs int, maxBytes int64) error {
-	cfg := jetstream.StreamConfig{
-		Name:      natsubj.BuildStreamName(accountID, manifold, source, name),
-		Subjects:  []string{natsubj.BuildSubject(accountID, manifold, source, name)},
-		Retention: jetstream.LimitsPolicy,
-		MaxAge:    maxAge,
-		MaxMsgs:   int64(maxMsgs),
-		MaxBytes:  maxBytes,
-		Storage:   jetstream.FileStorage,
-		Discard:   jetstream.DiscardOld,
-		Replicas:  1,
-	}
-	_, err := js.CreateStream(ctx, cfg)
-	if err != nil {
-		if errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
-			return nil
-		}
-		return fmt.Errorf("create stream %s: %w", cfg.Name, err)
-	}
-	return nil
-}
+// (Phase 1.5.1 collapsed ensurePipeStreamPhase15 into ensurePipeStream
+// once the latter became manifold-aware. The two were structurally
+// identical after the four-role migration.)
 
 // jsFor returns a JetStream context bound to the server's NATS connection.
 func jsFor(nc *nats.Conn) (jetstream.JetStream, error) {

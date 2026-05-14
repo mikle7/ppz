@@ -118,11 +118,26 @@ func cmdSend(args []string) error {
 		&reply); err != nil {
 		return err
 	}
-	// `to=` shows the user-facing handle.pipe form (what the user typed),
-	// not the daemon's full NATS subject — matches the operator's mental
-	// model and the spec §3 example.
-	printSendSuccess(sendErr, reply, handle+"."+channel, *requestAck)
+	// `to=` shows the path the daemon actually published to. For
+	// collared sends that's `<handle>.<pipe>`; for uncollared sends
+	// (Phase 1.5) it's the manifold-prefixed leaf without a fake
+	// `.inbox` suffix. Derived from reply.Subject (stripping the
+	// account-id prefix) so the display always matches reality.
+	display := stripAccountPrefix(reply.Subject, handle+"."+channel)
+	printSendSuccess(sendErr, reply, display, *requestAck)
 	return nil
+}
+
+// stripAccountPrefix returns the user-visible path from a full NATS
+// subject by dropping the leading "<account_id>." token. Falls back to
+// the supplied default when the subject doesn't carry an account-id
+// prefix (e.g. older daemons that don't populate reply.Subject).
+func stripAccountPrefix(subject, fallback string) string {
+	idx := strings.Index(subject, ".")
+	if idx <= 0 || idx == len(subject)-1 {
+		return fallback
+	}
+	return subject[idx+1:]
 }
 
 // printSendSuccess writes the v0.25.0 success line. Output:

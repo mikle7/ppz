@@ -223,7 +223,7 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 				Pipe:     p,
 				PipeLink: fmt.Sprintf("/orgs/%s/sources/%s/pipes/%s", org.Name, src.Handle, p),
 			}
-			streamName := natsubj.StreamName(org.ID, src.Handle, p)
+			streamName := natsubj.BuildStreamName(org.ID, src.Manifold, src.Handle, p)
 			if js == nil {
 				rows = append(rows, row)
 				continue

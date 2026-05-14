@@ -56,6 +56,11 @@ type State struct {
 	// for the namespace slot. Empty value (or missing key) = root.
 	currentNamespace map[string]string
 	knownPipes       map[string]struct{} // server-side handles cached after List/Create
+	// Phase 1.5.1: handle → manifold cache. Populated alongside
+	// knownPipes from /api/v1/sources responses. Used by the
+	// daemon's send / read paths so they can build the correct
+	// manifold-aware subject + stream name for the resolved handle.
+	handleManifold   map[string]string
 	pipesLoaded      bool
 	// loginCheck caches the daemon's last server-touching call result.
 	// Empty means "no observation yet" (fresh daemon). LoginCheckOK on
@@ -79,6 +84,7 @@ func NewState(home string) *State {
 		current:          map[string]string{},
 		currentNamespace: map[string]string{},
 		knownPipes:       map[string]struct{}{},
+		handleManifold:   map[string]string{},
 	}
 }
 
@@ -146,6 +152,7 @@ func (s *State) SetLogin(creds Credentials, accountID, accountName, keyPrefix st
 	s.accountName = accountName
 	s.keyPrefix = keyPrefix
 	s.knownPipes = map[string]struct{}{}
+	s.handleManifold = map[string]string{}
 	s.pipesLoaded = false
 	// Login itself is a successful server round-trip — record it as the
 	// initial "ok" observation so status shows the right state right away.
@@ -258,6 +265,31 @@ func (s *State) ResetPipes(handles []string) {
 	s.pipesLoaded = true
 }
 
+// ResetSources replaces both the known-handles set AND the per-handle
+// manifold cache from a server-supplied source list. Preferred over
+// ResetPipes for callers that have full cliproto.Source rows. Phase 1.5.1.
+func (s *State) ResetSources(handles []string, manifolds map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.knownPipes = make(map[string]struct{}, len(handles))
+	for _, h := range handles {
+		s.knownPipes[h] = struct{}{}
+	}
+	s.handleManifold = make(map[string]string, len(manifolds))
+	for h, m := range manifolds {
+		s.handleManifold[h] = m
+	}
+	s.pipesLoaded = true
+}
+
+// HandleManifold returns the cached manifold for a known source handle,
+// or "" (root) if the handle isn't cached. Phase 1.5.1.
+func (s *State) HandleManifold(handle string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.handleManifold[handle]
+}
+
 // LoadFromDisk reads credentials and current from $PPZ_HOME. Called at
 // startup and on SIGHUP. Missing files mean "not logged in" / "no current".
 //
@@ -273,6 +305,7 @@ func (s *State) LoadFromDisk() error {
 	s.current = map[string]string{}
 	s.currentNamespace = map[string]string{}
 	s.knownPipes = map[string]struct{}{}
+	s.handleManifold = map[string]string{}
 	s.pipesLoaded = false
 	// Reload zeros the cache: a daemon that just woke up hasn't talked to
 	// the server yet under the new credentials, so status should probe.

@@ -35,6 +35,14 @@ const (
 	// match the handle regex (lowercase alnum + hyphens, max 32, no
 	// leading/trailing hyphen). Phase 1.5.
 	EInvalidManifold Code = "E_INVALID_MANIFOLD"
+
+	// ENameTaken — Phase 1.5.1 first-wins collision rule. Within a
+	// manifold, user-typed names share a namespace across source
+	// handles and uncollared pipe names; a source at manifold M also
+	// reserves the manifold-prefix path M.<handle> from any uncollared
+	// pipe creation. Surfaces when a create would conflict with an
+	// existing row of either shape.
+	ENameTaken Code = "E_NAME_TAKEN"
 )
 
 // ExitCode returns the integer the CLI exits with for a given Code. Unknown
@@ -71,6 +79,8 @@ func ExitCode(c Code) int {
 		return 23
 	case EInvalidManifold:
 		return 24
+	case ENameTaken:
+		return 21
 	}
 	return 1
 }
@@ -115,6 +125,8 @@ func Message(c Code) string {
 		return "invalid subject; the 'ack:' prefix is reserved for system-emitted protocol messages"
 	case EInvalidManifold:
 		return "invalid manifold: each dot-separated segment must match [a-z0-9-] (max 32, no leading/trailing -, not reserved)"
+	case ENameTaken:
+		return "name already taken by another resource at this manifold"
 	}
 	return "unknown error"
 }
@@ -169,6 +181,37 @@ func NewUncollaredPipeNotFound(name, manifold string) *Error {
 	return &Error{Code: EPipeNotFound, Message: fmt.Sprintf("uncollared pipe '%s' not found at %s", name, location)}
 }
 
+// NewNameTakenBySource: name 'foo' is already taken by source at root
+// (or at manifold 'team-a'). Phase 1.5.1 collision rule.
+func NewNameTakenBySource(name, manifold string) *Error {
+	location := "root"
+	if manifold != "" {
+		location = fmt.Sprintf("manifold '%s'", manifold)
+	}
+	return &Error{Code: ENameTaken, Message: fmt.Sprintf("name '%s' is already taken by source at %s", name, location)}
+}
+
+// NewNameTakenByUncollaredPipe: name 'foo' is already taken by
+// uncollared pipe at root (or manifold). Phase 1.5.1 collision rule.
+func NewNameTakenByUncollaredPipe(name, manifold string) *Error {
+	location := "root"
+	if manifold != "" {
+		location = fmt.Sprintf("manifold '%s'", manifold)
+	}
+	return &Error{Code: ENameTaken, Message: fmt.Sprintf("name '%s' is already taken by uncollared pipe at %s", name, location)}
+}
+
+// NewManifoldReservedBySource: manifold path 'team1' is reserved by source 'team1'
+// at root. Phase 1.5.1 — source X at manifold M reserves the manifold-prefix
+// path M.X because the source's auto-pipes already live at those subjects.
+func NewManifoldReservedBySource(prefix, sourceManifold string) *Error {
+	location := "root"
+	if sourceManifold != "" {
+		location = fmt.Sprintf("manifold '%s'", sourceManifold)
+	}
+	return &Error{Code: ENameTaken, Message: fmt.Sprintf("manifold path '%s' is reserved by source '%s' at %s", prefix, prefix, location)}
+}
+
 // NewInvalidPipeReserved: pipe name 'system' is reserved
 func NewInvalidPipeReserved(name string) *Error {
 	return &Error{Code: EInvalidPipe, Message: fmt.Sprintf("pipe name '%s' is reserved", name)}
@@ -209,6 +252,8 @@ func HTTPStatus(c Code) int {
 		return 400
 	case EInvalidManifold:
 		return 400
+	case ENameTaken:
+		return 409
 	}
 	return 500
 }
