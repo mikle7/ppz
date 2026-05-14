@@ -531,7 +531,8 @@ type SourceDestroyRequest struct {
 }
 
 type SourceDestroyReply struct {
-	Handle string `json:"handle"`
+	Handle   string `json:"handle"`
+	Manifold string `json:"manifold,omitempty"` // Phase 1.5.2: render manifold.handle in display
 }
 
 // HTTPError is the body shape of a non-2xx HTTP response.

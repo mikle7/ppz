@@ -29,5 +29,5 @@ grep -oE '^sent id=[a-f0-9]{8} to=[^ ]+ bytes=[0-9]+$' "$err" | head -1 \
 
 # Read the payload back to prove the publish reached the uncollared
 # stream.
-ppz_a reread room -l 1
+ppz_a reread room -l 1 --bare
 rm -f "$err"

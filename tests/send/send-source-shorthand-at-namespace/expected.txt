@@ -1,4 +1,4 @@
 send-exit=0
 sent id=ID8 to=pixel.boris.inbox bytes=N
-shorthand-at-ns
+pixel.boris.inbox 1 1
 exit=0

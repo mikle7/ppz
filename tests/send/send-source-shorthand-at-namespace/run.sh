@@ -14,10 +14,17 @@ err=$(mktemp)
 ppz_a send boris "shorthand-at-ns" 2>"$err"
 echo "send-exit=$?"
 
-# Normalised line: id collapsed, byte-count collapsed.
+# Normalised send line: id collapsed, byte-count collapsed. The
+# `to=pixel.boris.inbox` substring is the load-bearing assertion — it
+# proves the shorthand resolved through the session's current_namespace
+# and routed to the source at the right manifold.
 grep -oE '^sent id=[a-f0-9]{8} to=[^ ]+ bytes=[0-9]+$' "$err" | head -1 \
   | sed -E 's/id=[a-f0-9]{8}/id=ID8/; s/bytes=[0-9]+/bytes=N/'
 
-# Verify the payload landed on pixel.boris.inbox specifically.
-ppz_a reread pixel.boris.inbox -l 1 --json | jq -r .payload
+# Cross-check via ls — the BUFFERED count for pixel.boris.inbox should
+# be 1 after the send lands. Locks in that the message physically
+# arrived at the manifolded subject, not just that the CLI printed the
+# right destination.
+wait_for 20 "ppz_a ls | grep -q '^pixel\.boris\.inbox 1 1'" >/dev/null
+ppz_a ls 2>/dev/null | awk '$1 == "pixel.boris.inbox" {print $1, $2, $3}'
 rm -f "$err"
