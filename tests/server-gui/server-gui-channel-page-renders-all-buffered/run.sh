@@ -22,7 +22,7 @@ wait_for 20 "ppz_a ls | grep -q msg-050" >/dev/null
 
 # data-message format is "<id>:<rfc3339>:<payload>". Extract the payload (3rd
 # colon-delimited field).
-curl_server "/orgs/alpha/sources/chat/pipes/inbox" \
+curl_server "/accounts/alpha/sources/chat/pipes/inbox" \
   | grep -oE 'data-message="[^"]+"' \
   | sed -E 's/.*Z:([^"]+)".*/\1/' > /tmp/payloads
 

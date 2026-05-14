@@ -1,6 +1,6 @@
 package server
 
-// requireSession middleware — gates GUI routes (/dashboard, /orgs/*, /me).
+// requireSession middleware — gates GUI routes (/dashboard, /accounts/*, /me).
 // On a valid session cookie, attaches the user_id to the request
 // context and chains to the next handler. On miss/invalid/expired:
 //

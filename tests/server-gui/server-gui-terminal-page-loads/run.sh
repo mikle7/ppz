@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The GUI exposes a live terminal viewer at
-#   /orgs/<slug>/sources/<handle>/terminal
+#   /accounts/<slug>/sources/<handle>/terminal
 # for any source whose .stdout has been written to (i.e. a shared
 # terminal). The page hosts xterm.js, mounts it on #terminal, and opens
 # a WebSocket against /terminal/ws for a binary stream of .stdout bytes.
@@ -20,7 +20,7 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a terminal share term1 -- printf "hello-from-share" >/dev/null
 wait_for 20 "ppz_a read term1.stdout --json | jq -r '.payload' | grep -q hello-from-share" >/dev/null
 
-PAGE=$(curl_server "/orgs/alpha/sources/term1/terminal")
+PAGE=$(curl_server "/accounts/alpha/sources/term1/terminal")
 
 echo "--- xterm assets referenced ---"
 echo "$PAGE" | grep -oE '/assets/xterm\.(js|css)' | sort -u
@@ -30,5 +30,5 @@ echo "$PAGE" | grep -oE 'id="terminal"' | head -1
 
 echo "--- WebSocket bootstrap path ---"
 echo "$PAGE" \
-  | grep -oE '/orgs/[a-z0-9-]+/sources/[a-z0-9-]+/terminal/ws' \
+  | grep -oE '/accounts/[a-z0-9-]+/sources/[a-z0-9-]+/terminal/ws' \
   | head -1

@@ -13,26 +13,26 @@ import (
 
 // invite handlers — Phase 4 (multi-org + invitations).
 //
-// API surface (bearer-auth, OAuth-only — API keys are org-scoped and
+// API surface (bearer-auth, OAuth-only — API keys are account-scoped and
 // have no user identity):
 //
-//   POST /api/v1/orgs/{slug}/invites              owner-only
-//   GET  /api/v1/orgs/{slug}/invites              owner-only
-//   POST /api/v1/orgs/{slug}/invites/{id}/revoke  owner-only
-//   GET  /api/v1/invites                          caller's pending invites
-//   POST /api/v1/invites/{id}/accept              caller must match invitee_username
-//   POST /api/v1/invites/{id}/decline             caller must match invitee_username
+//   POST /api/v1/accounts/{slug}/invites              owner-only
+//   GET  /api/v1/accounts/{slug}/invites              owner-only
+//   POST /api/v1/accounts/{slug}/invites/{id}/revoke  owner-only
+//   GET  /api/v1/invites                              caller's pending invites
+//   POST /api/v1/invites/{id}/accept                  caller must match invitee_username
+//   POST /api/v1/invites/{id}/decline                 caller must match invitee_username
 //
 // GUI surface (session-auth, form-post):
 //
-//   POST /orgs/{id}/invites                       owner-only
-//   POST /orgs/{id}/invites/{iid}/revoke          owner-only
+//   POST /accounts/{id}/invites                       owner-only
+//   POST /accounts/{id}/invites/{iid}/revoke          owner-only
 //   POST /invites/{id}/accept
 //   POST /invites/{id}/decline
 
 // ─── API: invites ────────────────────────────────────────────────────────────
 
-// handleAPICreateInvite: POST /api/v1/orgs/{slug}/invites
+// handleAPICreateInvite: POST /api/v1/accounts/{slug}/invites
 func (s *Server) handleAPICreateInvite(w http.ResponseWriter, r *http.Request) {
 	caller := CallerFromCtx(r.Context())
 	if caller.UserID == uuid.Nil {
@@ -91,8 +91,8 @@ func (s *Server) handleAPICreateInvite(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, cliproto.CreateInviteReply{Invite: inviteToWire(inv, org.Name)})
 }
 
-// handleAPIListInvitesForOrg: GET /api/v1/orgs/{slug}/invites
-func (s *Server) handleAPIListInvitesForOrg(w http.ResponseWriter, r *http.Request) {
+// handleAPIListInvitesForAccount: GET /api/v1/accounts/{slug}/invites
+func (s *Server) handleAPIListInvitesForAccount(w http.ResponseWriter, r *http.Request) {
 	caller := CallerFromCtx(r.Context())
 	if caller.UserID == uuid.Nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "OAuth token required"})
@@ -121,7 +121,7 @@ func (s *Server) handleAPIListInvitesForOrg(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, cliproto.ListInvitesReply{Invites: out})
 }
 
-// handleAPIRevokeInvite: POST /api/v1/orgs/{slug}/invites/{id}/revoke
+// handleAPIRevokeInvite: POST /api/v1/accounts/{slug}/invites/{id}/revoke
 func (s *Server) handleAPIRevokeInvite(w http.ResponseWriter, r *http.Request) {
 	caller := CallerFromCtx(r.Context())
 	if caller.UserID == uuid.Nil {
@@ -232,7 +232,7 @@ func (s *Server) acceptOrDecline(w http.ResponseWriter, r *http.Request, accept 
 
 // ─── GUI: invites (form posts) ───────────────────────────────────────────────
 
-// handleGUICreateInvite: POST /orgs/{id}/invites (form: username)
+// handleGUICreateInvite: POST /accounts/{id}/invites (form: username)
 func (s *Server) handleGUICreateInvite(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -272,7 +272,7 @@ func (s *Server) handleGUICreateInvite(w http.ResponseWriter, r *http.Request) {
 	browserSubmit(w, r)
 }
 
-// handleGUIRevokeInvite: POST /orgs/{id}/invites/{iid}/revoke
+// handleGUIRevokeInvite: POST /accounts/{id}/invites/{iid}/revoke
 func (s *Server) handleGUIRevokeInvite(w http.ResponseWriter, r *http.Request) {
 	uid := UserIDFromCtx(r.Context())
 	inviteID, err := uuid.Parse(r.PathValue("iid"))

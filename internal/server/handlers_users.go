@@ -42,8 +42,8 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	browserSubmit(w, r)
 }
 
-// handleAddMember: POST /orgs/{id}/members (form: user_id) — adds the
-// user as a non-owner member of the org. Idempotent: re-adding an
+// handleAddMember: POST /accounts/{id}/members (form: user_id) — adds the
+// user as a non-owner member of the account. Idempotent: re-adding an
 // existing member is a no-op + still 303.
 func (s *Server) handleAddMember(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -69,9 +69,9 @@ func (s *Server) handleAddMember(w http.ResponseWriter, r *http.Request) {
 	browserSubmit(w, r)
 }
 
-// handleRemoveMember: POST /orgs/{id}/members/{uid}/remove — removes
-// the user from the org. Returns 409 when the target is the org's
-// owner (transfer-ownership is a v2 feature).
+// handleRemoveMember: POST /accounts/{id}/members/{uid}/remove — removes
+// the user from the account. Returns 409 when the target is the
+// account's owner (transfer-ownership is a v2 feature).
 func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 	userID, err := uuid.Parse(r.PathValue("uid"))
 	if err != nil {

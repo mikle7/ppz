@@ -1,4 +1,4 @@
---- /orgs/ORG_ALPHA/pipes (pipes tab) ---
+--- /accounts/ORG_ALPHA/pipes (pipes tab) ---
 data-tab="pipes"
 data-tab="users"
 data-tab="keys"
@@ -6,7 +6,7 @@ active-tab=pipes
 section-pipes=present
 section-users=absent
 section-keys=absent
---- /orgs/ORG_ALPHA/users (users tab) ---
+--- /accounts/ORG_ALPHA/users (users tab) ---
 data-tab="pipes"
 data-tab="users"
 data-tab="keys"
@@ -14,7 +14,7 @@ active-tab=users
 section-pipes=absent
 section-users=present
 section-keys=absent
---- /orgs/ORG_ALPHA/keys (keys tab) ---
+--- /accounts/ORG_ALPHA/keys (keys tab) ---
 data-tab="pipes"
 data-tab="users"
 data-tab="keys"

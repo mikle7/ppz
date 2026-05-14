@@ -1,5 +1,5 @@
 --- bare org url returns a 303 redirect ---
 http=303
 --- redirect target is the pipes tab ---
-Location: /orgs/alpha/pipes
+Location: /accounts/alpha/pipes
 exit=0

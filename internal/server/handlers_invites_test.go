@@ -34,9 +34,9 @@ func TestInvites_API_NoAuth_401(t *testing.T) {
 		name, method, path string
 		body               string
 	}{
-		{"createInvite", "POST", "/api/v1/orgs/alpha/invites", `{"username":"alice"}`},
-		{"listOrgInvites", "GET", "/api/v1/orgs/alpha/invites", ""},
-		{"revokeInvite", "POST", "/api/v1/orgs/alpha/invites/00000000-0000-0000-0000-000000000000/revoke", ""},
+		{"createInvite", "POST", "/api/v1/accounts/alpha/invites", `{"username":"alice"}`},
+		{"listOrgInvites", "GET", "/api/v1/accounts/alpha/invites", ""},
+		{"revokeInvite", "POST", "/api/v1/accounts/alpha/invites/00000000-0000-0000-0000-000000000000/revoke", ""},
 		{"listMine", "GET", "/api/v1/invites", ""},
 		{"accept", "POST", "/api/v1/invites/00000000-0000-0000-0000-000000000000/accept", ""},
 		{"decline", "POST", "/api/v1/invites/00000000-0000-0000-0000-000000000000/decline", ""},
@@ -68,7 +68,7 @@ func TestAPICreateInvite_MissingUsername_400(t *testing.T) {
 	// "valid-looking" OAuth caller (nonzero UserID). Handler should
 	// reject empty username before any DB call.
 	srv := &Server{}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/orgs/alpha/invites", bytes.NewReader([]byte(`{"username":""}`)))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts/alpha/invites", bytes.NewReader([]byte(`{"username":""}`)))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("slug", "alpha")
 
@@ -87,7 +87,7 @@ func TestAPICreateInvite_APIKeyCaller_403(t *testing.T) {
 	// API-key bearers have UserID = uuid.Nil → handler should 403
 	// without touching the DB.
 	srv := &Server{}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/orgs/alpha/invites", bytes.NewReader([]byte(`{"username":"alice"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts/alpha/invites", bytes.NewReader([]byte(`{"username":"alice"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("slug", "alpha")
 	// No authed caller in context (or one with UserID=uuid.Nil) — the
@@ -132,7 +132,7 @@ func TestAPIDeclineInvite_BadInviteID_400(t *testing.T) {
 
 func TestAPIRevokeInvite_BadInviteID_400(t *testing.T) {
 	srv := &Server{}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/orgs/alpha/invites/not-a-uuid/revoke", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts/alpha/invites/not-a-uuid/revoke", nil)
 	req.SetPathValue("slug", "alpha")
 	req.SetPathValue("id", "not-a-uuid")
 

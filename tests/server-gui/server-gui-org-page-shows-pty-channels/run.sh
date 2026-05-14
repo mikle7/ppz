@@ -10,7 +10,7 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a terminal create regular >/dev/null
 ppz_a terminal share pty-pipe -- true >/dev/null
 
-PAGE=$(curl_server "/orgs/alpha")
+PAGE=$(curl_server "/accounts/alpha")
 
 echo "--- source-rows ---"
 echo "$PAGE" \

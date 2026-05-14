@@ -413,8 +413,8 @@ type AuthExchangeRequest struct {
 	AccountID string `json:"account_id,omitempty"`
 }
 
-// CreateInviteRequest is the body for POST /api/v1/orgs/{slug}/invites
-// and the /orgs/{id}/invites GUI form. Owner-only — handlers gate.
+// CreateInviteRequest is the body for POST /api/v1/accounts/{slug}/invites
+// and the /accounts/{id}/invites GUI form. Owner-only — handlers gate.
 type CreateInviteRequest struct {
 	Username string `json:"username"`
 }

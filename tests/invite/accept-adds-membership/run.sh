@@ -9,7 +9,7 @@ PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -v ON_ERROR_STOP=1 -tAc "
 " >/dev/null
 
 auth_as foo
-curl_server "/orgs/alpha/invites" -X POST -d "username=alice" -o /dev/null
+curl_server "/accounts/alpha/invites" -X POST -d "username=alice" -o /dev/null
 
 invite_id=$(PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc "
   SELECT id FROM invites WHERE invitee_username = 'alice' AND status = 'pending' LIMIT 1

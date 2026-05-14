@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# /orgs/<slug>/sources/<handle>/pipes/<pipe> lists every buffered message
+# /accounts/<slug>/sources/<handle>/pipes/<pipe> lists every buffered message
 # from the JetStream stream backing the (source, pipe), in chronological
 # order. Each <tr> exposes a stable
 #   data-message="<id>:<created_at>:<payload>"
@@ -14,6 +14,6 @@ ppz_a send chat.inbox "msg-2" >/dev/null
 ppz_a send chat.inbox "msg-3" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-3" >/dev/null
 
-curl_server "/orgs/alpha/sources/chat/pipes/inbox" \
+curl_server "/accounts/alpha/sources/chat/pipes/inbox" \
   | grep -oE 'data-message="[^"]+"' \
   | sed -E 's/data-message="([^"]+)"/\1/'

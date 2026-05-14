@@ -10,7 +10,7 @@ echo "--- /dashboard without cookie ---"
   | grep -i '^location:' | sed -E 's/\r$//' | head -1
 
 echo ""
-echo "--- /orgs/alpha/pipes without cookie (deep link preserves next=) ---"
-{ curl_server "/orgs/alpha/pipes" --max-redirs 0 -o /dev/null -w "status=%{http_code}\n" -s || true; }
-{ curl_server "/orgs/alpha/pipes" --max-redirs 0 -s -D - -o /dev/null || true; } \
+echo "--- /accounts/alpha/pipes without cookie (deep link preserves next=) ---"
+{ curl_server "/accounts/alpha/pipes" --max-redirs 0 -o /dev/null -w "status=%{http_code}\n" -s || true; }
+{ curl_server "/accounts/alpha/pipes" --max-redirs 0 -s -D - -o /dev/null || true; } \
   | grep -i '^location:' | sed -E 's/\r$//' | head -1

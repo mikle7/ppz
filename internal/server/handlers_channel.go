@@ -13,7 +13,7 @@ import (
 // Reads from the JetStream stream backing the pipe; messages are returned in
 // chronological order (sequence ASC).
 //
-// Route: GET /orgs/{id}/sources/{handle}/pipes/{pipe}
+// Route: GET /accounts/{id}/sources/{handle}/pipes/{pipe}
 // {id} accepts either UUID or slug via resolveOrg.
 func (s *Server) handleGUIPipePage(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := withTimeout(r)

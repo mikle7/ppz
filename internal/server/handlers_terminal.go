@@ -21,7 +21,7 @@ import (
 // The page itself is static — no per-request data beyond org + handle.
 // All the live behaviour lives in /terminal/ws.
 //
-// Route: GET /orgs/{id}/sources/{handle}/terminal
+// Route: GET /accounts/{id}/sources/{handle}/terminal
 func (s *Server) handleGUITerminalPage(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := withTimeout(r)
 	defer cancel()
@@ -56,7 +56,7 @@ func (s *Server) handleGUITerminalPage(w http.ResponseWriter, r *http.Request) {
 // Read-only: incoming frames from the browser are discarded. Stdin will
 // land in a future iteration with a write-lease design.
 //
-// Route: GET /orgs/{id}/sources/{handle}/terminal/ws
+// Route: GET /accounts/{id}/sources/{handle}/terminal/ws
 func (s *Server) handleGUITerminalWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

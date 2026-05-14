@@ -35,6 +35,6 @@ check_tab() {
   done
 }
 
-check_tab "/orgs/$org_id/pipes" pipes
-check_tab "/orgs/$org_id/users" users
-check_tab "/orgs/$org_id/keys"  keys
+check_tab "/accounts/$org_id/pipes" pipes
+check_tab "/accounts/$org_id/users" users
+check_tab "/accounts/$org_id/keys"  keys

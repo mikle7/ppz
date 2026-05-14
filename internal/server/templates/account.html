@@ -19,11 +19,11 @@
     </header>
 
     <nav class="tabs" data-active-tab="{{.ActiveTab}}">
-      <a data-tab="pipes" href="/orgs/{{.Org.Name}}/pipes"
+      <a data-tab="pipes" href="/accounts/{{.Org.Name}}/pipes"
          class="{{if eq .ActiveTab "pipes"}}active{{end}}">Pipes</a>
-      <a data-tab="users" href="/orgs/{{.Org.Name}}/users"
+      <a data-tab="users" href="/accounts/{{.Org.Name}}/users"
          class="{{if eq .ActiveTab "users"}}active{{end}}">Users</a>
-      <a data-tab="keys"  href="/orgs/{{.Org.Name}}/keys"
+      <a data-tab="keys"  href="/accounts/{{.Org.Name}}/keys"
          class="{{if eq .ActiveTab "keys"}}active{{end}}">API keys</a>
     </nav>
 
@@ -83,9 +83,9 @@
               data-user-mode="{{.Mode}}">
             {{.Username}}
             <small>· {{.Email}} · {{.Mode}}</small>
-            <form method="post" action="/orgs/{{$.Org.ID}}/members/{{.ID}}/remove" class="inline">
+            <form method="post" action="/accounts/{{$.Org.ID}}/members/{{.ID}}/remove" class="inline">
               <button type="submit"
-                      onclick="return confirm('Remove {{.Username}} from this organisation?');">Remove</button>
+                      onclick="return confirm('Remove {{.Username}} from this account?');">Remove</button>
             </form>
           </li>
           {{end}}
@@ -93,7 +93,7 @@
         {{else}}
         <p class="empty">No members yet.</p>
         {{end}}
-        <form method="post" action="/orgs/{{.Org.ID}}/members">
+        <form method="post" action="/accounts/{{.Org.ID}}/members">
           <label>Add member by user_id <input name="user_id" required></label>
           <button type="submit">Add member</button>
         </form>
@@ -107,7 +107,7 @@
           <li data-invite-id="{{.ID}}" data-invitee="{{.InviteeUsername}}">
             <strong>{{.InviteeUsername}}</strong>
             <small>· pending · {{.CreatedAt.Format "2006-01-02T15:04:05Z"}}</small>
-            <form method="post" action="/orgs/{{$.Org.ID}}/invites/{{.ID}}/revoke" class="inline">
+            <form method="post" action="/accounts/{{$.Org.ID}}/invites/{{.ID}}/revoke" class="inline">
               <button type="submit">Revoke</button>
             </form>
           </li>
@@ -116,7 +116,7 @@
         {{else}}
         <p class="empty">No pending invitations.</p>
         {{end}}
-        <form method="post" action="/orgs/{{.Org.ID}}/invites">
+        <form method="post" action="/accounts/{{.Org.ID}}/invites">
           <label>Invite by GitHub username <input name="username" required></label>
           <button type="submit">Send invite</button>
         </form>
@@ -151,7 +151,7 @@
       {{else}}
       <p class="empty">No keys yet.</p>
       {{end}}
-      <form method="post" action="/orgs/{{.Org.Name}}/keys">
+      <form method="post" action="/accounts/{{.Org.Name}}/keys">
         <label>Label <input name="label" required></label>
         <button type="submit">Create key</button>
       </form>

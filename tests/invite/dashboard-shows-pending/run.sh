@@ -12,7 +12,7 @@ PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -v ON_ERROR_STOP=1 -tAc "
 " >/dev/null
 
 auth_as foo
-curl_server "/orgs/alpha/invites" -X POST -d "username=alice" -o /dev/null
+curl_server "/accounts/alpha/invites" -X POST -d "username=alice" -o /dev/null
 
 # Now sign in as alice and fetch the dashboard.
 auth_as alice

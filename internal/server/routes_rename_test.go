@@ -1,7 +1,6 @@
 package server
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -43,8 +42,9 @@ func cycleBRenamedRoutes() []renamedRoute {
 }
 
 // TestRoutes_OrgsPathsReturn404 — old `/orgs/...` and `/api/v1/orgs/...`
-// shapes must 404 after the rename. ServeMux returns 404 for paths with
-// no registered pattern (regardless of method).
+// shapes must 404 after the rename. Use mux.Handler() to inspect the
+// matched pattern without invoking handlers (some routes bypass auth
+// and would panic on a nil DB pool, e.g. the terminal websocket).
 func TestRoutes_OrgsPathsReturn404(t *testing.T) {
 	s := &Server{Version: "v0-test"}
 	mux := s.Routes()
@@ -52,22 +52,18 @@ func TestRoutes_OrgsPathsReturn404(t *testing.T) {
 	for _, r := range cycleBRenamedRoutes() {
 		t.Run(r.method+" "+r.oldPath, func(t *testing.T) {
 			req := httptest.NewRequest(r.method, r.oldPath, nil)
-			req.Header.Set("Accept", "application/json") // surface 401 as 401, not 302
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, req)
-			if w.Code != http.StatusNotFound {
-				t.Errorf("%s %s: status = %d, want 404 (route should be unmounted after rename)",
-					r.method, r.oldPath, w.Code)
+			_, pattern := mux.Handler(req)
+			if pattern != "" {
+				t.Errorf("%s %s: matched pattern %q, want empty (route should be unmounted)",
+					r.method, r.oldPath, pattern)
 			}
 		})
 	}
 }
 
 // TestRoutes_AccountsPathsAreMounted — new `/accounts/...` and
-// `/api/v1/accounts/...` shapes must be mounted. Mounted means the
-// response is anything other than 404 — typically 401 (auth required)
-// or 302 (redirect to login) for session-gated GUI routes, or
-// 401/400/403 for the bearer-gated API routes.
+// `/api/v1/accounts/...` shapes must be mounted. mux.Handler() returns
+// a non-empty pattern for any registered route.
 func TestRoutes_AccountsPathsAreMounted(t *testing.T) {
 	s := &Server{Version: "v0-test"}
 	mux := s.Routes()
@@ -75,11 +71,9 @@ func TestRoutes_AccountsPathsAreMounted(t *testing.T) {
 	for _, r := range cycleBRenamedRoutes() {
 		t.Run(r.method+" "+r.newPath, func(t *testing.T) {
 			req := httptest.NewRequest(r.method, r.newPath, nil)
-			req.Header.Set("Accept", "application/json") // 401 instead of 302
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, req)
-			if w.Code == http.StatusNotFound {
-				t.Errorf("%s %s: status = 404, want any-not-404 (route should be mounted after rename)",
+			_, pattern := mux.Handler(req)
+			if pattern == "" {
+				t.Errorf("%s %s: no matched pattern, want one of the registered /accounts/* patterns",
 					r.method, r.newPath)
 			}
 		})

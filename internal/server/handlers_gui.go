@@ -101,7 +101,7 @@ func siteURL(r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
-func (s *Server) handleGUICreateOrg(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGUICreateAccount(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -137,32 +137,32 @@ func (s *Server) handleGUICreateOrg(w http.ResponseWriter, r *http.Request) {
 	browserSubmit(w, r)
 }
 
-// handleGUIOrgRedirect is the bare `/orgs/{id}` entry point. The page
+// handleGUIAccountRedirect is the bare `/accounts/{id}` entry point. The page
 // is split into three tabs (pipes / users / keys); we 303 the visitor
 // to the default tab so deep-linking + refresh land them on the same
 // place. Pipes wins as default — it's the operator's most-used view.
-func (s *Server) handleGUIOrgRedirect(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGUIAccountRedirect(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 	org, err := resolveOrg(ctx, s.Pool, r.PathValue("id"))
 	if err != nil {
-		http.Error(w, "org not found", 404)
+		http.Error(w, "account not found", 404)
 		return
 	}
-	http.Redirect(w, r, "/orgs/"+org.Name+"/pipes", http.StatusSeeOther)
+	http.Redirect(w, r, "/accounts/"+org.Name+"/pipes", http.StatusSeeOther)
 }
 
-// orgTabs lists the tab keys the GUI knows about. The router registers
+// accountTabs lists the tab keys the GUI knows about. The router registers
 // one route per entry; the handler validates against this set so only
 // valid tabs render.
-var orgTabs = map[string]bool{"pipes": true, "users": true, "keys": true}
+var accountTabs = map[string]bool{"pipes": true, "users": true, "keys": true}
 
-// handleGUIOrgTab dispatches the org page for a given tab. The tab
+// handleGUIAccountTab dispatches the account page for a given tab. The tab
 // drives which section the template renders, but the same shared
 // header + sub-nav always appears so the user can switch.
-func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGUIAccountTab(w http.ResponseWriter, r *http.Request) {
 	tab := r.PathValue("tab")
-	if !orgTabs[tab] {
+	if !accountTabs[tab] {
 		http.Error(w, "unknown tab", http.StatusNotFound)
 		return
 	}
@@ -170,7 +170,7 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	org, err := resolveOrg(ctx, s.Pool, r.PathValue("id"))
 	if err != nil {
-		http.Error(w, "org not found", 404)
+		http.Error(w, "account not found", 404)
 		return
 	}
 	keys, err := db.ListAPIKeysForOrg(ctx, s.Pool, org.ID)
@@ -207,8 +207,8 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 	type sourceRow struct {
 		Handle         string
 		Pipe           string // broadcast / stdin / stdout / user-created
-		PipeLink       string // /orgs/<slug>/sources/<handle>/pipes/<pipe>
-		TerminalLink   string // /orgs/<slug>/sources/<handle>/terminal — only set on stdout rows that have data (a shared terminal)
+		PipeLink       string // /accounts/<slug>/sources/<handle>/pipes/<pipe>
+		TerminalLink   string // /accounts/<slug>/sources/<handle>/terminal — only set on stdout rows that have data (a shared terminal)
 		LastMessageAt  string // relative duration ("5 seconds ago" / "just now") or ""
 		PayloadDisplay string // truncated to 60 chars or ""
 		HasLastMessage bool
@@ -246,7 +246,7 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 			row := sourceRow{
 				Handle:   src.Handle,
 				Pipe:     p,
-				PipeLink: fmt.Sprintf("/orgs/%s/sources/%s/pipes/%s", org.Name, src.Handle, p),
+				PipeLink: fmt.Sprintf("/accounts/%s/sources/%s/pipes/%s", org.Name, src.Handle, p),
 			}
 			streamName := natsubj.BuildStreamName(org.ID, src.Manifold, src.Handle, p)
 			if js == nil {
@@ -270,7 +270,7 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 			// have data — that's the signal someone's shared a terminal
 			// here (vs. a never-used auto-provisioned pipe).
 			if p == "stdout" && row.HasLastMessage {
-				row.TerminalLink = fmt.Sprintf("/orgs/%s/sources/%s/terminal", org.Name, src.Handle)
+				row.TerminalLink = fmt.Sprintf("/accounts/%s/sources/%s/terminal", org.Name, src.Handle)
 			}
 			rows = append(rows, row)
 		}
@@ -310,7 +310,7 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 	data["PendingInvites"] = pendingInvites
 	data["IsOwner"] = isOwner
 	data["ActiveTab"] = tab
-	if err := tmpl.ExecuteTemplate(w, "org.html", data); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "account.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
 }

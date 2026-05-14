@@ -6,7 +6,7 @@
 # functional equivalent so the spec exists end-to-end today.
 #
 # Open spec point — currently testing direct add-by-username via
-# POST /orgs/<id>/members. If the intent was that v1 has NO member
+# POST /accounts/<id>/members. If the intent was that v1 has NO member
 # add (owner-only until v2 invite-by-email lands), say so and
 # we'll cut the add path from this test.
 . /tests/lib/common.sh
@@ -25,14 +25,14 @@ alice_id="$(PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
   "SELECT id FROM users WHERE username = 'alice'")"
 bob_id="$(PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
   "SELECT id FROM users WHERE username = 'bob'")"
-curl_server "/orgs" -X POST \
+curl_server "/accounts" -X POST \
   --data-urlencode 'name=wonder' \
   --data-urlencode "owner_user_id=$alice_id" >/dev/null
 wonder_id="$(PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
   "SELECT id FROM accounts WHERE name = 'wonder'")"
 
 echo "--- add bob as member ---"
-curl_server "/orgs/$wonder_id/members" -X POST \
+curl_server "/accounts/$wonder_id/members" -X POST \
   --data-urlencode "user_id=$bob_id" \
   -o /dev/null -w 'http=%{http_code}\n'
 
@@ -43,7 +43,7 @@ PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
     WHERE m.account_id = '$wonder_id'"
 
 echo "--- removing bob (regular member) succeeds ---"
-curl_server "/orgs/$wonder_id/members/$bob_id/remove" -X POST \
+curl_server "/accounts/$wonder_id/members/$bob_id/remove" -X POST \
   -o /dev/null -w 'http=%{http_code}\n'
 
 echo "--- members table is empty again ---"
@@ -51,7 +51,7 @@ PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
   "SELECT COUNT(*)::text FROM account_members WHERE account_id = '$wonder_id'"
 
 echo "--- removing alice (owner) is rejected ---"
-curl_server "/orgs/$wonder_id/members/$alice_id/remove" -X POST \
+curl_server "/accounts/$wonder_id/members/$alice_id/remove" -X POST \
   -o /dev/null -w 'http=%{http_code}\n'
 
 echo "--- alice still owns wonder ---"

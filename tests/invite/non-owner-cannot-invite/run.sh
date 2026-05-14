@@ -4,7 +4,7 @@
 
 auth_as bar
 
-curl_server "/orgs/alpha/invites" -X POST -d "username=alice" -o /dev/null -w "status:%{http_code}\n"
+curl_server "/accounts/alpha/invites" -X POST -d "username=alice" -o /dev/null -w "status:%{http_code}\n"
 
 # Verify nothing was inserted.
 PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc "

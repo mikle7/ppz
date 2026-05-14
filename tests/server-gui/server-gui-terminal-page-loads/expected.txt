@@ -4,5 +4,5 @@
 --- mount point ---
 id="terminal"
 --- WebSocket bootstrap path ---
-/orgs/alpha/sources/term1/terminal/ws
+/accounts/alpha/sources/term1/terminal/ws
 exit=0

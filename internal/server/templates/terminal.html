@@ -33,7 +33,7 @@
     <header class="brand">
       <h1>
         <a href="/dashboard">ppz</a> /
-        <a href="/orgs/{{.Org.Name}}">{{.Org.Name}}</a> /
+        <a href="/accounts/{{.Org.Name}}">{{.Org.Name}}</a> /
         <code>{{.Handle}}</code> /
         terminal
       </h1>
@@ -53,7 +53,7 @@
        monitor gets equal padding on both sides instead of overflowing
        right. -->
   <div class="terminal-wrap">
-    <div id="terminal" data-ws-path="/orgs/{{.Org.Name}}/sources/{{.Handle}}/terminal/ws"></div>
+    <div id="terminal" data-ws-path="/accounts/{{.Org.Name}}/sources/{{.Handle}}/terminal/ws"></div>
   </div>
 
   <script src="/assets/xterm.js"></script>

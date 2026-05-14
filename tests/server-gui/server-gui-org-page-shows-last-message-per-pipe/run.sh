@@ -13,7 +13,7 @@ ppz_a send foo.inbox "hello-inbox" >/dev/null
 ppz_a send foo.archive "hello-archive" >/dev/null
 wait_for 20 "ppz_a ls | grep -q hello-archive" >/dev/null
 
-PAGE=$(curl_server "/orgs/alpha")
+PAGE=$(curl_server "/accounts/alpha")
 
 echo "--- column header is 'Last Message' ---"
 echo "$PAGE" | grep -oE '<th>[^<]*</th>' | sed -E 's/.*<th>(.+)<\/th>.*/\1/' | grep -iE '^(last broadcast|last message)$' | head -1

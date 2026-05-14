@@ -30,16 +30,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/keys/{id}/revoke", s.handleRevokeKey)
 	// Account-scoped invite API. Bearer-authed; the handler layer
 	// gates on OAuth user identity (API keys 403 because they're
-	// account-scoped without a user). The /orgs/ URL prefix is
-	// kept for now as a stable wire shape — renaming to /accounts/
-	// requires also renaming the GUI's `/orgs/{slug}/...` page URLs
-	// (invitee accept-links are bookmarkable and forwardable), so
-	// the API URL and GUI URL must move together. Tracked for
-	// Phase 2 (auth restructure) which already touches the GUI
-	// heavily. *(See PR #41 review point #5.)*
-	mux.HandleFunc("POST /api/v1/orgs/{slug}/invites", s.requireBearer(s.handleAPICreateInvite))
-	mux.HandleFunc("GET /api/v1/orgs/{slug}/invites", s.requireBearer(s.handleAPIListInvitesForOrg))
-	mux.HandleFunc("POST /api/v1/orgs/{slug}/invites/{id}/revoke", s.requireBearer(s.handleAPIRevokeInvite))
+	// account-scoped without a user).
+	mux.HandleFunc("POST /api/v1/accounts/{slug}/invites", s.requireBearer(s.handleAPICreateInvite))
+	mux.HandleFunc("GET /api/v1/accounts/{slug}/invites", s.requireBearer(s.handleAPIListInvitesForAccount))
+	mux.HandleFunc("POST /api/v1/accounts/{slug}/invites/{id}/revoke", s.requireBearer(s.handleAPIRevokeInvite))
 	mux.HandleFunc("GET /api/v1/invites", s.requireBearer(s.handleAPIListMyInvites))
 	mux.HandleFunc("POST /api/v1/invites/{id}/accept", s.requireBearer(s.handleAPIAcceptInvite))
 	mux.HandleFunc("POST /api/v1/invites/{id}/decline", s.requireBearer(s.handleAPIDeclineInvite))
@@ -82,23 +76,23 @@ func (s *Server) Routes() *http.ServeMux {
 	// GUI authed routes — wrapped in requireSession.
 	mux.HandleFunc("GET /dashboard", s.requireSession(s.handleGUIIndex))
 	mux.HandleFunc("GET /me", s.requireSession(s.handleMe))
-	mux.HandleFunc("POST /orgs", s.requireSession(s.handleGUICreateOrg))
-	mux.HandleFunc("GET /orgs/{id}", s.requireSession(s.handleGUIOrgRedirect))
-	mux.HandleFunc("GET /orgs/{id}/{tab}", s.requireSession(s.handleGUIOrgTab))
-	mux.HandleFunc("POST /orgs/{id}/keys", s.requireSession(s.handleGUICreateKey))
-	mux.HandleFunc("POST /orgs/{id}/keys/{kid}/revoke", s.requireSession(s.handleGUIRevokeKey))
+	mux.HandleFunc("POST /accounts", s.requireSession(s.handleGUICreateAccount))
+	mux.HandleFunc("GET /accounts/{id}", s.requireSession(s.handleGUIAccountRedirect))
+	mux.HandleFunc("GET /accounts/{id}/{tab}", s.requireSession(s.handleGUIAccountTab))
+	mux.HandleFunc("POST /accounts/{id}/keys", s.requireSession(s.handleGUICreateKey))
+	mux.HandleFunc("POST /accounts/{id}/keys/{kid}/revoke", s.requireSession(s.handleGUIRevokeKey))
 	mux.HandleFunc("POST /users", s.requireSession(s.handleCreateUser))
-	mux.HandleFunc("POST /orgs/{id}/members", s.requireSession(s.handleAddMember))
-	mux.HandleFunc("POST /orgs/{id}/members/{uid}/remove", s.requireSession(s.handleRemoveMember))
-	mux.HandleFunc("POST /orgs/{id}/invites", s.requireSession(s.handleGUICreateInvite))
-	mux.HandleFunc("POST /orgs/{id}/invites/{iid}/revoke", s.requireSession(s.handleGUIRevokeInvite))
+	mux.HandleFunc("POST /accounts/{id}/members", s.requireSession(s.handleAddMember))
+	mux.HandleFunc("POST /accounts/{id}/members/{uid}/remove", s.requireSession(s.handleRemoveMember))
+	mux.HandleFunc("POST /accounts/{id}/invites", s.requireSession(s.handleGUICreateInvite))
+	mux.HandleFunc("POST /accounts/{id}/invites/{iid}/revoke", s.requireSession(s.handleGUIRevokeInvite))
 	mux.HandleFunc("POST /invites/{id}/accept", s.requireSession(s.handleGUIAcceptInvite))
 	mux.HandleFunc("POST /invites/{id}/decline", s.requireSession(s.handleGUIDeclineInvite))
-	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/pipes/{pipe}", s.requireSession(s.handleGUIPipePage))
-	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/terminal", s.requireSession(s.handleGUITerminalPage))
+	mux.HandleFunc("GET /accounts/{id}/sources/{handle}/pipes/{pipe}", s.requireSession(s.handleGUIPipePage))
+	mux.HandleFunc("GET /accounts/{id}/sources/{handle}/terminal", s.requireSession(s.handleGUITerminalPage))
 	// WebSocket for terminal stream — leaving un-auth'd for now (RED phase
 	// surfaced this; tighten to session-or-key auth in a follow-up).
-	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/terminal/ws", s.handleGUITerminalWS)
+	mux.HandleFunc("GET /accounts/{id}/sources/{handle}/terminal/ws", s.handleGUITerminalWS)
 
 	// Static assets (logo, css, xterm, …) embedded into the binary.
 	mux.Handle("GET /assets/", assetsHandler())

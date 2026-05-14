@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Users tab specifics: the /orgs/<id>/users page renders the Owner
+# Users tab specifics: the /accounts/<id>/users page renders the Owner
 # and Members subregions and stamps `data-todo` placeholders on the
 # v2-only buttons (Invite, Transfer ownership). Lets the spec stay
 # visible while the buttons sit disabled until v2 lands.
@@ -11,7 +11,7 @@
 auth_as_foo
 
 org_id="$(cat /seed/org-alpha.txt)"
-page="$(curl_server "/orgs/$org_id/users")"
+page="$(curl_server "/accounts/$org_id/users")"
 
 echo "--- users section is present ---"
 printf '%s' "$page" | grep -oE 'id="section-users"' | head -1

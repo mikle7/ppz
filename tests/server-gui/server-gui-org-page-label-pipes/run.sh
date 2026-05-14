@@ -10,9 +10,9 @@ auth_as_foo
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create foo >/dev/null
 
-# Bare /orgs/<id> redirects to the pipes tab — exactly where this
+# Bare /accounts/<id> redirects to the pipes tab — exactly where this
 # table lives — so curl_server's -L follows and lands us here.
-PAGE=$(curl_server "/orgs/alpha/pipes")
+PAGE=$(curl_server "/accounts/alpha/pipes")
 
 echo "--- tab nav marks pipes as active ---"
 echo "$PAGE" | grep -oE 'data-active-tab="pipes"' | head -1

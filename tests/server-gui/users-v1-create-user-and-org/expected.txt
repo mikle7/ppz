@@ -6,7 +6,7 @@ alice|alice@example.com|internal
 http=200
 --- wonder is owned by alice ---
 alice
---- POST /orgs with only a name → owner defaults to the authed session user ---
+--- POST /accounts with only a name → owner defaults to the authed session user ---
 http=200
 foo
 exit=0

@@ -2,7 +2,7 @@
 status=302
 Location: /login?next=%2Fdashboard
 
---- /orgs/alpha/pipes without cookie (deep link preserves next=) ---
+--- /accounts/alpha/pipes without cookie (deep link preserves next=) ---
 status=302
 Location: /login?next=%2Forgs%2Falpha%2Fpipes
 exit=0

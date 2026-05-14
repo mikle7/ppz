@@ -141,7 +141,7 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 // handleRevokeKey marks an API key revoked. Idempotent: revoking an
 // already-revoked key returns 200 (the desired state — revoked — is
 // already in place). Missing keys return 404. No auth — same posture
-// as the existing /orgs/<id>/keys POST that creates them.
+// as the existing /accounts/<id>/keys POST that creates them.
 func (s *Server) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {

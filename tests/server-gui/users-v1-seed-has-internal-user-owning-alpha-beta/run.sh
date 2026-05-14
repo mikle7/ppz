@@ -24,6 +24,6 @@ PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -tAc \
 
 echo "--- alpha's org page surfaces the owner ---"
 org_id="$(cat /seed/org-alpha.txt)"
-curl_server "/orgs/$org_id" \
+curl_server "/accounts/$org_id" \
   | grep -oE 'data-owner-username="[^"]+"' \
   | head -1

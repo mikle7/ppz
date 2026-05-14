@@ -10,7 +10,7 @@ org_id="$(cat /seed/org-alpha.txt)"
 
 # Create a fresh key just for this test so we don't disturb the seeded
 # key other tests rely on.
-resp="$(curl_server "/orgs/$org_id/keys" -X POST --data-urlencode 'label=revoke-test')"
+resp="$(curl_server "/accounts/$org_id/keys" -X POST --data-urlencode 'label=revoke-test')"
 plaintext="$(printf '%s' "$resp" | grep -oE 'data-new-key="[^"]+"' | sed -E 's/data-new-key="([^"]+)"/\1/')"
 key_id="$(printf  '%s' "$resp" | grep -oE 'data-key-id="[^"]+"'  | sed -E 's/data-key-id="([^"]+)"/\1/')"
 

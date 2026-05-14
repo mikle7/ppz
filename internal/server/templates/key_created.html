@@ -10,14 +10,14 @@
   <main>
     <header class="brand">
       <div>
-        <h1><a href="/dashboard">ppz</a> / <a href="/orgs/{{.OrgName}}">{{.OrgName}}</a> / new key</h1>
+        <h1><a href="/dashboard">ppz</a> / <a href="/accounts/{{.OrgName}}">{{.OrgName}}</a> / new key</h1>
         <div class="crumbs">copy this now — it will not be shown again</div>
       </div>
     </header>
 
     <h2>API key</h2>
     <pre data-new-key="{{.Plaintext}}" data-key-id="{{.KeyID}}">{{.Plaintext}}</pre>
-    <p><a href="/orgs/{{.OrgName}}">← back to {{.OrgName}}</a></p>
+    <p><a href="/accounts/{{.OrgName}}">← back to {{.OrgName}}</a></p>
   </main>
 </body>
 </html>
