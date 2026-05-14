@@ -19,13 +19,14 @@ const (
 )
 
 type User struct {
-	ID        uuid.UUID
-	Username  string
-	Email     string
-	Mode      UserMode
-	GitHubID  *int64 // nil for mode=internal users
-	AvatarURL string
-	CreatedAt time.Time
+	ID           uuid.UUID
+	Username     string
+	Email        string
+	Mode         UserMode
+	GitHubID     *int64  // nil for mode=internal users
+	PasswordHash *string // nil for OAuth-only / pre-Phase-2 users; set for password-mode logins
+	AvatarURL    string
+	CreatedAt    time.Time
 }
 
 // ErrInvalidUserMode is returned when a caller passes a Mode value
