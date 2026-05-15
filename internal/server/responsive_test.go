@@ -88,9 +88,10 @@ func TestStyleCSS_HasAdminResponsiveRules(t *testing.T) {
 }
 
 // TestStyleCSS_LandingResponsiveRulesPresent — regression guard.
-// landing.html already had @media (max-width: 720px) rules before
-// the mobile pass; adding viewport meta to landing.html *activates*
-// those rules. This test prevents an accidental removal of them.
+// The @media (max-width: 720px) block now covers the admin pages
+// (the landing demos that originally seeded it were stripped — they
+// now live in pipes-internal). Test stays so a future change can't
+// silently drop the breakpoint.
 func TestStyleCSS_LandingResponsiveRulesPresent(t *testing.T) {
 	data, err := assetsFS.ReadFile("assets/style.css")
 	if err != nil {
@@ -98,27 +99,11 @@ func TestStyleCSS_LandingResponsiveRulesPresent(t *testing.T) {
 	}
 	css := string(data)
 	if !strings.Contains(css, "@media (max-width: 720px)") {
-		t.Error("style.css missing the pre-existing landing @media (max-width: 720px) block")
+		t.Error("style.css missing the @media (max-width: 720px) block")
 	}
 }
 
-// TestStyleCSS_LandingPaneTunedForNarrow — landing.html's demo panes
-// (.pane) work fine when the existing breakpoint stacks .senders into
-// a single column, but the default 0.85rem font + 1rem 1.25rem padding
-// leaves output cramped on a phone-width pane (~340px). Cycle 3 adds
-// a narrow-viewport override.
-func TestStyleCSS_LandingPaneTunedForNarrow(t *testing.T) {
-	data, err := assetsFS.ReadFile("assets/style.css")
-	if err != nil {
-		t.Fatalf("read style.css: %v", err)
-	}
-	css := string(data)
-	// Look for `.pane {` inside any @media block — we just need *some*
-	// narrow-viewport override on the .pane selector to exist.
-	if !strings.Contains(css, "data-pane-mobile-tuned") {
-		// Sentinel comment the GREEN cycle leaves in the @media block
-		// so this test pins intent without bolting to specific values
-		// (font-size, padding) that future polish may want to adjust.
-		t.Error("style.css missing the .pane mobile tuning sentinel (expected /* data-pane-mobile-tuned */ comment inside the 720px @media block)")
-	}
-}
+// TestStyleCSS_LandingPaneTunedForNarrow removed — the landing demo
+// panes it pinned have been deleted along with the marketing CSS
+// chunk (the demos now live in pipes-internal). No .pane selector
+// to tune on phone-width viewports anymore.
