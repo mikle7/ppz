@@ -1,0 +1,3 @@
+sent id=ID8 to=room bytes=N
+sender=alice
+exit=0
