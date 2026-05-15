@@ -631,7 +631,13 @@ func (d *Daemon) handlePipeDestroy(ctx context.Context, conn net.Conn, params js
 			writeIPCErr(conn, cliproto.New(cliproto.EInvalidPipe))
 			return
 		}
-		manifold := d.State.CurrentNamespace(req.Session)
+		// Explicit Manifold wins over session lookup — callers that
+		// already know the target pipe's manifold (the glob path) need
+		// to address pipes across namespaces, not just the session's.
+		manifold := req.Manifold
+		if manifold == "" {
+			manifold = d.State.CurrentNamespace(req.Session)
+		}
 		q := url.Values{}
 		q.Set("name", req.BareTarget)
 		if manifold != "" {

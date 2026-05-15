@@ -518,6 +518,11 @@ type PipeDestroyRequest struct {
 	// uncollared pipe at the session's current namespace.
 	BareTarget string `json:"bare_target,omitempty"`
 	Session    string `json:"session,omitempty"`
+	// Manifold is set by callers that already know the target pipe's
+	// manifold (e.g. the glob path needs to destroy uncollared pipes
+	// across manifolds, not just the session's). When empty, the
+	// daemon falls back to the session's current_namespace.
+	Manifold string `json:"manifold,omitempty"`
 }
 
 type PipeDestroyReply struct {
