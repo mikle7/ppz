@@ -910,9 +910,7 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 	// runtime check is unambiguous: at most one shape is real, and the
 	// fall-through finds it.
 	//
-	// Sender for uncollared is empty per the Phase 1.5.1 design
-	// (uncollared has no actor identity); user account is implicit via
-	// account_id.
+	// Sender stamping is per the success-branch comment below.
 	if shouldTryUncollaredFirst(bareTarget) {
 		if err := natsubj.ValidatePipe(bareTarget); err != nil {
 			return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
