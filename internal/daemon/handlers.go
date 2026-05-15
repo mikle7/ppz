@@ -455,7 +455,7 @@ func (d *Daemon) handleCreate(ctx context.Context, conn net.Conn, params json.Ra
 		writeIPCErr(conn, e)
 		return
 	}
-	d.State.RememberPipe(reply.Handle)
+	d.State.RememberSource(reply.Handle, reply.Manifold)
 	// PTY sources don't become the daemon's "current" — the user retains
 	// their existing current message source so `ppz send` keeps working
 	// the way they expect outside the terminal.
@@ -596,13 +596,17 @@ func (d *Daemon) handleSourceDestroy(ctx context.Context, conn net.Conn, params 
 		writeIPCErr(conn, cliproto.NewInvalidHandle(req.Handle))
 		return
 	}
+	// Look up the source's manifold via the handle→manifold cache BEFORE
+	// the delete clears it from any subsequent ls refresh. Empty if the
+	// source is at root (or cache miss — fallback to root display).
+	manifold := d.State.HandleManifold(req.Handle)
 	if e := d.callServer(ctx, "DELETE", "/api/v1/sources/"+req.Handle, nil, nil); e != nil {
 		writeIPCErr(conn, e)
 		return
 	}
 	d.State.ForgetPipe(req.Handle)
 	_ = d.State.ClearCurrentForHandle(req.Handle)
-	writeIPC(conn, cliproto.SourceDestroyReply{Handle: req.Handle})
+	writeIPC(conn, cliproto.SourceDestroyReply{Handle: req.Handle, Manifold: manifold})
 }
 
 // handlePipeDestroy proxies `ppz pipe destroy` to the server.

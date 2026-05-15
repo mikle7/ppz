@@ -284,7 +284,11 @@ func PrintPipeDestroy(w io.Writer, r PipeDestroyReply) {
 }
 
 func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {
-	fmt.Fprintf(w, "destroyed source=%s\n", r.Handle)
+	path := r.Handle
+	if r.Manifold != "" {
+		path = r.Manifold + "." + r.Handle
+	}
+	fmt.Fprintf(w, "destroyed source=%s\n", path)
 }
 
 // PrintList prints `ppz ls` output: one line per (source, pipe), sorted

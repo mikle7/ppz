@@ -239,7 +239,7 @@ func cmdTerminalShare(args []string) error {
 		for _, name := range []string{"stdin", "stdout", "stdctrl"} {
 			var reply cliproto.PipeCreateReply
 			err := daemon.Call(ipcSocket(), cliproto.IPCPipeCreate,
-				cliproto.PipeCreateRequest{Handle: handle, Name: name}, &reply)
+				cliproto.PipeCreateRequest{Handle: handle, Name: name, Session: sessionID()}, &reply)
 			if err != nil {
 				if e, ok := err.(*cliproto.Error); ok && e.Code == cliproto.EPipeTaken {
 					continue
@@ -250,9 +250,12 @@ func cmdTerminalShare(args []string) error {
 	} else {
 		// Provision a fresh pty source: server-side creates the row + the
 		// auto-provisioned streams (broadcast, stdin, stdout).
+		// Session is required so the daemon can stamp the manifold from
+		// the session's current_namespace (Phase 1.5.1). Without it the
+		// source lands at root even when `ppz set namespace X` is active.
 		var createReply cliproto.CreateReply
 		if err := daemon.Call(ipcSocket(), cliproto.IPCCreate,
-			cliproto.CreateRequest{Handle: handle, Kind: string(cliproto.KindPTY)},
+			cliproto.CreateRequest{Handle: handle, Kind: string(cliproto.KindPTY), Session: sessionID()},
 			&createReply); err != nil {
 			return err
 		}

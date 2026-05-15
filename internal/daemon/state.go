@@ -222,6 +222,17 @@ func (s *State) RememberPipe(handle string) {
 	s.knownPipes[handle] = struct{}{}
 }
 
+// RememberSource is the Phase 1.5.2 superset of RememberPipe — caches both
+// the known-handle bit AND the handle→manifold mapping. Callers that have
+// just minted a source should prefer this so later same-session sends
+// don't trigger a refresh just to learn the source's manifold.
+func (s *State) RememberSource(handle, manifold string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.knownPipes[handle] = struct{}{}
+	s.handleManifold[handle] = manifold
+}
+
 // ForgetPipe removes a handle from the known-pipes cache. Called after a
 // source is destroyed so the cache doesn't return stale hits.
 func (s *State) ForgetPipe(handle string) {

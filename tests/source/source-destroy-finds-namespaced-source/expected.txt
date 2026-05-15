@@ -1,0 +1,6 @@
+--- before destroy ---
+pixel.boris.inbox
+destroyed source=pixel.boris
+--- after destroy ---
+no boris rows
+exit=0

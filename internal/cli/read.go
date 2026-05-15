@@ -106,6 +106,16 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 		handle, channel = target[:idx], target[idx+1:]
 	}
 
+	// Phase 1.5.2 smart-default render mode. Only apply when the user
+	// didn't pick a mode explicitly and isn't using --tail (follow mode
+	// needs byte-faithful streaming).
+	//   - <handle>.stdout → --tty (vt10x render so ANSI escapes resolve
+	//     instead of leaking into the user's terminal as junk). Mirrors
+	//     `ppz terminal read` which has long auto-injected --tty.
+	if !asJSON && !tty && !raw && !bare && !follow && channel == "stdout" {
+		tty = true
+	}
+
 	req := cliproto.ReadRequest{
 		Handle:     handle,
 		Channel:    channel,
@@ -183,7 +193,10 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 			collected = append(collected, evt.Message.Payload...)
 		case raw:
 			fmt.Fprint(os.Stdout, evt.Message.Payload)
-		case !bare && cliproto.IsTabularReadPipe(channel):
+		case !bare && (cliproto.IsTabularReadPipe(channel) || bareTarget != ""):
+			// Phase 1.5.2: uncollared pipes (bareTarget != "") render
+			// tabular by default — they're the messaging primitive and
+			// share the inbox/broadcast shape semantically.
 			cliproto.FormatReadMessage(os.Stdout, *evt.Message, time.Local)
 		default:
 			fmt.Fprintln(os.Stdout, evt.Message.Payload)
