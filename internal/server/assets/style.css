@@ -428,6 +428,105 @@ body[data-page="landing"] {
 }
 @media (max-width: 720px) {
   .demo-pair .senders { grid-template-columns: 1fr; }
+
+  /* Admin-page mobile rules. The viewport meta tag landed alongside
+     these — without it the breakpoint never fires on phones and the
+     page renders at 980px-scaled-to-fit ("tiny on mobile"). */
+
+  /* Main container: drop the desktop max-width cap, reduce padding
+     so content can use the full viewport width. */
+  main {
+    padding: 0 0.75rem;
+  }
+
+  /* Header brand: smaller h1 + crumbs stack so the user/org line
+     doesn't push the title sideways. */
+  .brand h1 {
+    font-size: 1.1rem;
+    line-height: 1.3;
+  }
+  .brand .crumbs {
+    font-size: 0.85rem;
+    word-break: break-all;
+  }
+
+  /* Tab nav stacks vertically — three tabs side-by-side wrap
+     awkwardly on phones; column layout is unambiguous. */
+  nav.tabs {
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0.75rem 0;
+  }
+  nav.tabs a {
+    padding: 0.5rem 0.25rem;
+    border-bottom: 1px solid transparent;
+    margin-bottom: 0;
+  }
+  nav.tabs a.active {
+    background: rgba(37, 99, 235, 0.06);
+    border-left: 3px solid var(--accent);
+    border-bottom-color: transparent;
+    padding-left: 0.5rem;
+  }
+
+  /* Form panels (login_password, member-add, key-create, invite,
+     create-account) reflow as a vertical stack with full-width inputs
+     and buttons so taps work on small screens. */
+  .panel-form,
+  main form {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .panel-form input,
+  .panel-form button,
+  main form input,
+  main form button {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.25rem;
+  }
+  .panel-form label,
+  main form label {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Pipes table on the account page can be wider than the viewport
+     (handle + pipe + last + payload columns). Wrap it in a horizontal
+     scroll container instead of letting it overflow into the page
+     margins. */
+  #pipes {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  #pipes thead, #pipes tbody, #pipes tr {
+    display: table;
+    width: 100%;
+    table-layout: auto;
+  }
+
+  /* Hero CTA buttons stack on narrow screens — wider tap targets +
+     no jostling against each other. */
+  .hero-cta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hero-cta .btn-primary,
+  .hero-cta .btn-secondary {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Install command + copy button fit narrow viewports. The pre-tag
+     was set to a fixed max-width on desktop; let it shrink-wrap here. */
+  .hero-install {
+    max-width: 100%;
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
 }
 .demo-pair h3 {
   font-size: 1.4rem;
