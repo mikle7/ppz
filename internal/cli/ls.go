@@ -67,5 +67,6 @@ func cmdLs(args []string) error {
 	} else {
 		cliproto.PrintListWithUncollared(os.Stdout, reply.Sources, reply.UncollaredPipes, *iso)
 	}
+	maybeNotifyUpdate()
 	return nil
 }

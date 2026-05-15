@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -140,5 +141,107 @@ func TestMaybeNotifyUpdatePrintsNoticeForReleaseBuild(t *testing.T) {
 	text := string(out)
 	if !strings.Contains(text, "update available: ppz v1.2.4 (current v1.2.3); run 'ppz upgrade'") {
 		t.Fatalf("update notice = %q, want newer-version upgrade hint", text)
+	}
+}
+
+// withMockedReleaseEnv pretends the running binary is a release of
+// `release` and that the manifest server reports `latest` available.
+// Captures os.Stderr writes during `body` and returns them.
+func withMockedReleaseEnv(t *testing.T, release, latest string, env map[string]string, body func()) string {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"latest_version":"` + latest + `"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	oldVersion := version.Version
+	version.Version = release
+	t.Cleanup(func() { version.Version = oldVersion })
+
+	t.Setenv("PPZ_UPDATE_MANIFEST_URL", srv.URL)
+	t.Setenv("PPZ_UPDATE_CHECK", "")
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = oldStderr })
+
+	body()
+
+	_ = w.Close()
+	out, _ := io.ReadAll(r)
+	_ = r.Close()
+	return string(out)
+}
+
+// TestMaybeNotifyUpdate_NoticeRendersAmber RED: with an update available
+// and color forced on (FORCE_COLOR=1), the notice should carry ANSI
+// yellow/amber escape codes (\x1b[33m … \x1b[0m). The current
+// implementation writes plain text unconditionally, so this fails today.
+//
+// Amber rather than red so the line reads as informational ("heads up,
+// upgrade available") and not as a hard error like "not running" or
+// "authentication error" (which use red elsewhere in the status block).
+func TestMaybeNotifyUpdate_NoticeRendersAmber(t *testing.T) {
+	out := withMockedReleaseEnv(t, "v0.31.2", "v0.31.99", map[string]string{
+		"FORCE_COLOR": "1",
+		"NO_COLOR":    "",
+	}, func() {
+		maybeNotifyUpdate()
+	})
+
+	if !strings.Contains(out, "update available") {
+		t.Fatalf("expected notice in stderr, got %q", out)
+	}
+	if !strings.Contains(out, "\x1b[33m") {
+		t.Errorf("expected amber/yellow ANSI opener \\x1b[33m in notice, got %q", out)
+	}
+	if !strings.Contains(out, "\x1b[0m") {
+		t.Errorf("expected ANSI reset \\x1b[0m at end of notice, got %q", out)
+	}
+}
+
+// TestMaybeNotifyUpdate_NoColorEnvSuppressesAmber asserts that the
+// https://no-color.org/ contract is honoured: even when an update is
+// available and FORCE_COLOR would normally turn colour on, NO_COLOR
+// wins and the notice is plain text. The text still appears — only the
+// escape codes are suppressed.
+func TestMaybeNotifyUpdate_NoColorEnvSuppressesAmber(t *testing.T) {
+	out := withMockedReleaseEnv(t, "v0.31.2", "v0.31.99", map[string]string{
+		"NO_COLOR":    "1",
+		"FORCE_COLOR": "1", // NO_COLOR must take precedence
+	}, func() {
+		maybeNotifyUpdate()
+	})
+
+	if !strings.Contains(out, "update available") {
+		t.Fatalf("expected notice in stderr, got %q", out)
+	}
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("NO_COLOR=1 must suppress ANSI escapes, got %q", out)
+	}
+}
+
+// TestLsCallsMaybeNotifyUpdate RED: the body of cmdLs in ls.go must
+// invoke maybeNotifyUpdate() so users running `ppz ls` (the most-
+// frequent command per field usage) see upgrade prompts the same way
+// `ppz status` and `ppz version` do today. Source-level structural
+// assertion because the function writes directly to os.Stderr — a
+// runtime test would need full IPC + manifest plumbing here just to
+// observe a no-op when the call is missing.
+func TestLsCallsMaybeNotifyUpdate(t *testing.T) {
+	data, err := os.ReadFile("ls.go")
+	if err != nil {
+		t.Fatalf("read ls.go: %v", err)
+	}
+	if !bytes.Contains(data, []byte("maybeNotifyUpdate()")) {
+		t.Errorf("ls.go must call maybeNotifyUpdate() like status.go does, but the call is missing")
 	}
 }
