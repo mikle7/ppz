@@ -910,9 +910,7 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 	// runtime check is unambiguous: at most one shape is real, and the
 	// fall-through finds it.
 	//
-	// Sender for uncollared is empty per the Phase 1.5.1 design
-	// (uncollared has no actor identity); user account is implicit via
-	// account_id.
+	// Sender stamping is per the success-branch comment below.
 	if shouldTryUncollaredFirst(bareTarget) {
 		if err := natsubj.ValidatePipe(bareTarget); err != nil {
 			return sendTarget{}, cliproto.New(cliproto.EInvalidPipe)
@@ -928,9 +926,13 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 			_, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", bareTarget))
 			switch {
 			case err == nil:
+				// Phase 1.5.3: stamp sender from the session's current
+				// handle when one is set. Empty otherwise (anonymous
+				// send). Mirrors how collared sends carry the source
+				// handle as the actor identity.
 				return sendTarget{
 					subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
-					sender:  "",
+					sender:  d.State.Current(session),
 				}, nil
 			case errors.Is(err, jetstream.ErrStreamNotFound):
 				// Fall through to the legacy collared interpretation.
