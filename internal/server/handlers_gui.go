@@ -67,10 +67,16 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	if user, err := db.GetUser(ctx, s.Pool, uid); err == nil {
 		invites, _ = db.ListPendingInvitesForUsername(ctx, s.Pool, user.Username)
 	}
+	// Onboarding: if the user has no pipes anywhere they own/belong
+	// to, render the get-started panel on the dashboard. Failure here
+	// is non-fatal — false negatives just hide the panel from someone
+	// who'd benefit from it, never blocks the page.
+	hasAnyPipe, _ := db.UserHasAnyPipe(ctx, s.Pool, uid)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := s.base()
 	data["Orgs"] = orgs
 	data["Invites"] = invites
+	data["HasNoPipes"] = !hasAnyPipe
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}

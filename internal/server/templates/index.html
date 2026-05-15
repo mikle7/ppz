@@ -15,6 +15,33 @@
       </div>
     </header>
 
+    {{if .HasNoPipes}}
+    <aside data-onboarding="empty" class="panel panel-info">
+      <h2>Get started</h2>
+      <p>You don't have any pipes yet — here's how to create your first one.</p>
+      <ol>
+        <li>
+          Install the <code>ppz</code> CLI:
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/pipescloud/ppz/main/install.sh | bash</code></pre>
+        </li>
+        <li>
+          Log your daemon into this server (grab an API key from your account's <em>Keys</em> tab):
+          <pre><code>ppz daemon login &lt;server-url&gt; -apikey &lt;your-key&gt;</code></pre>
+        </li>
+        <li>
+          Claim an actor identity:
+          <pre><code>ppz source create &lt;your-handle&gt;</code></pre>
+        </li>
+        <li>
+          Create your first pipe and send a message:
+          <pre><code>ppz pipe create lobby
+ppz send lobby "hello"</code></pre>
+        </li>
+      </ol>
+      <p class="hero-sub">This panel disappears once your first pipe lands.</p>
+    </aside>
+    {{end}}
+
     {{if .Invites}}
     <h2>Invitations</h2>
     <ul class="tidy" id="invites">

@@ -137,6 +137,29 @@ func DeleteUncollaredPipe(ctx context.Context, p *Pool, accountID uuid.UUID, man
 // (account, manifold, name) already exists. Phase 1.5.1 collision check —
 // source creation rejects when an uncollared pipe shares the source's
 // proposed name at the same manifold.
+// UserHasAnyPipe reports whether the user owns or is a member of any
+// account that has at least one pipe (collared or uncollared). Powers
+// the dashboard onboarding panel: when this is false, the empty-state
+// get-started instructions render; once the user creates a pipe the
+// panel hides itself.
+func UserHasAnyPipe(ctx context.Context, p *Pool, userID uuid.UUID) (bool, error) {
+	var n int
+	err := p.QueryRow(ctx, `
+		SELECT 1
+		  FROM pipes pp
+		  JOIN accounts a ON pp.account_id = a.id
+		  LEFT JOIN account_members m ON m.account_id = a.id AND m.user_id = $1
+		 WHERE a.owner_user_id = $1 OR m.user_id IS NOT NULL
+		 LIMIT 1`, userID).Scan(&n)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func UncollaredPipeExists(ctx context.Context, p *Pool, accountID uuid.UUID, manifold, name string) (bool, error) {
 	var n int
 	err := p.QueryRow(ctx,
