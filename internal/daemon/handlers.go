@@ -928,9 +928,13 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 			_, err := js.Stream(ctx, natsubj.BuildStreamName(accountID, manifold, "", bareTarget))
 			switch {
 			case err == nil:
+				// Phase 1.5.3: stamp sender from the session's current
+				// handle when one is set. Empty otherwise (anonymous
+				// send). Mirrors how collared sends carry the source
+				// handle as the actor identity.
 				return sendTarget{
 					subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
-					sender:  "",
+					sender:  d.State.Current(session),
 				}, nil
 			case errors.Is(err, jetstream.ErrStreamNotFound):
 				// Fall through to the legacy collared interpretation.
