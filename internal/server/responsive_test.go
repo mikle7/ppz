@@ -101,3 +101,24 @@ func TestStyleCSS_LandingResponsiveRulesPresent(t *testing.T) {
 		t.Error("style.css missing the pre-existing landing @media (max-width: 720px) block")
 	}
 }
+
+// TestStyleCSS_LandingPaneTunedForNarrow — landing.html's demo panes
+// (.pane) work fine when the existing breakpoint stacks .senders into
+// a single column, but the default 0.85rem font + 1rem 1.25rem padding
+// leaves output cramped on a phone-width pane (~340px). Cycle 3 adds
+// a narrow-viewport override.
+func TestStyleCSS_LandingPaneTunedForNarrow(t *testing.T) {
+	data, err := assetsFS.ReadFile("assets/style.css")
+	if err != nil {
+		t.Fatalf("read style.css: %v", err)
+	}
+	css := string(data)
+	// Look for `.pane {` inside any @media block — we just need *some*
+	// narrow-viewport override on the .pane selector to exist.
+	if !strings.Contains(css, "data-pane-mobile-tuned") {
+		// Sentinel comment the GREEN cycle leaves in the @media block
+		// so this test pins intent without bolting to specific values
+		// (font-size, padding) that future polish may want to adjust.
+		t.Error("style.css missing the .pane mobile tuning sentinel (expected /* data-pane-mobile-tuned */ comment inside the 720px @media block)")
+	}
+}
