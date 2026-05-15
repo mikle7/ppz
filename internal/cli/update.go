@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/pipescloud/ppz/internal/version"
 )
 
@@ -41,8 +43,29 @@ func maybeNotifyUpdate() {
 	if err != nil || !isNewerVersion(manifest.LatestVersion, version.Version) {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "update available: ppz %s (current %s); run 'ppz upgrade'\n",
+	msg := fmt.Sprintf("update available: ppz %s (current %s); run 'ppz upgrade'",
 		normaliseVersionForDisplay(manifest.LatestVersion), normaliseVersionForDisplay(version.Version))
+	if useStderrColor() {
+		// 33 = yellow / amber. Informational tone — distinct from the
+		// red used elsewhere for hard-error states ("not running",
+		// "authentication error").
+		msg = "\x1b[33m" + msg + "\x1b[0m"
+	}
+	fmt.Fprintln(os.Stderr, msg)
+}
+
+// useStderrColor decides whether the update notice (written to stderr)
+// should carry ANSI escapes. NO_COLOR wins over everything per
+// https://no-color.org/. FORCE_COLOR turns it on regardless of tty.
+// Default: on when stderr is an interactive terminal.
+func useStderrColor() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if os.Getenv("FORCE_COLOR") != "" {
+		return true
+	}
+	return term.IsTerminal(int(os.Stderr.Fd()))
 }
 
 func fetchUpdateManifest(ctx context.Context) (updateManifest, error) {
