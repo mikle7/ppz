@@ -496,6 +496,23 @@ func writeListTable(w io.Writer, rows []listRow) {
 			creatorMax = w
 		}
 	}
+	// Pin a minimum LAST width so common relative-time rollovers
+	// ("9 minutes ago" → "10 minutes ago", "1 hour ago" → "2 hours ago")
+	// don't visibly drift PAYLOAD/CREATOR rightward between successive
+	// `ppz ls` invocations. 14 covers most steady-state values:
+	// "XX minutes ago" = 14, "X days ago" = 10, "just now" = 8.
+	// Rare wider values ("59 minutes ago" = 15) can still push past it.
+	//
+	// Skip the pin when the terminal is too narrow to absorb the extra
+	// width — anti-drift is a "nice to have" that shouldn't push rows
+	// off-screen on small windows.
+	const lastMinWidth = 14
+	if widths[3] < lastMinWidth {
+		proposed := widths[0] + widths[1] + widths[2] + lastMinWidth + widths[4] + creatorMax + 10
+		if proposed <= TerminalWidth() {
+			widths[3] = lastMinWidth
+		}
+	}
 	// Cap the PAYLOAD column to fit the caller's terminal width. The
 	// other columns are sized to their data — payload is the elastic
 	// one. With 5 two-char separators between 6 columns the fixed
