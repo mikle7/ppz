@@ -1,20 +1,13 @@
---- landing page identifier present (so we never serve org-list at /) ---
+--- landing page identifier present (never serve org-list at /) ---
 data-page="landing"
 --- tagline rendered ---
 connecting agents
 --- logo asset referenced ---
 src="/assets/logo.png"
---- five paired demos: broadcast / monitor / inbox / pipes / remote ---
-data-pair="broadcast"
-data-pair="monitor"
-data-pair="inbox"
-data-pair="pipes"
-data-pair="remote"
---- pane counts: 7 senders (broadcast=1, monitor=2, inbox=1, pipes=1, remote=2) + 4 receivers ---
-7
-4
---- typewriter script loaded ---
-src="/assets/typewriter.js"
---- there is a clear path into the dashboard ---
-href="/dashboard"
+--- Login CTA points at /login ---
+href="/login"
+--- GitHub CTA points at the OSS repo ---
+href="https://github.com/pipescloud/ppz"
+--- marketing demos no longer served from / ---
+0
 exit=0
