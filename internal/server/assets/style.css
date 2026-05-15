@@ -429,6 +429,26 @@ body[data-page="landing"] {
 @media (max-width: 720px) {
   .demo-pair .senders { grid-template-columns: 1fr; }
 
+  /* data-pane-mobile-tuned — demo .pane gets a smaller font + tighter
+     padding on phone-width viewports so the rendered output (4-5
+     columns of fake terminal data) fits without horizontal overflow.
+     Min-height is also dropped because vertical stacking already
+     gives each pane plenty of room. */
+  .pane {
+    font-size: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    min-height: 7rem;
+  }
+  /* Browser-frame demo: hide the chrome dots to claw back a bit of
+     horizontal space; the .browser-url stays as the identifying
+     element. */
+  .browser-frame .browser-dot { display: none; }
+  .browser-frame .browser-chrome { padding: 0.3rem 0.5rem; }
+  .browser-frame .browser-url {
+    font-size: 0.68rem;
+    margin: 0;
+  }
+
   /* Admin-page mobile rules. The viewport meta tag landed alongside
      these — without it the breakpoint never fires on phones and the
      page renders at 980px-scaled-to-fit ("tiny on mobile"). */
