@@ -77,9 +77,28 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	data["Orgs"] = orgs
 	data["Invites"] = invites
 	data["HasNoPipes"] = !hasAnyPipe
+	// SiteURL is the scheme+host the browser used to reach us. Shown
+	// verbatim in the onboarding `ppz login <url>` step so the user
+	// can copy/paste a working command — pointing at the site they're
+	// looking at, not at a hard-coded localhost.
+	data["SiteURL"] = siteURL(r)
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
+}
+
+// siteURL reconstructs the browser-facing origin (scheme://host) from
+// the current request. Honours the X-Forwarded-Proto header so reverse-
+// proxied https deployments render correctly.
+func siteURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+	return scheme + "://" + r.Host
 }
 
 func (s *Server) handleGUICreateOrg(w http.ResponseWriter, r *http.Request) {

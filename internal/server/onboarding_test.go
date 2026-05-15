@@ -28,6 +28,7 @@ func TestDashboard_ShowsOnboardingWhenNoPipes(t *testing.T) {
 		"Invites":    nil,
 		"Orgs":       nil,
 		"HasNoPipes": true,
+		"SiteURL":    "https://example.test",
 		"Version":    "v-test",
 	}
 	var buf bytes.Buffer
@@ -39,11 +40,25 @@ func TestDashboard_ShowsOnboardingWhenNoPipes(t *testing.T) {
 		t.Errorf("dashboard body missing %q when HasNoPipes=true", onboardingMarker)
 	}
 	for _, hint := range []string{
-		"ppz source create",
-		"ppz pipe create",
+		"install.sh",                         // step 1: install command
+		"ppz login https://example.test",     // step 2: simplified login with SiteURL substitution
+		"create a team of 4x agents",         // step 3: AI harness prompt
+		`class="copy-btn"`,                   // each step has a copy button
+		`data-copy-target='[data-cmd="install"]'`,
+		`data-copy-target='[data-cmd="login"]'`,
+		`data-copy-target='[data-cmd="prompt"]'`,
 	} {
 		if !strings.Contains(body, hint) {
-			t.Errorf("onboarding body missing CLI hint %q", hint)
+			t.Errorf("onboarding body missing %q", hint)
+		}
+	}
+	// Old step 4 (ppz pipe create + ppz send) removed per design.
+	for _, removed := range []string{
+		"ppz pipe create lobby",
+		`ppz send lobby "hello"`,
+	} {
+		if strings.Contains(body, removed) {
+			t.Errorf("onboarding body still contains removed step %q", removed)
 		}
 	}
 }
