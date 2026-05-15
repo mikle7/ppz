@@ -50,16 +50,17 @@ services:
       # Auth V2: GitHub URLs point at mock-github so e2e tests exercise
       # the full OAuth flow without real github.com. Production sets
       # none of these → defaults to real GitHub.
-      # BASE_URL is the browser-facing origin (used to build the
-      # callback redirect_uri). Must be host-reachable so a manual
-      # browser review works, not just in-network e2e robots.
-      PPZ_BASE_URL: "http://localhost:8080"
+      # BASE_URL + AUTHORIZE_URL use docker-internal hostnames so the
+      # in-network e2e suite can follow OAuth redirects via `curl -L`.
+      # mock-github's port is exposed on :9000 of the host so a human
+      # reviewer can also drive the flow in a browser — but doing so
+      # requires `127.0.0.1 mock-github ppz-server` in /etc/hosts so the
+      # docker hostnames resolve from the host. Without that, use
+      # `/dev/login` (PPZ_DEV_LOGIN is true below) to skip OAuth.
+      PPZ_BASE_URL: "http://ppz-server:8080"
       PPZ_GITHUB_CLIENT_ID: "test-client"
       PPZ_GITHUB_CLIENT_SECRET: "test-secret"
-      # Authorize URL is what the browser is redirected to → localhost.
-      # Token + user URLs are hit server-to-server (ppz-server → mock-github
-      # inside the network) → keep the docker hostname.
-      PPZ_GITHUB_AUTHORIZE_URL: "http://localhost:9000/login/oauth/authorize"
+      PPZ_GITHUB_AUTHORIZE_URL: "http://mock-github:9000/login/oauth/authorize"
       PPZ_GITHUB_TOKEN_URL: "http://mock-github:9000/login/oauth/access_token"
       PPZ_GITHUB_USER_URL: "http://mock-github:9000/user"
       PPZ_SESSION_KEY: "compose-test-session-key-32-bytes-x"
