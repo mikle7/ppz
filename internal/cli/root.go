@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
 // Run dispatches argv[1:] to the appropriate verb. Returns a *cliproto.Error
@@ -82,7 +85,105 @@ func Run(args []string) error {
 }
 
 func usage(w *os.File) {
-	fmt.Fprintln(w, `ppz — pipes for agents
+	fmt.Fprintln(w, wrapUsageText(usageText, cliproto.TerminalWidth()))
+}
+
+// wrapUsageText reflows the static usage block to fit `width` columns.
+// Each line is wrapped at word boundaries; when a line carries a
+// verb-signature followed by a 2+ space gap before its description
+// (the canonical usage layout), the wrap preserves that gap and aligns
+// every continuation line under the description column. Lines that
+// already fit, lines whose indent alone exceeds the budget, and lines
+// containing no internal break points are left untouched.
+func wrapUsageText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	out := make([]string, 0, 256)
+	for _, line := range strings.Split(text, "\n") {
+		if len([]rune(line)) <= width {
+			out = append(out, line)
+			continue
+		}
+		// Detect the description column: leading-indent, then non-
+		// whitespace (the verb signature), then 2+ spaces. Anything
+		// past the gap is the description. Lines without a gap (pure
+		// continuation, or solo verb signature) get descCol = leading
+		// indent so wrap just preserves the indent.
+		leadingIndent := 0
+		for leadingIndent < len(line) && line[leadingIndent] == ' ' {
+			leadingIndent++
+		}
+		// Scan past the verb signature looking for the first 2+ space
+		// gap — that's the description column. Single spaces inside
+		// the verb signature (e.g. "ppz status") are part of the verb,
+		// not the gap. Pure continuation lines and solo verb lines
+		// won't have such a gap; we fall back to leadingIndent.
+		descCol := leadingIndent
+		descStart := leadingIndent
+		for i := leadingIndent; i < len(line); {
+			if line[i] != ' ' {
+				i++
+				continue
+			}
+			j := i
+			for j < len(line) && line[j] == ' ' {
+				j++
+			}
+			if j-i >= 2 {
+				descCol = j
+				descStart = j
+				break
+			}
+			i = j
+		}
+		contentBudget := width - descCol
+		if contentBudget <= 4 { // description indent so deep that wrapping can't help
+			out = append(out, line)
+			continue
+		}
+		contPrefix := strings.Repeat(" ", descCol)
+		// Everything left of descStart is the verb signature + alignment
+		// gap (or just the leading indent for pure continuation lines).
+		// Preserved verbatim so column alignment stays intact.
+		firstPrefix := line[:descStart]
+		words := strings.Fields(line[descStart:])
+		if len(words) == 0 {
+			out = append(out, line)
+			continue
+		}
+		var cur strings.Builder
+		first := true
+		flush := func() {
+			if first {
+				out = append(out, firstPrefix+cur.String())
+				first = false
+			} else {
+				out = append(out, contPrefix+cur.String())
+			}
+			cur.Reset()
+		}
+		for _, word := range words {
+			if cur.Len() == 0 {
+				cur.WriteString(word)
+				continue
+			}
+			if cur.Len()+1+len([]rune(word)) <= contentBudget {
+				cur.WriteByte(' ')
+				cur.WriteString(word)
+				continue
+			}
+			flush()
+			cur.WriteString(word)
+		}
+		if cur.Len() > 0 {
+			flush()
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+const usageText = `ppz — pipes for agents
 
 Messaging (the verbs you use most):
   ppz status                       daemon state, current handle, last token refresh
@@ -227,8 +328,7 @@ Other:
                                    or "authentication error".
   ppz completion {bash|zsh}        tab-completion script
                                    add 'eval "$(ppz completion bash)"' to
-                                   your shell rc`)
-}
+                                   your shell rc`
 
 // home + sock resolution. Order: PPZ_IPC_SOCKET env, then $PPZ_HOME/daemon.sock,
 // then ~/.ppz/daemon.sock.

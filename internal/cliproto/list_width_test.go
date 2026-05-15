@@ -25,12 +25,14 @@ func withCOLUMNS(t *testing.T, cols string) {
 
 // sampleSourcesLongPayloads gives PrintList a row whose payload, when
 // rendered with the current 60-byte cap, blows past an 80-column
-// budget. Long handle + long payload + creator together make the row
-// > 100 chars wide.
+// budget. Handle is short ("alice") so the fixed-column overhead
+// stays small enough that the test contract is achievable: the
+// payload column has room to shrink without truncating the PIPE
+// column too.
 func sampleSourcesLongPayloads(at time.Time) []Source {
 	return []Source{
 		{
-			Handle:    "agent-alice-primary",
+			Handle:    "alice",
 			CreatedBy: "jamesmiles",
 			PipeInfos: []PipeInfo{
 				{

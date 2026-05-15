@@ -439,6 +439,25 @@ func payloadColumn(preview string) string {
 	return preview
 }
 
+// truncateForColumn cuts s to at most maxRunes wide, replacing the
+// trailing rune with "…" when truncation actually occurred. Operates
+// on runes (not bytes) so multi-byte characters aren't sliced mid-
+// codepoint. Used by writeListTable to fit the PAYLOAD column into
+// the leftover terminal-width budget.
+func truncateForColumn(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	rs := []rune(s)
+	if len(rs) <= maxRunes {
+		return s
+	}
+	if maxRunes == 1 {
+		return "…"
+	}
+	return string(rs[:maxRunes-1]) + "…"
+}
+
 // writeListTable computes max widths for every column (including PAYLOAD,
 // which used to be the trailing un-padded column) and prints header +
 // rows aligned. CREATOR is the rightmost column — it goes un-padded since
@@ -454,6 +473,7 @@ func writeListTable(w io.Writer, rows []listRow) {
 	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3]), len(headers[4])}
 	unreads := make([]string, len(rows))
 	buffereds := make([]string, len(rows))
+	creatorMax := len(headers[5])
 	for i, r := range rows {
 		unreads[i] = fmt.Sprintf("%d", r.unread)
 		buffereds[i] = fmt.Sprintf("%d", r.buffered)
@@ -471,6 +491,24 @@ func writeListTable(w io.Writer, rows []listRow) {
 		}
 		if w := len(r.payload); w > widths[4] {
 			widths[4] = w
+		}
+		if w := len(r.creator); w > creatorMax {
+			creatorMax = w
+		}
+	}
+	// Cap the PAYLOAD column to fit the caller's terminal width. The
+	// other columns are sized to their data — payload is the elastic
+	// one. With 5 two-char separators between 6 columns the fixed
+	// overhead is: pipe + unread + buffered + last + creator + 10.
+	// Anything left over becomes the payload budget. If the budget is
+	// negative (very narrow terminal vs wide handles), leave payload at
+	// its natural width — the row will overflow rather than corrupting
+	// alignment of the inner columns.
+	fixedOverhead := widths[0] + widths[1] + widths[2] + widths[3] + creatorMax + 10
+	if budget := TerminalWidth() - fixedOverhead; budget > 0 && budget < widths[4] {
+		widths[4] = budget
+		for i := range rows {
+			rows[i].payload = truncateForColumn(rows[i].payload, budget)
 		}
 	}
 	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %s\n",

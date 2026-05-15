@@ -6,6 +6,13 @@
 set -u
 set -o pipefail
 
+# Pin a generous terminal width for `ppz ls` / `ppz --help` so the
+# adaptive-truncation introduced in v0.31.5 doesn't shrink the payload
+# column or wrap help lines against test fixtures that were written
+# assuming a wide terminal. Exported so child run.sh invocations
+# inherit it.
+export COLUMNS=200
+
 : "${PPZ_SERVER_URL:=http://ppz-server:8080}"
 : "${PPZ_DAEMON_A_HOME:=/tmp/a}"
 : "${PPZ_DAEMON_B_HOME:=/tmp/b}"
