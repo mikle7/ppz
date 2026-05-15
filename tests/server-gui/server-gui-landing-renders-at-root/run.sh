@@ -25,4 +25,6 @@ echo "--- GitHub CTA points at the OSS repo ---"
 printf '%s' "$page" | grep -oE -m 1 'href="https://github.com/pipescloud/ppz"'
 
 echo "--- marketing demos no longer served from / ---"
-printf '%s' "$page" | grep -cE 'data-pair=' | tr -d ' '
+# `grep -c` exits 1 when zero matches even though it prints 0; wrap so
+# the run.sh harness doesn't treat the absence as a script-level failure.
+printf '%s' "$page" | { grep -cE 'data-pair=' || true; } | tr -d ' '
