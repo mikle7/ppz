@@ -90,6 +90,32 @@ func cmdAwait(args []string) error {
 	}
 }
 
+// defaultPatternsFromSnapshot expands `ppz await` (no positional args)
+// to the concrete pattern list watched by default:
+//
+//   - `<currentHandle>.inbox` — your inbox.
+//   - every uncollared pipe at currentManifold — namespace-scoped chat
+//     primitives (rooms, lobbies) you're inhabiting right now.
+//
+// Other handles' collared pipes (e.g. `bar.inbox`) are explicitly NOT
+// included — they're addressable by name when wanted.
+//
+// Pure function: takes a snapshot and returns a list. The IPC wiring
+// that fetches handle/manifold/uncollared lives in awaitDefaultPatterns.
+// Pure factoring keeps the table-driven test honest and lets us cover
+// namespace-boundary semantics without mocking IPCs.
+//
+// Pipes added AFTER `ppz await` starts are not retroactively watched —
+// patterns are resolved once at startup. Each `--tail` iteration reuses
+// the same list. Acceptable for v1; the typical agent loop is fast
+// enough that creating a pipe then waiting on it is a two-call flow
+// (create, then re-await).
+func defaultPatternsFromSnapshot(currentHandle, currentManifold string, uncollared []cliproto.UncollaredPipe) []string {
+	// RED stub.
+	_, _, _ = currentHandle, currentManifold, uncollared
+	return nil
+}
+
 // awaitOnce performs one (block, pick, drain) cycle. Uses awaitBlock
 // (not daemon.Call) so SIGINT during the block phase closes the
 // socket and lets the binary exit promptly.
