@@ -165,6 +165,25 @@ Useful commands:
 
 Create a persistent Monitor on 'ppz await' generating PushNotification on new messages.`
 
+// buildHarnessSpawnArgv returns the harness argv for the --new-window
+// spawn path. Identical to buildAgentArgv except the prompt element is
+// bash-single-quoted so it inlines safely into the `bash -lc <script>`
+// invocation we hand to the spawned terminal.
+//
+// Why not the old `"$(cat FILE)"` round-trip: wt.exe (Windows
+// Terminal, used by the WSL backend) parses our argv through Windows'
+// command-line rules and strips the outer double quotes around the
+// expansion. Bash then sees unquoted `$(cat FILE)` and word-splits
+// the file contents — the harness ends up receiving only the first
+// word of the prompt (reproduced on this WSL2 box: a multi-line
+// prompt arrived as the literal string "You"). Single-quoting avoids
+// the round-trip entirely.
+//
+// RED-phase stub: real body lands in the GREEN follow-up.
+func buildHarnessSpawnArgv(spec agentSpec) ([]string, error) {
+	return nil, fmt.Errorf("buildHarnessSpawnArgv: not implemented")
+}
+
 // buildAgentArgv returns the argv that runs *inside* the wrapped pty
 // (i.e. the part after the `--` to `ppz terminal share`). It does not
 // include `ppz terminal share <handle> --` — that prefix is the caller's

@@ -673,6 +673,121 @@ func TestBuildWSLNewWindowArgv_UsesLoginShell(t *testing.T) {
 	}
 }
 
+// --------------------------------------------------------------------------
+// Prompt-truncation regression (RED phase)
+//
+// Reproduction on this WSL2 box (Windows Terminal as front-end):
+//
+//   $ cat > /tmp/probe-prompt.txt <<EOF
+//   You are an agent.
+//   Line two has multiple words.
+//   EOF
+//   $ wt.exe -w 0 nt wsl.exe -d Ubuntu bash -lc \
+//       '/tmp/record-argv.sh first --model opus "$(cat /tmp/probe-prompt.txt)"'
+//   → recorded: argv=[first --model opus You]      ← prompt truncated to first word
+//
+//   $ bash -lc '/tmp/record-argv.sh ... "$(cat /tmp/probe-prompt.txt)"'
+//   → recorded: argv=[first --model opus $'You are an agent.\nLine two...']  ✓
+//
+//   $ wsl.exe -d Ubuntu bash -lc '… same …'
+//   → recorded: argv=[first --model opus $'You are an agent.\nLine two...']  ✓
+//
+// Conclusion: wt.exe's Windows command-line parser strips the outer
+// double quotes around `"$(cat FILE)"`. Bash then sees unquoted
+// `$(cat FILE)` and word-splits the file contents — the harness only
+// receives the first word.
+//
+// Fix: stop relying on shell expansion entirely; embed the prompt
+// directly as a bash-single-quoted argv element via the new
+// buildHarnessSpawnArgv helper. Single quotes are inert at every layer
+// of quote-mangling (Windows, AppleScript, bash) so any prompt
+// content survives.
+// --------------------------------------------------------------------------
+
+// The prompt argv element must be a single bash-single-quoted token.
+// Multi-line content must round-trip through `bash -lc <script>` as
+// one positional arg — that's what the harness expects, and it's what
+// the old $(cat) approach was meant to provide before wt.exe broke it.
+func TestBuildHarnessSpawnArgv_PromptInlinedAsSingleQuotedArg(t *testing.T) {
+	spec := agentSpec{
+		harness: "claude",
+		model:   "opus",
+		prompt:  "You are an agent.\nLine two has multiple words.",
+	}
+	argv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	want := "'You are an agent.\nLine two has multiple words.'"
+	last := argv[len(argv)-1]
+	if last != want {
+		t.Errorf("prompt argv element = %q,\n                  want %q", last, want)
+	}
+}
+
+// Hard contract: never use `$(cat FILE)` again. The whole reason this
+// helper exists is to avoid shell expansion of the prompt; any
+// regression to a $(cat …) shape would reintroduce the WSL truncation.
+func TestBuildHarnessSpawnArgv_DoesNotUseCatExpansion(t *testing.T) {
+	spec := agentSpec{harness: "claude", model: "opus", prompt: "anything"}
+	argv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	for i, a := range argv {
+		if strings.Contains(a, "$(cat") {
+			t.Errorf("argv[%d]=%q must not use $(cat — wt.exe strips outer quotes and bash word-splits, truncating the prompt to its first word", i, a)
+		}
+	}
+}
+
+// Embedded single quotes need the standard close-escape-reopen
+// pattern: `it's mine` → `'it'\''s mine'`. Apostrophes in prompts are
+// common ("don't", "user's", contractions) so this needs to be
+// boringly correct.
+func TestBuildHarnessSpawnArgv_EscapesEmbeddedSingleQuote(t *testing.T) {
+	spec := agentSpec{harness: "claude", model: "opus", prompt: "it's mine"}
+	argv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	want := `'it'\''s mine'`
+	last := argv[len(argv)-1]
+	if last != want {
+		t.Errorf("prompt argv element = %q,\n                  want %q", last, want)
+	}
+}
+
+// Empty prompt → no trailing positional argv element. Mirrors
+// buildAgentArgv's behaviour so the harness boots into its REPL with
+// no canned message.
+func TestBuildHarnessSpawnArgv_OmitsPromptWhenEmpty(t *testing.T) {
+	spec := agentSpec{harness: "claude", model: "opus"}
+	argv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	want := []string{"claude", "--dangerously-skip-permissions", "--model", "opus"}
+	if !reflect.DeepEqual(argv, want) {
+		t.Errorf("argv = %q, want %q", argv, want)
+	}
+}
+
+// Non-claude harnesses follow buildAgentArgv's shape (no auto
+// --dangerously-skip-permissions) but get the same single-quote
+// treatment for the prompt.
+func TestBuildHarnessSpawnArgv_CodexPromptAlsoQuoted(t *testing.T) {
+	spec := agentSpec{harness: "codex", model: "gpt-5", prompt: "hello"}
+	argv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	want := []string{"codex", "--model", "gpt-5", "'hello'"}
+	if !reflect.DeepEqual(argv, want) {
+		t.Errorf("argv = %q, want %q", argv, want)
+	}
+}
+
 // containsAdjacent reports whether xs contains a then b at adjacent
 // indices. Used to assert flag/value pairs in the Linux/WSL argv tests
 // without forcing a brittle exact-slice match.
