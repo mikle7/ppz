@@ -562,6 +562,40 @@ func TestBuildWSLNewWindowArgv_EmptyDistroErrors(t *testing.T) {
 	}
 }
 
+// The spawned bash must be a *login* shell (`-lc`, not `-c`) so it
+// sources ~/.profile / ~/.bash_profile. Most users' PATH additions for
+// claude (npm-global, nvm, asdf, ~/.local/bin) live there — a plain
+// non-login `bash -c` produces a PATH like /usr/bin:/bin:… and the
+// spawned `claude` is reported as "executable file not found in $PATH".
+// Verified on this WSL2 box: non-login bash sees no claude, login bash
+// resolves /home/<user>/.local/bin/claude.
+func TestBuildLinuxNewWindowArgv_UsesLoginShell(t *testing.T) {
+	for _, terminal := range []string{"gnome-terminal", "konsole", "xterm", "kitty", "wezterm"} {
+		argv, err := buildLinuxNewWindowArgv(terminal, "alice", "", []string{"claude"})
+		if err != nil {
+			t.Fatalf("%s: build: %v", terminal, err)
+		}
+		if !containsAdjacent(argv, "bash", "-lc") {
+			t.Errorf("%s: must invoke `bash -lc` (login shell) so ~/.profile-style PATH additions reach claude, got: %q", terminal, argv)
+		}
+	}
+}
+
+// Same constraint applies to the WSL path: `wsl.exe -d <distro> bash`
+// spawns a bash that inherits PATH from wsl.exe (a Windows process),
+// which means *only* the system minimum PATH unless we ask for login
+// shell semantics. Without -lc this reproducibly fails with
+// "exec: claude: executable file not found in $PATH".
+func TestBuildWSLNewWindowArgv_UsesLoginShell(t *testing.T) {
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if !containsAdjacent(argv, "bash", "-lc") {
+		t.Errorf("WSL path must invoke `bash -lc`, got: %q", argv)
+	}
+}
+
 // containsAdjacent reports whether xs contains a then b at adjacent
 // indices. Used to assert flag/value pairs in the Linux/WSL argv tests
 // without forcing a brittle exact-slice match.
