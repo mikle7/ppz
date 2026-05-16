@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -64,31 +63,18 @@ func runAgentInForeground(handle string, spec agentSpec) error {
 	return cmdTerminalShare(shareArgs)
 }
 
-// runAgentInNewWindow writes the prompt to $TMPDIR/ppz-agent-<handle>-
-// prompt.txt and asks the host's window-manager to open a new terminal
-// running `ppz terminal share <handle> -- <harness> [...] "$(cat
-// FILE)"`. We use a temp file (not direct shell quoting) so prompts
-// containing newlines, quotes, $-expansions, and backticks all survive
-// untouched.
+// runAgentInNewWindow asks the host's window-manager to open a new
+// terminal running `ppz terminal share <handle> -- <harness>
+// [...] '<prompt>'`. The prompt is bash-single-quoted inline via
+// buildHarnessSpawnArgv — see that helper for why the previous
+// `"$(cat FILE)"` temp-file round-trip was abandoned.
 //
 // Backend per platform:
 //   - darwin: osascript → Terminal.app / iTerm2 (see buildNewWindowScript)
 //   - linux (WSL):   wt.exe + wsl.exe (see buildWSLNewWindowArgv)
 //   - linux (native): $TERMINAL or probed emulator (see buildLinuxNewWindowArgv)
 func runAgentInNewWindow(handle string, spec agentSpec) error {
-	promptPath := filepath.Join(os.TempDir(), "ppz-agent-"+handle+"-prompt.txt")
-	if err := os.WriteFile(promptPath, []byte(spec.prompt), 0o600); err != nil {
-		return fmt.Errorf("write prompt file: %w", err)
-	}
-
-	// Replace the literal prompt in the spec with a shell expansion of
-	// the temp file. The harness binary receives the dereferenced
-	// content as a single argv element after the shell expands it.
-	specForShell := spec
-	if spec.prompt != "" {
-		specForShell.prompt = `"$(cat ` + promptPath + `)"`
-	}
-	argv, err := buildAgentArgv(specForShell)
+	argv, err := buildHarnessSpawnArgv(spec)
 	if err != nil {
 		return err
 	}
@@ -177,11 +163,15 @@ Create a persistent Monitor on 'ppz await' generating PushNotification on new me
 // the file contents — the harness ends up receiving only the first
 // word of the prompt (reproduced on this WSL2 box: a multi-line
 // prompt arrived as the literal string "You"). Single-quoting avoids
-// the round-trip entirely.
-//
-// RED-phase stub: real body lands in the GREEN follow-up.
+// the round-trip entirely: single quotes are inert at every layer
+// (Windows command-line, AppleScript, bash) so any prompt content
+// survives intact.
 func buildHarnessSpawnArgv(spec agentSpec) ([]string, error) {
-	return nil, fmt.Errorf("buildHarnessSpawnArgv: not implemented")
+	quoted := spec
+	if spec.prompt != "" {
+		quoted.prompt = bashSingleQuote(spec.prompt)
+	}
+	return buildAgentArgv(quoted)
 }
 
 // buildAgentArgv returns the argv that runs *inside* the wrapped pty
