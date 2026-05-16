@@ -13,10 +13,20 @@ ppz_a send term1.stdout "hello-stdout" >/dev/null
 wait_for 20 "ppz_a ls | grep -q hello-stdout" >/dev/null
 
 ERR=/tmp/await-tty-silent.err
-ppz_a await --tty term1.stdout 2>"$ERR" >/dev/null || true
+OUT=/tmp/await-tty-silent.out
+ppz_a await --tty term1.stdout >"$OUT" 2>"$ERR" || true
 
+# Two assertions: (1) no warning on stderr; (2) the drain actually
+# happened — stdout contains the vt10x-rendered bytes we published.
+# The second guards against the false-positive case where the verb
+# doesn't exist at all and emits no warning simply because nothing ran.
 if grep -qE '\-\-tty is only meaningful' "$ERR"; then
   echo "WARNING_ON_STDERR=yes"
 else
   echo "WARNING_ON_STDERR=no"
+fi
+if grep -q 'hello-stdout' "$OUT"; then
+  echo "DRAINED=yes"
+else
+  echo "DRAINED=no"
 fi
