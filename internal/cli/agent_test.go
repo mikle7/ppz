@@ -204,7 +204,7 @@ func TestResolveAgentSpec_DefaultPromptUsedWhenNoneProvided(t *testing.T) {
 // the prompt and trying the command would hit `unknown command, exit 2`
 // and either retry-loop or hallucinate a workaround.
 func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt, "ppz broadcast") {
+	if strings.Contains(defaultAgentPrompt("test-handle"), "ppz broadcast") {
 		t.Errorf("defaultAgentPrompt references the removed `ppz broadcast` verb; agents will hit `unknown command` if they try it")
 	}
 }
@@ -218,7 +218,7 @@ func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
 // user-visible bug is "the agent claims it acted but my read shows
 // nothing".
 func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
-	if !strings.Contains(defaultAgentPrompt, "ppz ls --watch") {
+	if !strings.Contains(defaultAgentPrompt("test-handle"), "ppz ls --watch") {
 		t.Errorf("defaultAgentPrompt should reference `ppz ls --watch` — the non-destructive blocking-watch primitive used by the Monitor recipe")
 	}
 }
@@ -230,8 +230,39 @@ func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
 // inbox messages the user then asked them to `ppz read`. The watch
 // vs. read concerns belong on different verbs.
 func TestDefaultAgentPrompt_OmitsAwait(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt, "ppz await") {
+	if strings.Contains(defaultAgentPrompt("test-handle"), "ppz await") {
 		t.Errorf("defaultAgentPrompt must not mention `ppz await` — destructive read races `ppz read inbox`; use `ppz ls --watch` for awareness and `ppz read` for consumption")
+	}
+}
+
+// TestDefaultAgentPrompt_SubstitutesHandle pins the handle template
+// substitution. The prompt is built per-spawn with the actual handle
+// so the Monitor recipe can hard-code PPZ_SESSION=<handle> inline.
+// A regression to a const prompt would leave `<handle>` as a literal
+// placeholder in the recipe — the agent would then run a Monitor
+// keyed by the string "<handle>" instead of e.g. "eve".
+func TestDefaultAgentPrompt_SubstitutesHandle(t *testing.T) {
+	prompt := defaultAgentPrompt("alice")
+	if !strings.Contains(prompt, `"alice"`) {
+		t.Errorf("defaultAgentPrompt(\"alice\") should mention the handle literally; got: %q", prompt)
+	}
+	if strings.Contains(prompt, "<handle>.stdout") {
+		t.Errorf("defaultAgentPrompt should substitute the handle into `.stdout` / `.inbox` references, not leave the `<handle>` placeholder; got: %q", prompt)
+	}
+}
+
+// TestDefaultAgentPrompt_MonitorRecipePinsSession — the Monitor
+// recipe must set PPZ_SESSION=<handle> inline. Inheriting the parent
+// shell's PPZ_SESSION is unreliable across Claude Code versions; we
+// observed v2.1.143 dropping it on Monitor's bash subprocess, which
+// then resolved a fresh tty-less session id the daemon had never
+// seen and failed every ppz call with E_NO_CURRENT_SOURCE. Setting
+// PPZ_SESSION inline in the recipe makes the watch robust to that
+// behaviour.
+func TestDefaultAgentPrompt_MonitorRecipePinsSession(t *testing.T) {
+	prompt := defaultAgentPrompt("eve")
+	if !strings.Contains(prompt, "PPZ_SESSION=eve ppz ls --watch") {
+		t.Errorf("defaultAgentPrompt Monitor recipe should set PPZ_SESSION=<handle> inline so it survives env-strip on Monitor subprocesses; got: %q", prompt)
 	}
 }
 
@@ -241,7 +272,7 @@ func TestDefaultAgentPrompt_OmitsAwait(t *testing.T) {
 // Mis-spelling it leaves an agent unable to grep / Ctrl-F into the
 // actual docs and tests.
 func TestDefaultAgentPrompt_UsesUncollaredTerminology(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt, "uncoloured") {
+	if strings.Contains(defaultAgentPrompt("test-handle"), "uncoloured") {
 		t.Errorf("defaultAgentPrompt has the `uncoloured` typo; wire vocab is `uncollared` (WIRE.md §1)")
 	}
 }
@@ -255,7 +286,7 @@ func TestDefaultAgentPrompt_UsesUncollaredTerminology(t *testing.T) {
 // undo today's alignment work.
 func TestDefaultAgentPrompt_CommandColumnIsAligned(t *testing.T) {
 	descCol := -1
-	for i, line := range strings.Split(defaultAgentPrompt, "\n") {
+	for i, line := range strings.Split(defaultAgentPrompt("test-handle"), "\n") {
 		if !strings.HasPrefix(line, "  ppz ") {
 			continue
 		}

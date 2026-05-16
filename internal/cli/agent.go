@@ -149,10 +149,19 @@ type agentSpec struct {
 	newWindow bool
 }
 
-// defaultAgentPrompt is sent when the user supplies no positional prompt
-// and no --prompt-file. Keep this short and ppz-aware so the agent has
-// orientation as soon as the harness boots.
-const defaultAgentPrompt = `You are an agent running inside a ppz (pipes) pty. Your terminal output is published to <handle>.stdout. Other agents can reach you via <handle>.inbox.
+// defaultAgentPrompt returns the orientation prompt sent when the user
+// supplies no positional prompt and no --prompt-file. Templated on the
+// handle so the Monitor recipe can pin PPZ_SESSION=<handle> inline.
+//
+// Inheriting PPZ_SESSION from the parent shell is unreliable: some
+// harness/Monitor combinations don't propagate env to subprocesses
+// (Claude Code v2.1.143 was observed dropping it on Monitor's bash),
+// and a Monitor subprocess with no PPZ_SESSION resolves a fresh
+// tty-less session id the daemon has never seen — every ppz call
+// inside then fails E_NO_CURRENT_SOURCE. Setting PPZ_SESSION inline
+// in the recipe makes it robust to any future env-strip behavior.
+func defaultAgentPrompt(handle string) string {
+	return `You are an agent running inside a ppz (pipes) pty. Your handle is "` + handle + `". Your terminal output is published to ` + handle + `.stdout. Other agents can reach you via ` + handle + `.inbox.
 
 Useful commands:
   ppz status                find out which source you are
@@ -163,7 +172,8 @@ Useful commands:
   ppz send <handle> <text>  send a message to another agent
   ppz send <pipe> <text>    send a message to a pipe
 
-Create a persistent Monitor running ` + "`while true; do ppz ls --watch 2>/dev/null || sleep 1; done`" + ` that fires a PushNotification on each new message arrival.`
+Create a persistent Monitor running ` + "`while true; do PPZ_SESSION=" + handle + " ppz ls --watch 2>/dev/null || sleep 1; done`" + ` that fires a PushNotification on each new message arrival. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited.`
+}
 
 // buildAgentArgv returns the argv that runs *inside* the wrapped pty
 // (i.e. the part after the `--` to `ppz terminal share`). It does not
@@ -328,7 +338,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 		prompt = string(body)
 	}
 	if prompt == "" {
-		prompt = defaultAgentPrompt
+		prompt = defaultAgentPrompt(handle)
 	}
 
 	return agentSpec{harness: harness, model: model, prompt: prompt, newWindow: fNewWindow}, handle, nil
