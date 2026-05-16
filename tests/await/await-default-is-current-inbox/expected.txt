@@ -1,2 +1,2 @@
-HH:MM:SS  -             hello there
+HH:MM:SS  chat          hello there
 exit=0

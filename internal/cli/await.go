@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
-	"github.com/pipescloud/ppz/internal/daemon"
 )
 
 // cmdAwait: ppz await [PATTERN...] [--tail --json --bare --tty --raw]
@@ -90,11 +90,12 @@ func cmdAwait(args []string) error {
 	}
 }
 
-// awaitOnce performs one (block, pick, drain) cycle.
+// awaitOnce performs one (block, pick, drain) cycle. Uses awaitBlock
+// (not daemon.Call) so SIGINT during the block phase closes the
+// socket and lets the binary exit promptly.
 func awaitOnce(ctx context.Context, patterns []string, asJSON, tty, raw, bare bool) error {
-	var reply cliproto.ListReply
-	req := cliproto.ListWatchRequest{Session: sessionID(), Patterns: patterns}
-	if err := daemon.Call(ipcSocket(), cliproto.IPCListWatch, req, &reply); err != nil {
+	reply, err := awaitBlock(ctx, patterns)
+	if err != nil {
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -137,6 +138,51 @@ func awaitOnce(ctx context.Context, patterns []string, asJSON, tty, raw, bare bo
 	}
 
 	return runRead(target, asJSON, false /* follow */, tty, raw, bare, false /* all */, 0, 0, 0)
+}
+
+// awaitBlock issues a single IPCListWatch request and decodes the
+// reply. Owns the connection so a SIGINT-driven ctx cancel can close
+// the socket and unblock the daemon-side wait.
+func awaitBlock(ctx context.Context, patterns []string) (cliproto.ListReply, error) {
+	var reply cliproto.ListReply
+	conn, err := net.Dial("unix", ipcSocket())
+	if err != nil {
+		return reply, cliproto.New(cliproto.EDaemonNotRunning)
+	}
+	defer conn.Close()
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stop:
+		}
+	}()
+
+	body, _ := json.Marshal(cliproto.ListWatchRequest{Session: sessionID(), Patterns: patterns})
+	if err := json.NewEncoder(conn).Encode(map[string]any{
+		"method": cliproto.IPCListWatch,
+		"params": json.RawMessage(body),
+	}); err != nil {
+		return reply, err
+	}
+
+	var resp struct {
+		Result json.RawMessage  `json:"result,omitempty"`
+		Error  *cliproto.Error  `json:"error,omitempty"`
+	}
+	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+		return reply, err
+	}
+	if resp.Error != nil {
+		return reply, resp.Error
+	}
+	if err := json.Unmarshal(resp.Result, &reply); err != nil {
+		return reply, err
+	}
+	return reply, nil
 }
 
 // pickAwaitTarget selects the single pipe to drain from a ListReply

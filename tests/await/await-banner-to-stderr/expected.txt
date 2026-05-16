@@ -1,3 +1,3 @@
-HH:MM:SS  -             body line
+HH:MM:SS  chat          body line
 BANNER_ON_STDERR=yes
 exit=0
