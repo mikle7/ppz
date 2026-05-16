@@ -1,0 +1,4 @@
+--- watch lobby-* — only matching uncollared rows ---
+lobby-1 1 1 RELATIVE lobby 1 msg foo
+lobby-2 0 0 - - foo
+exit=0

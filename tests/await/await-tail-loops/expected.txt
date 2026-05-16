@@ -1,0 +1,3 @@
+msg-A
+msg-B
+exit=0

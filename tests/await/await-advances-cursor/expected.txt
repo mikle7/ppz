@@ -1,0 +1,3 @@
+--- ls after await ---
+signal 0 1 RELATIVE consumed foo
+exit=0

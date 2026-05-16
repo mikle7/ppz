@@ -29,6 +29,18 @@ func TestMatchAnyTarget(t *testing.T) {
 		{"exact target mismatch on pipe", "apple", "broadcast", []string{"apple.stdout"}, false},
 		{"% spans handle.pipe boundary", "apple", "stdout", []string{"%stdout"}, true},
 		{"multiple patterns OR — handle plus pipe", "apple", "stdout", []string{"banana", "*.stdout"}, true},
+
+		// Uncollared pipes have handle="". A bare pattern matching the
+		// pipe name alone is the natural way to address them.
+		{"bare pattern matches uncollared pipe", "", "plaza", []string{"plaza"}, true},
+		{"bare glob matches uncollared pipe", "", "lobby-1", []string{"lobby-*"}, true},
+		{"bare pattern doesn't match different uncollared", "", "plaza", []string{"lobby"}, false},
+		// Manifold-uncollared: pipe name carries dotted manifold path
+		// (e.g. "team-a.chat"). Pattern must match against that whole
+		// path so users can address namespaced pipes with their
+		// manifold prefix.
+		{"manifold.pipe pattern matches namespaced uncollared", "", "team-a.chat", []string{"team-a.chat"}, true},
+		{"manifold-glob matches namespaced uncollared", "", "team-a.chat", []string{"team-*.chat"}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

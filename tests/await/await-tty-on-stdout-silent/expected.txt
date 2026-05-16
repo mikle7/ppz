@@ -1,0 +1,3 @@
+WARNING_ON_STDERR=no
+DRAINED=yes
+exit=0
