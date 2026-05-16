@@ -47,8 +47,8 @@ func Run(args []string) error {
 		return cmdDaemonLogin(rest)
 	case "status":
 		return cmdStatus(rest)
-	case "diag":
-		return cmdDiag(rest)
+	case "diagnostics":
+		return cmdDiagnostics(rest)
 	case "set":
 		return cmdSet(rest)
 	case "unset":
@@ -321,11 +321,13 @@ Agents:
 Other:
   ppz version                      print the binary's version + build sha
   ppz upgrade                      install the latest ppz CLI release
-  ppz diag [--json]                introspect the daemon: NATS connection
+  ppz diagnostics [--json]         introspect the daemon: NATS connection
                                    state + recent disconnect / reconnect
-                                   events. Works without login — useful
-                                   when 'ppz status' shows "not running"
-                                   or "authentication error".
+                                   events + daemon_start / daemon_stop
+                                   lifecycle events (the latter persist
+                                   across daemon restarts). Works without
+                                   login — useful when 'ppz status' shows
+                                   "not running" or "authentication error".
   ppz completion {bash|zsh}        tab-completion script
                                    add 'eval "$(ppz completion bash)"' to
                                    your shell rc`

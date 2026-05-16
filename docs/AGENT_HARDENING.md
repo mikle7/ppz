@@ -133,11 +133,11 @@ re-run blind doesn't give us anything new.
 
 1. **Disconnect / reconnect handlers.** Register `nats.DisconnectErrHandler`,
    `nats.ReconnectHandler`, `nats.ClosedHandler` on every `nats.Connect`
-   call site. Each writes a structured line to the daemon's diag log
+   call site. Each writes a structured line to the daemon's diagnostics log
    (timestamp, event, error if any, attempt counter).
 2. **Connection-state ring buffer in `Daemon`.** Tracks last N disconnect /
    reconnect events with timestamps and reasons. Capped at, say, 32
-   entries. Read-only access for `ppz status` and `ppz diag`.
+   entries. Read-only access for `ppz status` and `ppz diagnostics`.
 3. **`ppz status` shows NATS state.** New line:
 
    ```
@@ -149,11 +149,11 @@ re-run blind doesn't give us anything new.
    ```
    nats: disconnected since 14:23:01 (server unreachable; reconnect attempts: 7)
    ```
-4. **`ppz diag` (new verb).** Dumps the diag log tail and the connection-
+4. **`ppz diagnostics` (new verb).** Dumps the diagnostics log tail and the connection-
    state ring buffer. Replaces the implicit "tail `/tmp/ppz-diag.log`"
    workflow MoltHub had to discover.
 5. **WIRE.md and `docs/ERRORS.md` updates.** Document the new `ppz status`
-   format and the `ppz diag` verb. Note diag log location.
+   format and the `ppz diagnostics` verb. Note diagnostics log location.
 
 Phase 0 is **one PR**. ~1 day. Behavior-preserving except for the new
 status field and verb, both additive.
@@ -166,7 +166,7 @@ overlay extends `compose/docker-compose.yml` with no special networking —
 just controlled stop/start of the `ppz-server` container.
 
 **`tests/reliability/disconnect-handler-fires/`** — RED: the daemon writes a
-disconnect event to the diag log when NATS goes away.
+disconnect event to the diagnostics log when NATS goes away.
 
 ```bash
 # pseudocode
@@ -177,9 +177,9 @@ ppz_a broadcast -m "before drop"
 docker stop compose-ppz-server-1
 sleep 3
 docker start compose-ppz-server-1
-wait_for 30 'ppz_a diag | grep -q "nats: reconnected"'
+wait_for 30 'ppz_a diagnostics | grep -q "nats: reconnected"'
 
-ppz_a diag | grep -E "^nats: (disconnected|reconnected)" | head -4
+ppz_a diagnostics | grep -E "^nats: (disconnected|reconnected)" | head -4
 ```
 
 Expected lines (after normalisation): `nats: disconnected …` then
@@ -198,8 +198,8 @@ wait_for 10 'ppz_a status 2>/dev/null | grep -q "^nats: disconnected"'
 ppz_a status | grep '^nats:' | head -1   # → "nats: disconnected …"
 ```
 
-**`tests/reliability/diag-verb-dumps-events/`** — RED: `ppz diag` returns
-the connection-state ring + diag log tail.
+**`tests/reliability/diagnostics-verb-dumps-events/`** — RED: `ppz diagnostics` returns
+the connection-state ring + diagnostics log tail.
 
 ```bash
 ppz_a daemon login …
@@ -208,7 +208,7 @@ sleep 3
 docker start compose-ppz-server-1
 wait_for 30 'ppz_a status | grep -q "^nats: connected"'
 
-ppz_a diag | grep -c '^nats:'   # → at least 2 (one disconnect, one reconnect)
+ppz_a diagnostics | grep -c '^nats:'   # → at least 2 (one disconnect, one reconnect)
 ```
 
 All three are red against `main` today (no handlers registered, no `diag`
@@ -307,7 +307,7 @@ done
 
 # Diag log shows rotations completing without disconnect/reconnect cycles
 # (in-place rotation works) OR with clean reconnects (forced rotation works)
-ppz_a diag | awk '/^nats: (disconnected|reconnected|rotated)/ { c++ } END { print c }'
+ppz_a diagnostics | awk '/^nats: (disconnected|reconnected|rotated)/ { c++ } END { print c }'
 # Either count 0 (in-place) or even number (each disconnect paired with reconnect)
 ```
 
@@ -329,7 +329,7 @@ revoke_and_reissue_alpha_key
 # Daemon's next call surfaces ENotLoggedIn? Or transparently
 # re-authenticates? The fix says transparent.
 ppz_a broadcast -m "after key rotation"   # should succeed
-ppz_a diag | grep -q "^nats: re-authenticated"
+ppz_a diagnostics | grep -q "^nats: re-authenticated"
 ```
 
 This requires a way to revoke + reissue server-side from the test
@@ -345,10 +345,10 @@ loops; with jitter, attempts spread out.
 docker stop compose-ppz-server-1
 sleep 30                          # daemon trying to reconnect this whole time
 
-# Inspect daemon's reconnect-attempt timestamps from the diag log.
+# Inspect daemon's reconnect-attempt timestamps from the diagnostics log.
 # With jitter (0.5–2s), inter-attempt gaps should vary; without, they're
 # uniform at 2s. Cheap statistical assertion: variance > threshold.
-ppz_a diag | awk '/nats: reconnect attempt/ { print $1 }' | …
+ppz_a diagnostics | awk '/nats: reconnect attempt/ { print $1 }' | …
 ```
 
 Statistical assertions are unusual for ppz e2e; if this test is too
@@ -366,7 +366,7 @@ path that crashed.
 - Existing e2e (192/192 today) remains green — no regression.
 - A 70-minute soak (past 1h JWT TTL) under continuous traffic on the WAN
   stack completes with zero `E_NATS_UNREACHABLE` user-visible failures.
-- `ppz diag` shows clean disconnect → reconnect → re-authenticated event
+- `ppz diagnostics` shows clean disconnect → reconnect → re-authenticated event
   trails for each induced fault.
 
 ### Out of scope for Phase 1

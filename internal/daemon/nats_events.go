@@ -35,7 +35,7 @@ func natsStateString(nc *nats.Conn) string {
 // natsEventRingCap is the maximum number of NATS connection-state events
 // retained in memory. Phase 0 of the agent-hardening plan calls for a
 // short tail — enough to catch events that happened "a few minutes ago"
-// when an operator runs `ppz diag`, not a full history.
+// when an operator runs `ppz diagnostics`, not a full history.
 const natsEventRingCap = 32
 
 // NATSEvent is one entry in the daemon's NATS connection-state log.
@@ -43,7 +43,7 @@ const natsEventRingCap = 32
 // matching the nats.go handler set we register. At is the moment the
 // handler fired. Reason captures the error string for disconnect /
 // closed events (empty for the others). Phase 0 is observe-only —
-// these events drive `ppz status` and `ppz diag` output but do not
+// these events drive `ppz status` and `ppz diagnostics` output but do not
 // influence reconnect behaviour.
 type NATSEvent struct {
 	Type   string    `json:"type"`
@@ -53,7 +53,7 @@ type NATSEvent struct {
 
 // NATSEventRing is a fixed-capacity, append-only, drop-oldest ring of
 // NATSEvent records. Used by the daemon to surface a recent tail of
-// connection-state transitions through `ppz diag`.
+// connection-state transitions through `ppz diagnostics`.
 //
 // Thread-safe: every accessor takes mu. The ring lives on Daemon and
 // is initialised in New() — before any nats.Connect call — so the

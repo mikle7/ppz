@@ -285,7 +285,7 @@ The `nats:` line surfaces the daemon's current connection state to the
 NATS server. The state vocabulary is fixed (`connected` /
 `disconnected` / `connecting` / `unknown`). The line is deliberately
 terse — per-event detail (drop counts, timestamps, error reasons)
-lives in `ppz diag` instead, so a noisy connection history doesn't
+lives in `ppz diagnostics` instead, so a noisy connection history doesn't
 churn `ppz status` output.
 
 ### `ppz login URL -apikey K`
@@ -360,18 +360,27 @@ Flags:
 
 (`reread` mirrors `read`'s output flags including `--bare`.)
 
-### `ppz diag [--json]`
+### `ppz diagnostics [--json]`
 
 Daemon introspection (Phase 0 of agent hardening). Prints the current
 NATS connection state plus the most recent connection-state events the
-daemon has observed (capped at 32 entries, drop-oldest). Useful for
-catching transient outages "a few minutes ago" that have already
-recovered by the time `ppz status` runs.
+daemon has observed (capped at 32 entries, drop-oldest) along with the
+last few daemon lifecycle events (`daemon_start` / `daemon_stop`).
+Useful for catching transient outages or daemon bounces "a few minutes
+ago" that have already recovered by the time `ppz status` runs.
 
 The verb deliberately does NOT require login. An operator hitting a
-sick daemon (login fails, NATS unreachable) needs `ppz diag` to work —
-that's the whole point. Only `ppz status` reporting "daemon: not
-running" prevents `ppz diag` from succeeding (no socket to talk to).
+sick daemon (login fails, NATS unreachable) needs `ppz diagnostics` to
+work — that's the whole point. Only `ppz status` reporting "daemon: not
+running" prevents `ppz diagnostics` from succeeding (no socket to
+talk to).
+
+Lifecycle events (`daemon_start` / `daemon_stop`) persist across
+daemon restarts via a tiny on-disk log under `$PPZ_HOME` — a fresh
+daemon's in-memory ring is otherwise empty, so without persistence
+"the previous daemon stopped at HH:MM:SS" would vanish the instant
+the next daemon comes up. The persisted log is trimmed to the most
+recent 32 lifecycle entries on each append.
 
 Default output:
 ```
@@ -380,10 +389,11 @@ nats: <connected|disconnected|connecting|unknown> drops_last_hour=N events=N
 …
 ```
 
-Where `<type>` is one of `disconnect` / `reconnect` / `closed`. The
-`reason` field captures the underlying error string for disconnect /
-closed events (e.g. `"connection closed"`); for reconnect it captures
-the URL the client reconnected to. Empty when nats.go provided none.
+Where `<type>` is one of `disconnect` / `reconnect` / `closed` /
+`daemon_start` / `daemon_stop`. The `reason` field captures the
+underlying error string for disconnect / closed events (e.g.
+`"connection closed"`); for reconnect it captures the URL the client
+reconnected to. Empty when nats.go provided none.
 
 Test contract: each event line begins with the type token (anchored
 to start-of-line). Detail tokens after the timestamp are free-form —
