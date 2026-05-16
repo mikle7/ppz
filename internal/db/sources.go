@@ -51,7 +51,7 @@ type Source struct {
 func (s Source) Pipes() []string {
 	switch s.Kind {
 	case SourceKindPTY:
-		return []string{"stdin", "stdout", "stdctrl", "inbox"}
+		return []string{"stdin", "stdout", "stdctrl", "inbox", "heartbeat"}
 	default:
 		return []string{"inbox"}
 	}
@@ -163,3 +163,4 @@ func UpdateLastBroadcast(ctx context.Context, p *Pool, accountID uuid.UUID, hand
 		at, payload, accountID, handle)
 	return err
 }
+

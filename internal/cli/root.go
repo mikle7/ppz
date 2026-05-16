@@ -49,6 +49,8 @@ func Run(args []string) error {
 		return cmdStatus(rest)
 	case "diagnostics":
 		return cmdDiagnostics(rest)
+	case "who":
+		return cmdWho(rest)
 	case "set":
 		return cmdSet(rest)
 	case "unset":
@@ -351,6 +353,11 @@ Other:
                                    across daemon restarts). Works without
                                    login — useful when 'ppz status' shows
                                    "not running" or "authentication error".
+  ppz who [--json] [--online]      list every agent the local daemon has
+         [--stale] [--offline]     seen a heartbeat from, with online /
+         [--harness=X]             stale / offline status, harness, model,
+                                   host, os/arch and age. Filters combine
+                                   OR for status, AND for harness.
   ppz completion {bash|zsh}        tab-completion script
                                    add 'eval "$(ppz completion bash)"' to
                                    your shell rc`

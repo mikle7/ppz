@@ -37,6 +37,11 @@ const (
 	// without credentials and without a live NATS connection — the
 	// whole point is being able to introspect a sick daemon.
 	IPCDiag = "Diag"
+
+	// Who verb — `ppz who`. Returns the daemon's in-memory snapshot of
+	// the most recent heartbeat per source handle. Client-side filters
+	// and rendering happen in cmdWho; the daemon just dumps the cache.
+	IPCWho = "Who"
 )
 
 // Source kinds, mirrored from internal/db so non-db callers can use them.
@@ -566,4 +571,25 @@ type DiagReply struct {
 	NATSState         string      `json:"nats_state,omitempty"`
 	NATSDropsLastHour int         `json:"nats_drops_last_hour,omitempty"`
 	NATSEvents        []DiagEvent `json:"nats_events"`
+}
+
+// WhoRequest is the input to `ppz who`. Empty for v1 — filters are
+// applied client-side so the daemon stays a pure snapshot provider.
+type WhoRequest struct{}
+
+// WhoEntry is one row of the daemon's heartbeat cache. Payload is the
+// verbatim heartbeat JSON the pty wrapper published; consumers
+// (cmdWho) unmarshal it as HeartbeatPayload to extract harness/model/
+// host fields.
+type WhoEntry struct {
+	Handle    string    `json:"handle"`
+	Payload   string    `json:"payload"`
+	ArrivedAt time.Time `json:"arrived_at"`
+}
+
+// WhoReply carries the daemon's sorted-by-handle snapshot of every
+// known heartbeat. Lifetime is the daemon process — a restart clears
+// the cache and the next round of beats re-populates it.
+type WhoReply struct {
+	Entries []WhoEntry `json:"entries"`
 }

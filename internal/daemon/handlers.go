@@ -800,6 +800,10 @@ func (d *Daemon) handleSend(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
 	}
+	// Heartbeat fast-path: stamp the daemon's in-memory cache so
+	// `ppz who` can render this agent without a NATS round-trip.
+	// No-op on every other channel.
+	applyHeartbeatStamp(d.Heartbeats, req.Channel, req.Handle, req.Payload, clock.Now())
 	// Bytes counts the user-visible payload, not the encoded envelope —
 	// matches WIRE.md §8 ppz broadcast and the broadcast-from-* fixtures.
 	writeIPC(conn, cliproto.SendReply{ID: env.ID, Subject: target.subject, Bytes: len(req.Payload)})
@@ -851,6 +855,13 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 	if err := d.NC.Flush(); err != nil {
 		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
 		return
+	}
+	// Heartbeat fast-path on the batch path. In practice the heartbeat
+	// ticker publishes one beat at a time via handleSend, so this is
+	// belt-and-suspenders — if any caller ever batches heartbeats the
+	// cache still gets the latest payload.
+	if len(req.Payloads) > 0 {
+		applyHeartbeatStamp(d.Heartbeats, req.Channel, req.Handle, req.Payloads[len(req.Payloads)-1], clock.Now())
 	}
 	writeIPC(conn, cliproto.SendBatchReply{IDs: ids, Subject: target.subject, Bytes: bytes})
 }
@@ -1156,7 +1167,7 @@ func uncollaredPipeInfo(ctx context.Context, js jetstream.JetStream, accountID u
 // decision #16).
 func pipesForKind(kind string) []string {
 	if kind == string(cliproto.KindPTY) {
-		return []string{"inbox", "stdctrl", "stdin", "stdout"}
+		return []string{"heartbeat", "inbox", "stdctrl", "stdin", "stdout"}
 	}
 	return []string{"inbox"}
 }

@@ -336,7 +336,7 @@ func TestResolveAgentSpec_HandleParsed(t *testing.T) {
 // followed by the harness argv, with shell quoting that survives multi-
 // line prompts.
 func TestBuildNewWindowScript_TerminalAppContainsShareInvocation(t *testing.T) {
-	cmd := buildNewWindowScript("Apple_Terminal", "alice", "", []string{"claude", "-p", "hello"})
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "", nil, []string{"claude", "-p", "hello"})
 	if !strings.Contains(cmd, "ppz terminal share alice --") {
 		t.Errorf("expected ppz share prefix, got:\n%s", cmd)
 	}
@@ -346,7 +346,7 @@ func TestBuildNewWindowScript_TerminalAppContainsShareInvocation(t *testing.T) {
 }
 
 func TestBuildNewWindowScript_ITerm2Detected(t *testing.T) {
-	cmd := buildNewWindowScript("iTerm.app", "alice", "", []string{"claude"})
+	cmd := buildNewWindowScript("iTerm.app", "alice", "", nil, []string{"claude"})
 	if !strings.Contains(cmd, "tell application \"iTerm\"") {
 		t.Errorf("expected iTerm osascript, got:\n%s", cmd)
 	}
@@ -356,7 +356,7 @@ func TestBuildNewWindowScript_ITerm2Detected(t *testing.T) {
 // builder writes the prompt to a temp file and dereferences it with
 // $(cat …) so we never have to shell-quote the content.
 func TestBuildNewWindowScript_PromptFileDereferenced(t *testing.T) {
-	cmd := buildNewWindowScript("Apple_Terminal", "alice", "",
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "", nil,
 		[]string{"claude", "$(cat /tmp/ppz-agent-alice.prompt)"})
 	if !strings.Contains(cmd, "$(cat /tmp/ppz-agent-alice.prompt)") {
 		t.Errorf("expected prompt-file dereference, got:\n%s", cmd)
@@ -370,7 +370,7 @@ func TestBuildNewWindowScript_PromptFileDereferenced(t *testing.T) {
 // so claude boots in the folder the user invoked `ppz agent create`
 // from (presumably already trusted).
 func TestBuildNewWindowScript_PrependsCdToCallersCwd(t *testing.T) {
-	cmd := buildNewWindowScript("Apple_Terminal", "alice", "/Users/jimmy/work", []string{"claude"})
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "/Users/jimmy/work", nil, []string{"claude"})
 	if !strings.Contains(cmd, `cd '/Users/jimmy/work'`) {
 		t.Errorf("expected single-quoted cd to caller's cwd, got:\n%s", cmd)
 	}
@@ -384,7 +384,7 @@ func TestBuildNewWindowScript_PrependsCdToCallersCwd(t *testing.T) {
 // iTerm2 path inherits the same cwd-preservation semantics as
 // Terminal.app — the bug is dialect-agnostic.
 func TestBuildNewWindowScript_ITerm2AlsoPrependsCd(t *testing.T) {
-	cmd := buildNewWindowScript("iTerm.app", "alice", "/Users/jimmy/work", []string{"claude"})
+	cmd := buildNewWindowScript("iTerm.app", "alice", "/Users/jimmy/work", nil, []string{"claude"})
 	if !strings.Contains(cmd, `cd '/Users/jimmy/work'`) {
 		t.Errorf("iTerm path must include cd, got:\n%s", cmd)
 	}
@@ -394,7 +394,7 @@ func TestBuildNewWindowScript_ITerm2AlsoPrependsCd(t *testing.T) {
 // care about cwd opt out (and gives `os.Getwd` a graceful fallback if
 // it fails).
 func TestBuildNewWindowScript_EmptyCwdSkipsCd(t *testing.T) {
-	cmd := buildNewWindowScript("Apple_Terminal", "alice", "", []string{"claude"})
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", "", nil, []string{"claude"})
 	if strings.Contains(cmd, "cd ") {
 		t.Errorf("empty cwd must not produce cd, got:\n%s", cmd)
 	}
@@ -408,7 +408,7 @@ func TestBuildNewWindowScript_EmptyCwdSkipsCd(t *testing.T) {
 // AppleScript unescapes back to `'\''` at runtime, which the shell
 // then interprets as the close-escape-reopen pattern.
 func TestBuildNewWindowScript_CdEscapesSingleQuote(t *testing.T) {
-	cmd := buildNewWindowScript("Apple_Terminal", "alice", `/path/with'quote`, []string{"claude"})
+	cmd := buildNewWindowScript("Apple_Terminal", "alice", `/path/with'quote`, nil, []string{"claude"})
 	if !strings.Contains(cmd, `'/path/with'\\''quote'`) {
 		t.Errorf("expected bash-safe single-quote escape (in AppleScript form), got:\n%s", cmd)
 	}
@@ -480,7 +480,7 @@ func TestSelectLinuxTerminal_NoneAvailableErrors(t *testing.T) {
 // Without the separator gnome-terminal swallows the bash invocation as
 // its own argument. Pin the shape.
 func TestBuildLinuxNewWindowArgv_GnomeTerminalUsesDashDashSeparator(t *testing.T) {
-	argv, err := buildLinuxNewWindowArgv("gnome-terminal", "alice", "", []string{"claude"})
+	argv, err := buildLinuxNewWindowArgv("gnome-terminal", "alice", "", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestBuildLinuxNewWindowArgv_GnomeTerminalUsesDashDashSeparator(t *testing.T
 }
 
 func TestBuildLinuxNewWindowArgv_KonsoleUsesDashE(t *testing.T) {
-	argv, err := buildLinuxNewWindowArgv("konsole", "alice", "", []string{"claude"})
+	argv, err := buildLinuxNewWindowArgv("konsole", "alice", "", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -503,7 +503,7 @@ func TestBuildLinuxNewWindowArgv_KonsoleUsesDashE(t *testing.T) {
 }
 
 func TestBuildLinuxNewWindowArgv_XtermUsesDashE(t *testing.T) {
-	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", []string{"claude"})
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -517,7 +517,7 @@ func TestBuildLinuxNewWindowArgv_XtermUsesDashE(t *testing.T) {
 // harness argv. Asserting on the last element keeps the test resilient
 // to per-terminal flag-shape differences.
 func TestBuildLinuxNewWindowArgv_IncludesShareInvocation(t *testing.T) {
-	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", []string{"claude", "-p", "hi"})
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", nil, []string{"claude", "-p", "hi"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -530,7 +530,7 @@ func TestBuildLinuxNewWindowArgv_IncludesShareInvocation(t *testing.T) {
 // Same cwd-inheritance bug exists on Linux: a fresh terminal opens in
 // $HOME, and claude treats trust per-folder. Prepend `cd '<cwd>' &&`.
 func TestBuildLinuxNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
-	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "/home/jamesmiles/work", []string{"claude"})
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "/home/jamesmiles/work", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -546,7 +546,7 @@ func TestBuildLinuxNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
 }
 
 func TestBuildLinuxNewWindowArgv_EmptyCwdSkipsCd(t *testing.T) {
-	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", []string{"claude"})
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -557,7 +557,7 @@ func TestBuildLinuxNewWindowArgv_EmptyCwdSkipsCd(t *testing.T) {
 }
 
 func TestBuildLinuxNewWindowArgv_UnknownTerminalErrors(t *testing.T) {
-	if _, err := buildLinuxNewWindowArgv("nonesuch", "alice", "", []string{"claude"}); err == nil {
+	if _, err := buildLinuxNewWindowArgv("nonesuch", "alice", "", nil, []string{"claude"}); err == nil {
 		t.Fatal("expected error for unknown terminal")
 	}
 }
@@ -582,7 +582,7 @@ func TestIsWSL_FalseOnNativeLinux(t *testing.T) {
 // (Windows Terminal). We expect argv[0] to be the literal `wt.exe` —
 // resolution to a full path is left to os/exec.LookPath.
 func TestBuildWSLNewWindowArgv_UsesWtExe(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", []string{"claude"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -596,7 +596,7 @@ func TestBuildWSLNewWindowArgv_UsesWtExe(t *testing.T) {
 // wt would launch the default distro, which may not match the one the
 // user invoked ppz from.
 func TestBuildWSLNewWindowArgv_InvokesWslExeWithDistro(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu-22.04", "alice", "", []string{"claude"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu-22.04", "alice", "", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -609,7 +609,7 @@ func TestBuildWSLNewWindowArgv_InvokesWslExeWithDistro(t *testing.T) {
 }
 
 func TestBuildWSLNewWindowArgv_IncludesShareInvocation(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", []string{"claude", "-p", "hi"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", nil, []string{"claude", "-p", "hi"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -620,7 +620,7 @@ func TestBuildWSLNewWindowArgv_IncludesShareInvocation(t *testing.T) {
 }
 
 func TestBuildWSLNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "/home/jamesmiles/work", []string{"claude"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "/home/jamesmiles/work", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -634,7 +634,7 @@ func TestBuildWSLNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
 // error loudly than to silently fall through to the user's default
 // distro (which may be the wrong one).
 func TestBuildWSLNewWindowArgv_EmptyDistroErrors(t *testing.T) {
-	if _, err := buildWSLNewWindowArgv("", "alice", "", []string{"claude"}); err == nil {
+	if _, err := buildWSLNewWindowArgv("", "alice", "", nil, []string{"claude"}); err == nil {
 		t.Fatal("expected error for empty distro (caller forgot $WSL_DISTRO_NAME)")
 	}
 }
@@ -648,7 +648,7 @@ func TestBuildWSLNewWindowArgv_EmptyDistroErrors(t *testing.T) {
 // resolves /home/<user>/.local/bin/claude.
 func TestBuildLinuxNewWindowArgv_UsesLoginShell(t *testing.T) {
 	for _, terminal := range []string{"gnome-terminal", "konsole", "xterm", "kitty", "wezterm"} {
-		argv, err := buildLinuxNewWindowArgv(terminal, "alice", "", []string{"claude"})
+		argv, err := buildLinuxNewWindowArgv(terminal, "alice", "", nil, []string{"claude"})
 		if err != nil {
 			t.Fatalf("%s: build: %v", terminal, err)
 		}
@@ -664,7 +664,7 @@ func TestBuildLinuxNewWindowArgv_UsesLoginShell(t *testing.T) {
 // shell semantics. Without -lc this reproducibly fails with
 // "exec: claude: executable file not found in $PATH".
 func TestBuildWSLNewWindowArgv_UsesLoginShell(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", []string{"claude"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", nil, []string{"claude"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

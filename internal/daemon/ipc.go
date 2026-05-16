@@ -97,6 +97,8 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handleUnsetNamespace(ctx, conn, req.Params)
 	case cliproto.IPCDiag:
 		d.handleDiag(ctx, conn, req.Params)
+	case cliproto.IPCWho:
+		d.handleWho(ctx, conn, req.Params)
 	default:
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: "unknown method " + req.Method})
 	}

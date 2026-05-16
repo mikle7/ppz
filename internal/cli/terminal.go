@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 	"github.com/pipescloud/ppz/internal/daemon"
+	"github.com/pipescloud/ppz/internal/version"
 )
 
 // cmdTerminal dispatches `ppz terminal <subverb>`.
@@ -388,6 +390,32 @@ func cmdTerminalShare(args []string) error {
 	go func() {
 		defer wg.Done()
 		forwardInboxAlerts(ctx, handle, inboxAlerts)
+	}()
+
+	// Heartbeat ticker: publishes <handle>.heartbeat every 60s with the
+	// agent identity (harness/model from PPZ_AGENT_* env vars set by
+	// `ppz agent create`) plus host/runtime fields. First beat fires
+	// immediately so `ppz who` shows a freshly-booted agent without
+	// waiting for the first interval. Lives inside the share's ctx so
+	// it stops cleanly when the wrapped child exits.
+	hbTicker := time.NewTicker(60 * time.Second)
+	defer hbTicker.Stop()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		runHeartbeat(ctx, handle, heartbeatDeps{
+			Now:         time.Now,
+			Tick:        hbTicker.C,
+			Publish:     sendStreamLine,
+			GetEnv:      os.Getenv,
+			Hostname:    os.Hostname,
+			OS:          runtime.GOOS,
+			Arch:        runtime.GOARCH,
+			PID:         os.Getpid(),
+			PPZVersion:  version.Version,
+			StartedAt:   time.Now(),
+			IntervalSec: 60,
+		})
 	}()
 
 	// Wait for child. Give the kernel + reader a brief window to drain any
