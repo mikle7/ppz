@@ -56,24 +56,19 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 	// when something happened" semantics.
 	wakeup := make(chan struct{}, 1)
 	sub, err := d.NC.Subscribe(accountID.String()+".>", func(msg *nats.Msg) {
-		// Subjects are "<accountID>.<handle>.<pipe>" — parse both, match
-		// against the full target so `*.stdout` patterns wake correctly
-		// (and not just on traffic to handles named *.stdout, which
-		// don't exist).
-		parts := strings.SplitN(msg.Subject, ".", 3)
-		if len(parts) != 3 {
-			return
-		}
-		// parts[0] = accountID (already filtered by subscribe), parts[1] is
-		// the handle's first dot-bounded segment, parts[2] is the pipe
-		// name. UUIDs contain hyphens not dots so this split is safe.
-		handle, pipe := parts[1], parts[2]
-		if !matchAnyTarget(handle, pipe, req.Patterns) {
-			return
-		}
-		select {
-		case wakeup <- struct{}{}:
-		default:
+		// Subjects are ambiguous between collared and uncollared shapes
+		// at certain part counts (see parseSubjectInterpretations).
+		// We test every plausible (handle, pipe) split — waking on a
+		// false positive is harmless (next snapshot decides), but a
+		// missed wakeup would hang the caller.
+		for _, iv := range parseSubjectInterpretations(msg.Subject) {
+			if matchAnyTarget(iv.Handle, iv.Pipe, req.Patterns) {
+				select {
+				case wakeup <- struct{}{}:
+				default:
+				}
+				return
+			}
 		}
 	})
 	if err != nil {
@@ -88,7 +83,7 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, e)
 		return
 	}
-	if hasUnread(reply.Sources) {
+	if hasUnread(reply) {
 		writeIPC(conn, reply)
 		return
 	}
@@ -119,8 +114,12 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 }
 
 // buildFilteredList does the same per-pipe enumeration as handleList,
-// but filters sources by the patterns. Returns a ListReply whose Sources
-// only include matching handles.
+// but filters by the patterns. Returns a ListReply whose Sources only
+// include matching handles AND whose UncollaredPipes only include
+// matching uncollared rows. The uncollared listing was previously
+// omitted entirely, so any pattern filter on an org with only
+// uncollared traffic returned an empty reply and the level-triggered
+// early-return at handleListWatch never fired.
 func (d *Daemon) buildFilteredList(ctx context.Context, accountID uuid.UUID, session string, patterns []string) (cliproto.ListReply, *cliproto.Error) {
 	var lr cliproto.ListSourcesReply
 	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
@@ -135,15 +134,44 @@ func (d *Daemon) buildFilteredList(ctx context.Context, accountID uuid.UUID, ses
 	if err != nil {
 		return cliproto.ListReply{}, cliproto.New(cliproto.ENATSUnreachable)
 	}
-	return cliproto.ListReply{Sources: enriched}, nil
+
+	// Mirror handleList's uncollared enrichment, then filter by patterns.
+	var ucReply cliproto.ListUncollaredPipesReply
+	if e := d.callServer(ctx, "GET", "/api/v1/pipes", nil, &ucReply); e != nil {
+		return cliproto.ListReply{}, e
+	}
+	uncollared := make([]cliproto.UncollaredPipe, 0, len(ucReply.Pipes))
+	for _, p := range ucReply.Pipes {
+		// Uncollared has handle="". The rendered path is "manifold.name"
+		// at namespace or just "name" at root — that string is what
+		// matchAnyTarget will check against patterns.
+		dotted := cliproto.FormatPipePath(p.Manifold, "", p.Name)
+		if !matchAnyTarget("", dotted, patterns) {
+			continue
+		}
+		info := uncollaredPipeInfo(ctx, js, accountID, p.Manifold, p.Name, session, d.Cursors)
+		info.CreatedBy = p.CreatedBy
+		uncollared = append(uncollared, cliproto.UncollaredPipe{
+			Manifold: p.Manifold,
+			Name:     p.Name,
+			Info:     info,
+		})
+	}
+
+	return cliproto.ListReply{Sources: enriched, UncollaredPipes: uncollared}, nil
 }
 
 // matchAnyTarget returns true if any pattern matches the (handle,pipe)
-// row. A pattern matches when filepath.Match succeeds against EITHER
-// the handle alone (back-compat: `ls --watch agent-*` returns all pipes
-// of every agent-* handle) OR the full `<handle>.<pipe>` target (lets
-// `*.stdout` filter to stdout pipes only). Empty patterns slice means
-// "match anything".
+// row. A pattern matches when filepath.Match succeeds against ANY of:
+//   - the handle alone (back-compat: `ls --watch agent-*` returns all
+//     pipes of every agent-* handle)
+//   - the pipe alone (so `ls --watch plaza` matches an uncollared
+//     pipe, and `ls --watch inbox` matches every handle's inbox)
+//   - the full `<handle>.<pipe>` target (lets `*.stdout` filter to
+//     stdout pipes only; covers manifold.pipe for uncollared at
+//     namespace since callers pass the full dotted path as pipe).
+//
+// Empty patterns slice means "match anything".
 //
 // Accepts both `*` (standard glob, requires shell-quoting in zsh) and
 // `%` (SQL-LIKE-style alias, passes through unquoted in zsh/bash). The
@@ -153,10 +181,21 @@ func matchAnyTarget(handle, pipe string, patterns []string) bool {
 	if len(patterns) == 0 {
 		return true
 	}
-	target := handle + "." + pipe
+	// target is the displayed dotted form. When handle is empty
+	// (uncollared), pipe IS the full path so target == pipe — that's
+	// fine, the second filepath.Match below catches it.
+	target := pipe
+	if handle != "" {
+		target = handle + "." + pipe
+	}
 	for _, raw := range patterns {
 		p := strings.ReplaceAll(raw, "%", "*")
-		if ok, _ := filepath.Match(p, handle); ok {
+		if handle != "" {
+			if ok, _ := filepath.Match(p, handle); ok {
+				return true
+			}
+		}
+		if ok, _ := filepath.Match(p, pipe); ok {
 			return true
 		}
 		if ok, _ := filepath.Match(p, target); ok {
@@ -166,15 +205,60 @@ func matchAnyTarget(handle, pipe string, patterns []string) bool {
 	return false
 }
 
-// hasUnread reports whether any pipe in any source has unread > 0 — the
-// "should I wake up the watcher?" predicate.
-func hasUnread(sources []cliproto.Source) bool {
-	for _, s := range sources {
+// hasUnread reports whether any pipe in the reply — source-collared
+// OR uncollared — has unread > 0. The "should I wake up the watcher?"
+// predicate.
+func hasUnread(reply cliproto.ListReply) bool {
+	for _, s := range reply.Sources {
 		for _, p := range s.PipeInfos {
 			if p.Unread > 0 {
 				return true
 			}
 		}
 	}
+	for _, uc := range reply.UncollaredPipes {
+		if uc.Info.Unread > 0 {
+			return true
+		}
+	}
 	return false
+}
+
+// parseSubjectInterpretations returns the plausible (handle, pipe)
+// splits for a NATS subject of the form `<acct>.<...rest>`. The wire
+// form is ambiguous between collared and uncollared shapes at certain
+// part counts — rather than disambiguate (which would need state
+// lookup), we return every reasonable interpretation and let
+// matchAnyTarget decide. False-positive wakeups are cheap (the next
+// snapshot resolves what's actually unread); false negatives would
+// hang the caller.
+//
+// Returned interpretations:
+//   2 parts (acct.X):      [{"", "X"}]                                   uncollared at root
+//   3 parts (acct.X.Y):    [{"X","Y"}, {"", "X.Y"}]                      collared OR manifold-uncollared
+//   4+ parts (acct...Y.Z): [{Y, Z}, {"", parts[1:].join(".")},           collared, root-uncollared-with-dots,
+//                           {parts[1:n-1].join("."), Z}]                 manifold-nested-uncollared
+func parseSubjectInterpretations(subject string) []struct{ Handle, Pipe string } {
+	parts := strings.Split(subject, ".")
+	if len(parts) < 2 {
+		return nil
+	}
+	rest := parts[1:] // drop accountID
+	switch len(rest) {
+	case 1:
+		return []struct{ Handle, Pipe string }{{"", rest[0]}}
+	case 2:
+		return []struct{ Handle, Pipe string }{
+			{rest[0], rest[1]},
+			{"", strings.Join(rest, ".")},
+		}
+	default:
+		last := rest[len(rest)-1]
+		penult := rest[len(rest)-2]
+		return []struct{ Handle, Pipe string }{
+			{penult, last},
+			{"", strings.Join(rest, ".")},
+			{strings.Join(rest[:len(rest)-1], "."), last},
+		}
+	}
 }
