@@ -14,7 +14,11 @@ OUT=/tmp/await-tail.out
 PID_FILE=/tmp/await-tail.pid
 rm -f "$OUT" "$PID_FILE"
 
-ppz_a await --tail alpha beta > "$OUT" 2>&1 &
+# exec replaces the backgrounded subshell with the ppz binary, so $!
+# captures ppz's PID directly. Without exec, $! is the subshell PID
+# and SIGINT lands on bash (which ignores it while waiting on its
+# child), leaving the ppz binary unsignaled.
+( exec env PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" ppz await --tail alpha beta ) > "$OUT" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 0.4
 
