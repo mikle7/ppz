@@ -10,15 +10,15 @@ import (
 	"github.com/pipescloud/ppz/internal/daemon"
 )
 
-// cmdDiag implements `ppz diag` — Phase 0 of the agent hardening plan
-// (docs/WIRE.md §8). Prints the daemon's NATS connection state plus
-// the recent tail of connection-state events (disconnect / reconnect /
-// closed). Useful for catching transient outages "a few minutes ago"
-// that aren't visible in `ppz status` because the connection has
-// since recovered.
+// cmdDiagnostics implements `ppz diagnostics`. Prints the daemon's NATS
+// connection state plus the recent tail of connection-state events
+// (disconnect / reconnect / closed) and daemon lifecycle events
+// (daemon_start / daemon_stop). Useful for catching transient outages
+// or daemon bounces "a few minutes ago" that aren't visible in
+// `ppz status` because the state has since recovered.
 //
 // The verb deliberately does NOT require login. An operator hitting
-// a sick daemon (login fails, NATS unreachable) needs `ppz diag` to
+// a sick daemon (login fails, NATS unreachable) needs diagnostics to
 // work — that's the entire point. We surface whatever ring buffer
 // state is available + the daemon's reachability over IPC.
 //
@@ -26,11 +26,12 @@ import (
 //
 //	<type> <RFC3339-timestamp> reason="<text>"
 //
-// Where type is one of disconnect / reconnect / closed. Reason is
-// quoted to keep the line shape parseable when it contains spaces.
+// Where type is one of disconnect / reconnect / closed /
+// daemon_start / daemon_stop. Reason is quoted to keep the line
+// shape parseable when it contains spaces.
 //
 // --json emits a single JSON object matching cliproto.DiagReply.
-func cmdDiag(args []string) error {
+func cmdDiagnostics(args []string) error {
 	asJSON := false
 	for _, a := range args {
 		if a == "--json" {

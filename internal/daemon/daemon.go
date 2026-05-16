@@ -35,7 +35,7 @@ type Daemon struct {
 
 	// Phase 0 (agent hardening) — short tail of NATS connection-state
 	// transitions. Surfaced by `ppz status` (latest state) and
-	// `ppz diag` (full ring). Initialised in New() so the handlers
+	// `ppz diagnostics` (full ring). Initialised in New() so the handlers
 	// registered on the very first nats.Connect have a non-nil ring
 	// to append to.
 	NATSEvents *NATSEventRing
@@ -63,6 +63,17 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return fmt.Errorf("write pid: %w", err)
 	}
 	defer os.Remove(filepath.Join(d.Home, filePID))
+
+	// Diagnostics ring: prime from the on-disk lifecycle log (so the
+	// previous daemon's stop event is observable here), then record our
+	// own start. The stop counterpart fires on shutdown below.
+	if d.NATSEvents != nil {
+		for _, ev := range loadLifecycleLog(d.Home) {
+			d.NATSEvents.Append(ev.Type, ev.Reason, ev.At)
+		}
+	}
+	d.recordDaemonLifecycle("daemon_start", "")
+	defer d.recordDaemonLifecycle("daemon_stop", "graceful")
 
 	if err := d.State.LoadFromDisk(); err != nil {
 		return fmt.Errorf("load state: %w", err)

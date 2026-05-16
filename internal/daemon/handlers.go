@@ -29,7 +29,7 @@ import (
 // (Phase 0 of agent hardening). Both connect helpers below splat these
 // onto every nats.Connect so disconnect / reconnect / closed transitions
 // land in the daemon's NATSEventRing — surfaced by `ppz status` and
-// `ppz diag`.
+// `ppz diagnostics`.
 //
 // Phase 0 is observe-only — no behaviour change. We do NOT pass
 // nats.MaxReconnects(-1) or jitter options here; those are Phase 1
@@ -330,7 +330,7 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	// If so, the fresh NC we're about to build represents a recovery —
 	// from the operator's perspective, the daemon "reconnected" to NATS.
 	// Record that signal alongside the nats.go-provided ReconnectHandler
-	// events so `ppz diag` surfaces both reconnect mechanisms.
+	// events so `ppz diagnostics` surfaces both reconnect mechanisms.
 	wasDisconnected := d.NC != nil && !d.NC.IsConnected()
 	nc, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.NATSEvents)
 	if err != nil {

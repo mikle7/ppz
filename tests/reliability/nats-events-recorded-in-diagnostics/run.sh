@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# RED for Phase 0 (docs/AGENT_HARDENING.md §"Phase 0 — Observability"):
-# the daemon must register NATS connection-event handlers AND surface
-# the recorded events through a `ppz diag` verb. Pinning both contracts
-# in one scenario so they evolve together.
+# Pins two contracts together (so they evolve together): the daemon
+# registers NATS connection-event handlers AND surfaces the recorded
+# events through `ppz diagnostics`.
 #
-# Today: no `ppz diag` verb exists; no DisconnectErrHandler /
-# ReconnectHandler are registered. So the assertion below produces
-# empty output (or an error from the unknown command) until Phase 0
-# ships.
+# History: this verb was originally `ppz diag` (Phase 0 of
+# docs/AGENT_HARDENING.md §"Phase 0 — Observability"); renamed to
+# `ppz diagnostics` so the spelling matches the rest of the operator-
+# facing surface — no two-letter mystery abbreviations.
 #
-# When green: `ppz diag` lists at least one disconnect and one
+# When green: `ppz diagnostics` lists at least one disconnect and one
 # reconnect event after a brief NATS outage. Each event line begins
 # with the event type token; further fields (timestamp, attempt
 # count, error string) are not pinned here.
@@ -33,10 +32,11 @@ docker start compose-ppz-server-1 >/dev/null
 # user-visible signal that recovery completed. Both stdout (the table
 # itself, which prints once `ls` succeeds) and stderr (errors during
 # the polling loop) need silencing — we're using `ls` purely as a
-# health probe; only the diag output below matters for the assertion.
+# health probe; only the diagnostics output below matters for the
+# assertion.
 wait_for 600 'ppz_a ls >/dev/null 2>&1'
 
-# `ppz diag` must list both events. Print just the event-type tokens
-# (sorted, deduped) so the assertion stays insensitive to ordering
-# and detail.
-ppz_a diag 2>/dev/null | grep -oE "^(disconnect|reconnect)" | sort -u
+# `ppz diagnostics` must list both events. Print just the event-type
+# tokens (sorted, deduped) so the assertion stays insensitive to
+# ordering and detail.
+ppz_a diagnostics 2>/dev/null | grep -oE "^(disconnect|reconnect)" | sort -u

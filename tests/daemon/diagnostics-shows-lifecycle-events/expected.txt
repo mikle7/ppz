@@ -1,0 +1,3 @@
+daemon_start
+daemon_stop
+exit=0

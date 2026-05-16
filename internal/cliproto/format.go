@@ -187,11 +187,11 @@ func normaliseVersionForCompare(v string) string {
 //
 // We deliberately keep the status line TERSE — just the current state
 // token. Per-event detail (timestamps, drop counters, error reasons)
-// lives in `ppz diag` instead. Surfacing drop counts here would have
+// lives in `ppz diagnostics` instead. Surfacing drop counts here would have
 // made `ppz status` fixtures flap whenever the daemon's lifetime
 // crossed an unrelated reconnect (test isolation issue: the ring
 // accumulates events across scenarios that share a daemon process).
-// `ppz diag` is the right place to look when you want detail.
+// `ppz diagnostics` is the right place to look when you want detail.
 //
 // State "" (daemon hasn't observed a NATS connection yet — fresh
 // process pre-login) renders as "unknown" so we don't lie.

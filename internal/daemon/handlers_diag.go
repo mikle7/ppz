@@ -13,7 +13,7 @@ import (
 // of connection-state events.
 //
 // CRITICAL: this handler must succeed even when the daemon has no
-// credentials and no NATS connection. The whole point of `ppz diag`
+// credentials and no NATS connection. The whole point of `ppz diagnostics`
 // is being able to introspect a sick daemon — if the verb itself
 // requires login or a live NATS connection, an operator can't use it
 // in the failure modes it's designed to surface.
