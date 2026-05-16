@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -136,3 +137,70 @@ func TestPickAwaitTarget_TieBreakLexicographic(t_ *testing.T) {
 		t_.Fatalf("pickAwaitTarget tie-break = (%q, %q, %v), want (alice, inbox, true)", h, p, ok)
 	}
 }
+
+// defaultPatternsFromSnapshot expands `ppz await` (no args) to the
+// concrete pattern list it should watch:
+//   - <current>.inbox
+//   - every uncollared pipe AT the current manifold (root if empty)
+//
+// Cross-manifold uncollared pipes are NOT included; the user's example
+// in this thread was unambiguous on the namespace-scoped intent.
+//
+// All sub-cases below should pass once the helper is implemented.
+// RED today: the stub returns nil.
+func uc(manifold, name string) cliproto.UncollaredPipe {
+	displayPath := name
+	if manifold != "" {
+		displayPath = manifold + "." + name
+	}
+	return cliproto.UncollaredPipe{
+		Manifold: manifold,
+		Name:     name,
+		Info:     cliproto.PipeInfo{Pipe: displayPath},
+	}
+}
+
+func TestDefaultPatternsFromSnapshot_InboxOnly_NoUncollared(t_ *testing.T) {
+	got := defaultPatternsFromSnapshot("foo", "", nil)
+	want := []string{"foo.inbox"}
+	if !reflect.DeepEqual(got, want) {
+		t_.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestDefaultPatternsFromSnapshot_RootIncludesRootUncollared(t_ *testing.T) {
+	got := defaultPatternsFromSnapshot("foo", "", []cliproto.UncollaredPipe{
+		uc("", "room"),
+		uc("", "plaza"),
+	})
+	want := []string{"foo.inbox", "room", "plaza"}
+	if !reflect.DeepEqual(got, want) {
+		t_.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestDefaultPatternsFromSnapshot_RootExcludesNamespacedUncollared(t_ *testing.T) {
+	got := defaultPatternsFromSnapshot("foo", "", []cliproto.UncollaredPipe{
+		uc("", "room"),
+		uc("team-a", "chat"),
+		uc("team-b", "chat"),
+	})
+	want := []string{"foo.inbox", "room"}
+	if !reflect.DeepEqual(got, want) {
+		t_.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestDefaultPatternsFromSnapshot_NamespaceScoped(t_ *testing.T) {
+	got := defaultPatternsFromSnapshot("foo", "team-a", []cliproto.UncollaredPipe{
+		uc("", "room"),         // root — must be excluded
+		uc("team-a", "chat"),   // current ns — must be included
+		uc("team-a", "lobby"),  // current ns — must be included
+		uc("team-b", "chat"),   // other ns — must be excluded
+	})
+	want := []string{"foo.inbox", "team-a.chat", "team-a.lobby"}
+	if !reflect.DeepEqual(got, want) {
+		t_.Fatalf("got %v, want %v", got, want)
+	}
+}
+
