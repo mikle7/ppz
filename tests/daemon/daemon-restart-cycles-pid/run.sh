@@ -4,8 +4,8 @@
 # operators don't have to chain commands after `ppz status` reports the
 # red "daemon out of sync with ppz cli" state.
 #
-# Output: one "daemon stopped pid=PID" line then one "daemon started
-# pid=PID" line, both at exit=0.
+# Asserts the PID actually changes (otherwise the verb could
+# silently no-op and we'd still see two normalized "pid=PID" lines).
 . /tests/lib/common.sh
 
 HOME_K=/tmp/k-restart
@@ -19,4 +19,11 @@ cleanup() {
 trap cleanup EXIT
 
 PPZ_HOME=$HOME_K PPZ_IPC_SOCKET=$SOCK ppz daemon start >/dev/null
+PID_BEFORE=$(cat "$HOME_K/daemon.pid")
 PPZ_HOME=$HOME_K PPZ_IPC_SOCKET=$SOCK ppz daemon restart
+PID_AFTER=$(cat "$HOME_K/daemon.pid")
+if [[ "$PID_BEFORE" != "$PID_AFTER" ]]; then
+  echo "pid-cycled: yes"
+else
+  echo "pid-cycled: no"
+fi
