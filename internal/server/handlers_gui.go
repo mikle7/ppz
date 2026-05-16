@@ -67,13 +67,38 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	if user, err := db.GetUser(ctx, s.Pool, uid); err == nil {
 		invites, _ = db.ListPendingInvitesForUsername(ctx, s.Pool, user.Username)
 	}
+	// Onboarding: if the user has no pipes anywhere they own/belong
+	// to, render the get-started panel on the dashboard. Failure here
+	// is non-fatal — false negatives just hide the panel from someone
+	// who'd benefit from it, never blocks the page.
+	hasAnyPipe, _ := db.UserHasAnyPipe(ctx, s.Pool, uid)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := s.base()
 	data["Orgs"] = orgs
 	data["Invites"] = invites
+	data["HasNoPipes"] = !hasAnyPipe
+	// SiteURL is the scheme+host the browser used to reach us. Shown
+	// verbatim in the onboarding `ppz login <url>` step so the user
+	// can copy/paste a working command — pointing at the site they're
+	// looking at, not at a hard-coded localhost.
+	data["SiteURL"] = siteURL(r)
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
+}
+
+// siteURL reconstructs the browser-facing origin (scheme://host) from
+// the current request. Honours the X-Forwarded-Proto header so reverse-
+// proxied https deployments render correctly.
+func siteURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+	return scheme + "://" + r.Host
 }
 
 func (s *Server) handleGUICreateOrg(w http.ResponseWriter, r *http.Request) {

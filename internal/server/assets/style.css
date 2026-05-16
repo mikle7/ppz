@@ -285,17 +285,6 @@ body[data-page="landing"] {
   font-size: 1rem;
   line-height: 1.5;
 }
-.hero-examples {
-  margin: 0 auto 1.75rem;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-.hero-examples code {
-  background: rgba(255,255,255,0.06);
-  color: #d6deeb;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-  font-size: 0.85em;
 }
 .hero-cta {
   margin: 0;
@@ -336,288 +325,158 @@ body[data-page="landing"] {
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: #888;
+  }
 }
-/* One-line install snippet under the CTA row. Visually a code box
-   the user can triple-click and copy. NB: the URL here points to a
-   curl installer that doesn't exist yet (task #86) — the visual is
-   in place ahead of the script landing. */
-.hero-install {
+
+/* ─── pipescloud marketing chrome ─── */
+/* Admin server footer — version pin shown on /dashboard. */
+.hero-footer .server-version { margin-left: 1rem; font-size: 0.75rem; opacity: 0.5; }
+.server-footer { text-align: center; padding: 1rem; font-size: 0.75rem; color: var(--muted); opacity: 0.6; }
+
+/* Get-started onboarding panel on /dashboard. Each step has a
+   pre+copy-btn pair — reuses the .hero-install copy-btn pattern. */
+.onboarding-steps {
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.onboarding-steps > li {
+  counter-increment: step;
   position: relative;
-  display: inline-block;
-  margin: 1.4rem auto 0;
-  padding: 0.6rem 2.4rem 0.6rem 1rem;
-  background: #1a1a18;
-  border: 1px solid #353532;
-  border-radius: 6px;
-  color: #ececea;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85rem;
-  white-space: pre;
-  overflow-x: auto;
-  max-width: 90vw;
+  margin: 0 0 1.25rem;
+  padding-left: 2.25rem;
 }
-.hero-install code { font: inherit; color: inherit; }
-/* Copy-to-clipboard button. The generic `button` rule above paints
-   it cobalt with white text — we override here to a subtle ghost
-   button that sits in the top-right of the install snippet. The
-   .copied class swaps clipboard icon for a checkmark for 1.5s after
-   a successful copy (added by the inline script in landing.html). */
-.hero-install .copy-btn {
+.onboarding-steps > li::before {
+  content: counter(step);
   position: absolute;
-  top: 4px;
-  right: 4px;
-  padding: 4px 6px;
-  background: transparent;
-  color: #92928e;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
+  left: 0;
+  top: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 0;
-}
-.hero-install .copy-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ececea;
-}
-.hero-install .copy-btn .check-icon { display: none; }
-.hero-install .copy-btn.copied { color: #5fb87a; }
-.hero-install .copy-btn.copied .copy-icon { display: none; }
-.hero-install .copy-btn.copied .check-icon { display: inline; }
-
-.demos {
-  max-width: 1100px;
-  margin: 3rem auto;
-  padding: 0 1.5rem;
-}
-.demos h2 {
-  text-align: center;
-  margin: 0 0 0.4rem;
-  font-weight: 500;
-}
-.demos-blurb {
-  text-align: center;
-  color: var(--muted);
-  margin: 0 0 2.5rem;
-}
-.demo-pair {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.5rem;
-  margin: 0 0 7rem;
-  /* Whichever demo is currently in the viewport's centre band gets
-     `.in-focus` (set by typewriter.js IntersectionObserver). Demos
-     above and below fade toward the page background so they don't
-     compete with the one the reader is actually looking at. */
-  opacity: 0.18;
-  filter: blur(1px);
-  transition: opacity 0.5s ease, filter 0.5s ease;
-}
-.demo-pair.in-focus {
-  opacity: 1;
-  filter: none;
-}
-/* Two-sender / one-receiver "monitor" layout: top row splits into
-   columns for the parallel sender terminals; the receiver below
-   spans full-width. Collapses to single-column on narrow screens. */
-.demo-pair .senders {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-@media (max-width: 720px) {
-  .demo-pair .senders { grid-template-columns: 1fr; }
-}
-.demo-pair h3 {
-  font-size: 1.4rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text);
-  margin: 0 0 0.6rem;
-  text-align: center;
-  letter-spacing: -0.01em;
 }
-.demo-blurb {
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.9rem;
-  margin: 0 0 0.75rem;
-}
-.demo-blurb code {
-  background: rgba(37, 99, 235, 0.08);
-  color: var(--accent);
-  padding: 0.05rem 0.4rem;
-  border-radius: 4px;
-}
-/* Highlighted Unix `|` in the "you can also | to pipes" heading.
-   Sits inline with the heading text but coloured cobalt to make
-   the joke land. */
-.demo-pair h3 .hl-pipe {
-  background: rgba(37, 99, 235, 0.12);
-  color: var(--btn-bg);
-  padding: 0 0.45rem;
-  border-radius: 4px;
-  font: inherit;
-  font-weight: 700;
-}
-/* Tinted left edge on PTY-shared agent panes so they read as
-   "this is what claude/copilot looks like, captured live" rather
-   than as a generic terminal. */
-.pty-claude  { border-left: 3px solid #b87a99; }
-.pty-copilot { border-left: 3px solid #a78bfa; }
-/* Browser-frame wrapper for the "remote monitor" demo. Its inner
-   .pane mirrors the sender pane on the left; the chrome around it
-   makes the second view obviously a browser viewport rather than
-   another terminal. */
-.browser-frame {
-  border: 1px solid #3a3a37;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #1a1a18;
-  display: flex;
-  flex-direction: column;
-}
-.browser-frame .pane {
-  border-radius: 0;
-  border-left: 0;
-  flex: 1;
-}
-.browser-chrome {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.6rem;
-  background: #2a2a28;
-  border-bottom: 1px solid #3a3a37;
-}
-.browser-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-}
-.browser-dot.dot-r { background: #ff5f56; }
-.browser-dot.dot-y { background: #ffbd2e; }
-.browser-dot.dot-g { background: #27c93f; }
-.browser-url {
-  flex: 1;
-  text-align: center;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.72rem;
-  color: #8a8a85;
-  background: #1a1a18;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  border: 1px solid #353532;
-  margin: 0 0.4rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.pane .cmd {
-  /* User-input rows (prompt + typed command) — bright blue so they
-     stand out against the muted output text. */
-  color: #60a5fa;
-  font-weight: 500;
-}
-.pane {
+.onboarding-cmd {
+  position: relative;
   background: #0d1117;
   color: #d6deeb;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
   line-height: 1.5;
   border-radius: 8px;
-  padding: 1rem 1.25rem;
-  margin: 0;
-  min-height: 9rem;
-  white-space: pre;
-  overflow: hidden;
-  cursor: pointer;
+  padding: 0.75rem 2.75rem 0.75rem 1rem;
+  margin: 0.5rem 0 0;
   border: 1px solid #1f2933;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
-
-/* Pipe segment between sender + receiver. Renders a faint vertical
-   tube anchored to the centre of each terminal pair, with a tiny
-   "ppz" label badged in the middle. The packet is a small accent-
-   coloured dot that animates from top → bottom whenever the pair
-   gains the `.fire` class (typewriter.js sets+clears it between
-   sender finishing and receiver starting). */
-.pipe {
-  position: relative;
-  height: 3.5rem;
-  margin: -0.25rem auto;
-  width: 100%;
-  display: flex;
+.onboarding-cmd code { font: inherit; color: inherit; background: transparent; padding: 0; }
+.onboarding-cmd .copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid #2a3a47;
+  background: rgba(255, 255, 255, 0.05);
+  color: #8a9bab;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.25rem;
 }
-.pipe::before {
-  /* The tube itself: a vertical line behind the label. */
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  transform: translateX(-50%);
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    var(--accent) 20%,
-    var(--accent) 80%,
-    transparent 100%
-  );
-  opacity: 0.35;
-}
-.pipe-label {
-  position: relative;
-  z-index: 2;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--bg);
-  padding: 0.15rem 0.6rem;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  letter-spacing: 0.05em;
-}
-.packet {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  transform: translate(-50%, -50%);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-.demo-pair.fire .packet {
-  /* Travel from above the pipe to below it, fading in on entry and
-     out on exit so the ends look natural. */
-  animation: packet-fly 1100ms cubic-bezier(0.4, 0, 0.6, 1);
-}
-@keyframes packet-fly {
-  0%   { top: -10%; opacity: 0; }
-  20%  { opacity: 1; }
-  80%  { opacity: 1; }
-  100% { top: 110%; opacity: 0; }
-}
-.demo-pair.fire .pipe::before {
-  opacity: 0.7;
-  transition: opacity 0.2s;
-}
+.onboarding-cmd .copy-btn:hover { background: rgba(255, 255, 255, 0.1); color: #d6deeb; }
+.onboarding-cmd .copy-btn .check-icon { display: none; }
+.onboarding-cmd .copy-btn.copied { color: #5fb87a; border-color: #5fb87a; }
+.onboarding-cmd .copy-btn.copied .copy-icon { display: none; }
+.onboarding-cmd .copy-btn.copied .check-icon { display: inline; }
 
-.hero-footer {
-  text-align: center;
-  padding: 2rem 1rem 3rem;
-  color: var(--muted);
+/* Admin-page mobile rules. Co-located with the existing demo-pair
+   @media block above for cohesion; viewport meta tag landed alongside
+   these — without it the breakpoint never fires on phones and the
+   page renders at 980px-scaled-to-fit ("tiny on mobile"). */
+@media (max-width: 720px) {
+  main {
+    padding: 0 0.75rem;
+  }
+  .brand h1 {
+    font-size: 1.1rem;
+    line-height: 1.3;
+  }
+  .brand .crumbs {
+    font-size: 0.85rem;
+    word-break: break-all;
+  }
+  nav.tabs {
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0.75rem 0;
+  }
+  nav.tabs a {
+    padding: 0.5rem 0.25rem;
+    border-bottom: 1px solid transparent;
+    margin-bottom: 0;
+  }
+  nav.tabs a.active {
+    background: rgba(37, 99, 235, 0.06);
+    border-left: 3px solid var(--accent);
+    border-bottom-color: transparent;
+    padding-left: 0.5rem;
+  }
+  .panel-form,
+  main form {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .panel-form input,
+  .panel-form button,
+  main form input,
+  main form button {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.25rem;
+  }
+  .panel-form label,
+  main form label {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  #pipes {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  #pipes thead, #pipes tbody, #pipes tr {
+    display: table;
+    width: 100%;
+    table-layout: auto;
+  }
+  .hero-cta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hero-cta .btn-primary,
+  .hero-cta .btn-secondary {
+    width: 100%;
+    text-align: center;
+  }
+  .hero-install {
+    max-width: 100%;
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .onboarding-cmd {
+    font-size: 0.75rem;
+    padding: 0.6rem 2.5rem 0.6rem 0.75rem;
+  }
 }
-.hero-footer a { color: var(--accent); text-decoration: none; }
-.hero-footer a:hover { text-decoration: underline; }
-.hero-footer .server-version { margin-left: 1rem; font-size: 0.75rem; opacity: 0.5; }
-.server-footer { text-align: center; padding: 1rem; font-size: 0.75rem; color: var(--muted); opacity: 0.6; }
