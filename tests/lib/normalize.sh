@@ -60,6 +60,10 @@ sed_args+=(-e 's/^ppz [^ ]+ \([^)]+\)$/ppz VERSION (SHA)/')
 
 # `ppz status` daemon line includes the daemon build version. Normalize it so
 # tagged, dirty, and local builds all diff against the same expected.txt.
-sed_args+=(-e 's/^(daemon: .*\(pid=PID\), )[^ ]+ \(((not )?latest)\)$/\1VERSION (\2)/')
+# Three states (since v0.31.9):
+#   (latest)                                                       — green
+#   (update available, run 'ppz upgrade')                          — amber
+#   (daemon out of sync with ppz cli, run 'ppz daemon restart')    — red
+sed_args+=(-e "s/^(daemon: .*\(pid=PID\), )[^ ]+ \((latest|update available, run 'ppz upgrade'|daemon out of sync with ppz cli, run 'ppz daemon restart')\)$/\1VERSION (\2)/")
 
 exec sed "${sed_args[@]}"

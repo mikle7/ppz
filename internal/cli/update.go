@@ -29,22 +29,40 @@ type updateManifest struct {
 	ReleaseURL    string `json:"release_url,omitempty"`
 }
 
-func maybeNotifyUpdate() {
+// fetchLatestIfNewer is the single point where we decide "is the CLI
+// behind the manifest". Both the stderr nudge (maybeNotifyUpdate) and
+// the `ppz status` amber state (updateAvailableForCLI) route through
+// here so the skip rules — PPZ_UPDATE_CHECK=0, dev/dirty builds,
+// fetch failure — apply uniformly.
+//
+// Returns the manifest's latest version string and a bool indicating
+// whether it's strictly newer than the running CLI. ("", false) means
+// "we don't know" (skip path); the boolean alone is what callers
+// usually need.
+func fetchLatestIfNewer() (string, bool) {
 	if os.Getenv("PPZ_UPDATE_CHECK") == "0" {
-		return
+		return "", false
 	}
 	if !isExactReleaseVersion(version.Version) {
-		return
+		return "", false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
 	defer cancel()
 
 	manifest, err := fetchUpdateManifest(ctx)
-	if err != nil || !isNewerVersion(manifest.LatestVersion, version.Version) {
+	if err != nil {
+		return "", false
+	}
+	return manifest.LatestVersion, isNewerVersion(manifest.LatestVersion, version.Version)
+}
+
+func maybeNotifyUpdate() {
+	latest, newer := fetchLatestIfNewer()
+	if !newer {
 		return
 	}
 	msg := fmt.Sprintf("update available: ppz %s (current %s); run 'ppz upgrade'",
-		normaliseVersionForDisplay(manifest.LatestVersion), normaliseVersionForDisplay(version.Version))
+		normaliseVersionForDisplay(latest), normaliseVersionForDisplay(version.Version))
 	if useStderrColor() {
 		// 33 = yellow / amber. Informational tone — distinct from the
 		// red used elsewhere for hard-error states ("not running",
@@ -52,6 +70,14 @@ func maybeNotifyUpdate() {
 		msg = "\x1b[33m" + msg + "\x1b[0m"
 	}
 	fmt.Fprintln(os.Stderr, msg)
+}
+
+// updateAvailableForCLI returns true when the running CLI binary is
+// behind the published manifest. Used by `ppz status` to drive the
+// daemon line's amber state.
+func updateAvailableForCLI() bool {
+	_, newer := fetchLatestIfNewer()
+	return newer
 }
 
 // useStderrColor decides whether the update notice (written to stderr)

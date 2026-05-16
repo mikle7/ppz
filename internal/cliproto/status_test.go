@@ -160,7 +160,7 @@ func TestPrintStatus_ColorsDaemonVersionByCLIMatch(t *testing.T) {
 			name:          "red when daemon differs from cli",
 			daemonVersion: "v0.17.9",
 			cliVersion:    "v0.18.0",
-			wantLine:      "daemon: \x1b[32mlogged in\x1b[0m (pid=12953), \x1b[31mv0.17.9\x1b[0m (not latest)\n",
+			wantLine:      "daemon: \x1b[32mlogged in\x1b[0m (pid=12953), \x1b[31mv0.17.9\x1b[0m (daemon out of sync with ppz cli, run 'ppz daemon restart')\n",
 		},
 	}
 
@@ -193,8 +193,75 @@ func TestPrintStatus_ClarifiesUnknownDaemonVersion(t *testing.T) {
 		Current:   "foo",
 	}, "", "", false, "v0.18.0")
 
-	wantLine := "daemon: logged in (pid=12953), version unknown (not latest)\n"
+	wantLine := "daemon: logged in (pid=12953), version unknown (daemon out of sync with ppz cli, run 'ppz daemon restart')\n"
 	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantLine)) {
 		t.Fatalf("status output missing clarified unknown daemon version\nwant line: %q\ngot:\n%q", wantLine, got)
+	}
+}
+
+// TestPrintStatus_AmberWhenUpdateAvailable covers the amber state of the
+// new three-state daemon line: the daemon and CLI agree on version (so
+// the operator doesn't need to restart the daemon) but a newer release
+// exists on the update manifest, so the recommended action is `ppz upgrade`.
+//
+// updateAvailable=true is the caller's say-so — the cliproto formatter
+// stays pure; the CLI does the actual manifest fetch + version compare
+// and hands the resolved boolean here.
+func TestPrintStatus_AmberWhenUpdateAvailable(t *testing.T) {
+	var b bytes.Buffer
+	PrintStatusWithUpdateInfo(&b, StatusReply{
+		DaemonPID:     12953,
+		DaemonVersion: "v0.31.6",
+		LoggedIn:      true,
+		URL:           "https://pipescloud.io",
+		AccountName:   "jamesmiles",
+		Current:       "foo",
+	}, "", "", true, "v0.31.6", true)
+
+	wantLine := "daemon: \x1b[32mlogged in\x1b[0m (pid=12953), \x1b[33mv0.31.6\x1b[0m (update available, run 'ppz upgrade')\n"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantLine)) {
+		t.Fatalf("status output missing amber update-available line\nwant line: %q\ngot:\n%q", wantLine, got)
+	}
+}
+
+// TestPrintStatus_GreenWhenLatestAndNoUpdate confirms the green state
+// still renders "(latest)" when the daemon agrees with the CLI AND the
+// caller has resolved that no upgrade is available.
+func TestPrintStatus_GreenWhenLatestAndNoUpdate(t *testing.T) {
+	var b bytes.Buffer
+	PrintStatusWithUpdateInfo(&b, StatusReply{
+		DaemonPID:     12953,
+		DaemonVersion: "v0.31.6",
+		LoggedIn:      true,
+		URL:           "https://pipescloud.io",
+		AccountName:   "jamesmiles",
+		Current:       "foo",
+	}, "", "", true, "v0.31.6", false)
+
+	wantLine := "daemon: \x1b[32mlogged in\x1b[0m (pid=12953), \x1b[32mv0.31.6\x1b[0m (latest)\n"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantLine)) {
+		t.Fatalf("status output missing green latest line\nwant line: %q\ngot:\n%q", wantLine, got)
+	}
+}
+
+// TestPrintStatus_RedOutOfSyncTakesPriorityOverUpdate: if the daemon is
+// out of sync with the CLI, the operator's first job is to restart the
+// daemon — only AFTER the daemon picks up the new CLI binary should the
+// upgrade prompt appear. So an update-available bool is overridden by
+// the version mismatch state.
+func TestPrintStatus_RedOutOfSyncTakesPriorityOverUpdate(t *testing.T) {
+	var b bytes.Buffer
+	PrintStatusWithUpdateInfo(&b, StatusReply{
+		DaemonPID:     12953,
+		DaemonVersion: "v0.31.5",
+		LoggedIn:      true,
+		URL:           "https://pipescloud.io",
+		AccountName:   "jamesmiles",
+		Current:       "foo",
+	}, "", "", true, "v0.31.6", true)
+
+	wantLine := "daemon: \x1b[32mlogged in\x1b[0m (pid=12953), \x1b[31mv0.31.5\x1b[0m (daemon out of sync with ppz cli, run 'ppz daemon restart')\n"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantLine)) {
+		t.Fatalf("status output missing red out-of-sync line\nwant line: %q\ngot:\n%q", wantLine, got)
 	}
 }

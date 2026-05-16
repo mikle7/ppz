@@ -1,0 +1,4 @@
+daemon stopped pid=PID
+daemon started pid=PID
+pid-cycled: yes
+exit=0

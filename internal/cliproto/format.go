@@ -63,6 +63,7 @@ func PrintStatus(w io.Writer, s StatusReply) {
 type statusColors struct {
 	green func(string) string // healthy state, e.g. "logged in", current handle
 	red   func(string) string // bad state, e.g. "not running", "authentication error"
+	amber func(string) string // soft warning, e.g. "update available" upgrade nudge
 	dim   func(string) string // muted, e.g. "-" placeholder for unset current
 }
 
@@ -76,6 +77,7 @@ func newStatusColors(enabled bool) statusColors {
 	return statusColors{
 		green: wrap("32"),
 		red:   wrap("31"),
+		amber: wrap("33"),
 		dim:   wrap("2"),
 	}
 }
@@ -101,18 +103,28 @@ func PrintStatusWithEnv(w io.Writer, s StatusReply, envCurrent, currentJsonPath 
 }
 
 func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, currentJsonPath string, color bool, cliVersion string) {
+	PrintStatusWithUpdateInfo(w, s, envCurrent, currentJsonPath, color, cliVersion, false)
+}
+
+// PrintStatusWithUpdateInfo is the canonical `ppz status` printer.
+// updateAvailable is the caller's resolved view of "is the CLI behind
+// the published manifest" — when true AND daemon == CLI, the daemon
+// line renders amber and recommends `ppz upgrade`. Out-of-sync wins
+// over update-available (restart first, upgrade after); see status_test
+// TestPrintStatus_RedOutOfSyncTakesPriorityOverUpdate.
+func PrintStatusWithUpdateInfo(w io.Writer, s StatusReply, envCurrent, currentJsonPath string, color bool, cliVersion string, updateAvailable bool) {
 	c := newStatusColors(color)
 	if s.DaemonPID == 0 {
 		fmt.Fprintf(w, "daemon: %s\n", c.red("not running"))
 		return
 	}
 	if !s.LoggedIn {
-		fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.red("not logged in"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion))
+		fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.red("not logged in"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion, updateAvailable))
 		fmt.Fprintln(w, "hint: run 'ppz login URL -apikey K'")
 		return
 	}
 	if s.LoginCheck == LoginCheckInvalid {
-		fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.red("authentication error"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion))
+		fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.red("authentication error"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion, updateAvailable))
 		fmt.Fprintf(w, "server: %s\n", s.URL)
 		fmt.Fprintln(w, "hint: run 'ppz login URL -apikey K' to refresh")
 		return
@@ -120,7 +132,7 @@ func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, cur
 	// LoginCheck is "ok" or "" (probe failed for transient reasons —
 	// don't lie, but also don't refuse to render). Treat both as the
 	// happy path; the next server-touching call will refresh the cache.
-	fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.green("logged in"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion))
+	fmt.Fprintf(w, "daemon: %s (pid=%d)%s\n", c.green("logged in"), s.DaemonPID, daemonVersionSuffix(c, s.DaemonVersion, cliVersion, updateAvailable))
 	if s.LastTokenRefreshAt != nil {
 		fmt.Fprintf(w, "last token refresh: %s\n", coloredTokenRefreshAge(c, *s.LastTokenRefreshAt, timeNow()))
 	} else {
@@ -156,7 +168,18 @@ func PrintStatusWithEnvAndCLIVersion(w io.Writer, s StatusReply, envCurrent, cur
 	}
 }
 
-func daemonVersionSuffix(c statusColors, daemonVersion, cliVersion string) string {
+// daemonVersionSuffix renders the trailing `, <version> (<state>)`
+// portion of the daemon line. Three states:
+//
+//   - red "(daemon out of sync with ppz cli, run 'ppz daemon restart')"
+//     when the daemon binary's version doesn't match the CLI's. Trumps
+//     update-available because the daemon must come back in sync before
+//     any upgrade message is meaningful.
+//   - amber "(update available, run 'ppz upgrade')" when daemon == CLI
+//     AND the caller resolved that a newer release is on the manifest.
+//   - green "(latest)" otherwise (daemon == CLI AND no update available
+//     OR update check skipped).
+func daemonVersionSuffix(c statusColors, daemonVersion, cliVersion string, updateAvailable bool) string {
 	if strings.TrimSpace(cliVersion) == "" {
 		return ""
 	}
@@ -164,10 +187,13 @@ func daemonVersionSuffix(c statusColors, daemonVersion, cliVersion string) strin
 	if display == "" {
 		display = "version unknown"
 	}
-	if versionsMatch(display, cliVersion) {
-		return fmt.Sprintf(", %s (latest)", c.green(display))
+	if !versionsMatch(display, cliVersion) {
+		return fmt.Sprintf(", %s (daemon out of sync with ppz cli, run 'ppz daemon restart')", c.red(display))
 	}
-	return fmt.Sprintf(", %s (not latest)", c.red(display))
+	if updateAvailable {
+		return fmt.Sprintf(", %s (update available, run 'ppz upgrade')", c.amber(display))
+	}
+	return fmt.Sprintf(", %s (latest)", c.green(display))
 }
 
 func versionsMatch(a, b string) bool {
