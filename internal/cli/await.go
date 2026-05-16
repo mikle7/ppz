@@ -129,18 +129,11 @@ func defaultPatternsFromSnapshot(currentHandle, currentManifold string, uncollar
 			continue
 		}
 		// Info.Pipe is the already-formatted dotted path
-		// ("manifold.name" or just "name"). Use it verbatim so the
-		// daemon-side matcher sees the same string the user would
-		// see in `ppz ls`.
-		path := uc.Info.Pipe
-		if path == "" {
-			// Defensive: fall back to manual format if Info isn't filled.
-			path = uc.Name
-			if uc.Manifold != "" {
-				path = uc.Manifold + "." + uc.Name
-			}
-		}
-		patterns = append(patterns, path)
+		// ("manifold.name" or just "name") — both daemon
+		// construction sites (handleList + buildFilteredList) fill it
+		// unconditionally via cliproto.FormatPipePath, so we trust it
+		// rather than re-formatting.
+		patterns = append(patterns, uc.Info.Pipe)
 	}
 	return patterns
 }

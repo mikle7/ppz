@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -162,7 +163,7 @@ func uc(manifold, name string) cliproto.UncollaredPipe {
 func TestDefaultPatternsFromSnapshot_InboxOnly_NoUncollared(t_ *testing.T) {
 	got := defaultPatternsFromSnapshot("foo", "", nil)
 	want := []string{"foo.inbox"}
-	if !equalStringSlice(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t_.Fatalf("got %v, want %v", got, want)
 	}
 }
@@ -173,7 +174,7 @@ func TestDefaultPatternsFromSnapshot_RootIncludesRootUncollared(t_ *testing.T) {
 		uc("", "plaza"),
 	})
 	want := []string{"foo.inbox", "room", "plaza"}
-	if !equalStringSlice(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t_.Fatalf("got %v, want %v", got, want)
 	}
 }
@@ -185,7 +186,7 @@ func TestDefaultPatternsFromSnapshot_RootExcludesNamespacedUncollared(t_ *testin
 		uc("team-b", "chat"),
 	})
 	want := []string{"foo.inbox", "room"}
-	if !equalStringSlice(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t_.Fatalf("got %v, want %v", got, want)
 	}
 }
@@ -198,19 +199,8 @@ func TestDefaultPatternsFromSnapshot_NamespaceScoped(t_ *testing.T) {
 		uc("team-b", "chat"),   // other ns — must be excluded
 	})
 	want := []string{"foo.inbox", "team-a.chat", "team-a.lobby"}
-	if !equalStringSlice(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t_.Fatalf("got %v, want %v", got, want)
 	}
 }
 
-func equalStringSlice(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
