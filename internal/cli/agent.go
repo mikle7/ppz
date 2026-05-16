@@ -172,7 +172,7 @@ Useful commands:
   ppz send <handle> <text>  send a message to another agent
   ppz send <pipe> <text>    send a message to a pipe
 
-Create a persistent Monitor running ` + "`while true; do PPZ_SESSION=" + handle + " ppz ls --watch 2>/dev/null || sleep 1; done`" + ` that fires a PushNotification on each new message arrival. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited.`
+Create a persistent Monitor running ` + "`while true; do PPZ_SESSION=" + handle + " ppz ls --watch 2>/dev/null; sleep 60; done`" + ` that fires a PushNotification on each new message arrival. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited. The trailing sleep 60 throttles the loop: ls --watch is non-destructive, so without it the loop would re-fire immediately on every iteration as long as any pipe still has unread, flooding you with duplicate events until you ` + "`ppz read`" + ` to clear them.`
 }
 
 // buildAgentArgv returns the argv that runs *inside* the wrapped pty

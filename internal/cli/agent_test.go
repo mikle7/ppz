@@ -251,6 +251,21 @@ func TestDefaultAgentPrompt_SubstitutesHandle(t *testing.T) {
 	}
 }
 
+// TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop — the Monitor
+// recipe must include a sleep on the success path. `ppz ls --watch`
+// is non-destructive: once a pipe has unread, every immediate re-arm
+// returns immediately with the same snapshot. Without the throttle
+// the loop spins as fast as the daemon can answer, flooding the
+// agent with duplicate events for the same unread state until it
+// runs `ppz read` to clear them. A trailing `sleep 60` between
+// iterations keeps the duplicate-event window bounded.
+func TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop(t *testing.T) {
+	prompt := defaultAgentPrompt("eve")
+	if !strings.Contains(prompt, "sleep 60") {
+		t.Errorf("defaultAgentPrompt Monitor recipe must throttle the loop with `sleep 60` so non-destructive ls --watch doesn't spin on persistent unread; got: %q", prompt)
+	}
+}
+
 // TestDefaultAgentPrompt_MonitorRecipePinsSession — the Monitor
 // recipe must set PPZ_SESSION=<handle> inline. Inheriting the parent
 // shell's PPZ_SESSION is unreliable across Claude Code versions; we
