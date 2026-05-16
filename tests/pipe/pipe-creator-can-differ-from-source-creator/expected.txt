@@ -1,3 +1,4 @@
+{"handle":"chat","pipe":"heartbeat","creator":"foo"}
 {"handle":"chat","pipe":"inbox","creator":"foo"}
 {"handle":"chat","pipe":"notes","creator":"bar"}
 {"handle":"chat","pipe":"stdctrl","creator":"foo"}

@@ -1,11 +1,14 @@
+alpha.heartbeat 0 0 - - foo
 alpha.inbox 0 0 - - foo
 alpha.stdctrl 0 0 - - foo
 alpha.stdin 0 0 - - foo
 alpha.stdout 0 0 - - foo
+beta.heartbeat 0 0 - - foo
 beta.inbox 0 0 - - foo
 beta.stdctrl 0 0 - - foo
 beta.stdin 0 0 - - foo
 beta.stdout 0 0 - - foo
+gamma.heartbeat 0 0 - - foo
 gamma.inbox 0 0 - - foo
 gamma.stdctrl 0 0 - - foo
 gamma.stdin 0 0 - - foo

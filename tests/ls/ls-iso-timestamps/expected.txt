@@ -1,4 +1,5 @@
 PIPE UNREAD BUFFERED LAST PAYLOAD CREATOR
+chat.heartbeat 0 0 - - foo
 chat.inbox 1 1 TIMESTAMP iso row foo
 chat.stdctrl 0 0 - - foo
 chat.stdin 0 0 - - foo

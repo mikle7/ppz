@@ -1,7 +1,9 @@
+chat:heartbeat::
 chat:inbox:RELATIVE:hello table
 chat:stdctrl::
 chat:stdin::
 chat:stdout::
+/orgs/alpha/sources/chat/pipes/heartbeat
 /orgs/alpha/sources/chat/pipes/inbox
 /orgs/alpha/sources/chat/pipes/stdctrl
 /orgs/alpha/sources/chat/pipes/stdin

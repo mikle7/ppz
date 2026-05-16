@@ -24,5 +24,6 @@ echo "$PAGE" \
   | grep -oE 'data-source-row="foo:[^"]+"' \
   | sed -E 's/data-source-row="([^"]+)"/\1/' \
   | sed -E 's/:(just now|[0-9]+ (seconds?|minutes?|hours?|days?) ago):/:RELATIVE:/' \
-  | sed -E 's|:RELATIVE:\{&#34;.*\}$|:RELATIVE:STDCTRL_JSON|' \
+  | sed -E 's|^([^:]+:heartbeat:RELATIVE):.*|\1:HEARTBEAT_JSON|' \
+  | sed -E 's|:RELATIVE:\{&#34;.*|:RELATIVE:STDCTRL_JSON|' \
   | sort

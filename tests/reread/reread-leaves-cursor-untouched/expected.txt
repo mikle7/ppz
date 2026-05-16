@@ -3,6 +3,7 @@ msg-1
 msg-2
 msg-3
 --- ls after reread: unread still 3 (cursor not advanced) ---
+chat.heartbeat 0 0 - - foo
 chat.inbox 3 3 RELATIVE msg-3 foo
 chat.stdctrl 0 0 - - foo
 chat.stdin 0 0 - - foo
@@ -12,6 +13,7 @@ msg-1
 msg-2
 msg-3
 --- ls after default read: unread=0 ---
+chat.heartbeat 0 0 - - foo
 chat.inbox 0 3 RELATIVE msg-3 foo
 chat.stdctrl 0 0 - - foo
 chat.stdin 0 0 - - foo
