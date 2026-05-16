@@ -12,7 +12,10 @@ ppz_a terminal share pty-pipe -- true >/dev/null
 # Normalise the stdctrl + heartbeat JSON previews to stable placeholders
 # so the test isn't dependent on the default cols/rows that no-tty wraps
 # fall back to, nor on the heartbeat's volatile pid/hostname/started_at.
+# Heartbeat JSON is longer than the preview cap and gets truncated with a
+# trailing `…`, so it never ends in `}` — anchor the regex on the
+# .heartbeat pipe column and consume non-whitespace through the next gap.
 ppz_a ls \
   | ls_normalize \
   | sed -E 's| \{[^}]*"type":"resize"[^}]*\}| STDCTRL_JSON|' \
-  | sed -E 's| \{[^}]*"harness":[^}]*\}| HEARTBEAT_JSON|'
+  | sed -E 's|^(.+\.heartbeat [0-9]+ [0-9]+ RELATIVE) \{[^ ]+|\1 HEARTBEAT_JSON|'
