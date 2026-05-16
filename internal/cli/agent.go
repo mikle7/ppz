@@ -156,16 +156,16 @@ Create a persistent Monitor on 'ppz await' generating PushNotification on new me
 // bash-single-quoted so it inlines safely into the `bash -lc <script>`
 // invocation we hand to the spawned terminal.
 //
-// Why not the old `"$(cat FILE)"` round-trip: wt.exe (Windows
-// Terminal, used by the WSL backend) parses our argv through Windows'
-// command-line rules and strips the outer double quotes around the
-// expansion. Bash then sees unquoted `$(cat FILE)` and word-splits
-// the file contents — the harness ends up receiving only the first
-// word of the prompt (reproduced on this WSL2 box: a multi-line
-// prompt arrived as the literal string "You"). Single-quoting avoids
-// the round-trip entirely: single quotes are inert at every layer
-// (Windows command-line, AppleScript, bash) so any prompt content
-// survives intact.
+// Why not the old `"$(cat FILE)"` round-trip: when the WSL backend
+// invokes wt.exe, Windows' argv parser sees our command line and
+// strips the outer double quotes around the expansion before wt.exe
+// hands the remainder to bash. Bash then sees unquoted `$(cat FILE)`
+// and word-splits the file contents — the harness ends up receiving
+// only the first word of the prompt (reproduced on this WSL2 box: a
+// multi-line prompt arrived as the literal string "You").
+// Single-quoting avoids the round-trip entirely: single quotes are
+// inert at every layer (Windows' argv parser, AppleScript, bash) so
+// any prompt content survives intact.
 func buildHarnessSpawnArgv(spec agentSpec) ([]string, error) {
 	quoted := spec
 	if spec.prompt != "" {

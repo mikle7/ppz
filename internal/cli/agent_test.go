@@ -788,6 +788,29 @@ func TestBuildHarnessSpawnArgv_CodexPromptAlsoQuoted(t *testing.T) {
 	}
 }
 
+// Shell metacharacters ($expansions, `backticks`) inside a prompt
+// must reach the harness as literal text, not be evaluated by bash on
+// the way in. Single-quoting is the mechanism — bash treats every
+// character inside '...' as literal, including $ and `. Locks in the
+// behaviour so a future move to double-quoting (which would expand
+// $HOME and execute `pwd`) fails fast.
+func TestBuildHarnessSpawnArgv_PreservesShellMetacharacters(t *testing.T) {
+	spec := agentSpec{
+		harness: "claude",
+		model:   "opus",
+		prompt:  "$HOME and `pwd`",
+	}
+	argv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	want := "'$HOME and `pwd`'"
+	last := argv[len(argv)-1]
+	if last != want {
+		t.Errorf("prompt argv element = %q,\n                  want %q", last, want)
+	}
+}
+
 // containsAdjacent reports whether xs contains a then b at adjacent
 // indices. Used to assert flag/value pairs in the Linux/WSL argv tests
 // without forcing a brittle exact-slice match.
