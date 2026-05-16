@@ -4,12 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 	"github.com/pipescloud/ppz/internal/daemon"
+	"github.com/pipescloud/ppz/internal/natsubj"
 )
 
 // cmdPipeGroup dispatches `ppz pipe <subverb>` to create / destroy.
@@ -126,6 +128,15 @@ func cmdPipeDestroy(args []string) error {
 	// plays no role in destination routing). Dotted form is the
 	// explicit collared destroy.
 	target := rest[0]
+
+	// Glob form (any of *, ?, [): expand against the user's pipe set
+	// and destroy each match. Skips auto-pipes (inbox/stdin/stdout/
+	// stdctrl/broadcast) so sources stay intact — those belong to
+	// `ppz source destroy`.
+	if strings.ContainsAny(target, "*?[") {
+		return pipeDestroyGlob(target)
+	}
+
 	var handle, name, bareTarget string
 	if !strings.Contains(target, ".") {
 		bareTarget = target
@@ -144,6 +155,138 @@ func cmdPipeDestroy(args []string) error {
 	}
 	cliproto.PrintPipeDestroy(os.Stdout, reply)
 	return nil
+}
+
+// pipeDestroyGlob implements `ppz pipe destroy PATTERN` where PATTERN
+// contains glob wildcards (* ? [).
+//
+// Semantics, mirroring `ppz source destroy` glob but scoped to
+// user-created pipes only (auto-pipes are left alone so sources
+// stay alive):
+//
+//   - bare pattern (no dot): matches uncollared pipe names AND
+//     names of user-created pipes attached to any source. So
+//     `pipe destroy '*'` deletes every user-created pipe across the
+//     account.
+//   - dotted pattern (handle.pipe): matches collared user-pipes only.
+//     Handle and pipe parts are independently globbed.
+//
+// Errors per match follow rm(1): each failure goes to stderr, the
+// loop continues, and the command exits non-zero if any destroy
+// failed. Order: collared first (alphabetical by handle.pipe), then
+// uncollared (alphabetical by name) — gives deterministic test
+// output and matches the source-destroy convention.
+func pipeDestroyGlob(pattern string) error {
+	var listReply cliproto.ListReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCList,
+		cliproto.ListRequest{Session: sessionID()}, &listReply); err != nil {
+		return err
+	}
+
+	collared, uncollared, err := resolvePipeGlob(pattern, listReply.Sources, listReply.UncollaredPipes)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ppz pipe destroy: invalid pattern %q: %v\n", pattern, err)
+		os.Exit(2)
+	}
+
+	if len(collared) == 0 && len(uncollared) == 0 {
+		fmt.Fprintln(os.Stdout, "0 pipes destroyed")
+		return nil
+	}
+
+	hadErr := false
+	for _, req := range collared {
+		var reply cliproto.PipeDestroyReply
+		if err := daemon.Call(ipcSocket(), cliproto.IPCPipeDestroy, req, &reply); err != nil {
+			if e, ok := err.(*cliproto.Error); ok {
+				fmt.Fprintf(os.Stderr, "error: %s: %s\n", e.Code, e.Message)
+			} else {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			}
+			hadErr = true
+			continue
+		}
+		cliproto.PrintPipeDestroy(os.Stdout, reply)
+	}
+	for _, req := range uncollared {
+		var reply cliproto.PipeDestroyReply
+		if err := daemon.Call(ipcSocket(), cliproto.IPCPipeDestroy, req, &reply); err != nil {
+			if e, ok := err.(*cliproto.Error); ok {
+				fmt.Fprintf(os.Stderr, "error: %s: %s\n", e.Code, e.Message)
+			} else {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			}
+			hadErr = true
+			continue
+		}
+		cliproto.PrintPipeDestroy(os.Stdout, reply)
+	}
+	if hadErr {
+		os.Exit(1)
+	}
+	return nil
+}
+
+// resolvePipeGlob matches a glob pattern against the user's pipe set
+// and returns two ordered destroy-request lists: collared (handle.pipe
+// targets) and uncollared (bare-name targets). Auto-pipes are skipped.
+func resolvePipeGlob(pattern string, sources []cliproto.Source, uncollared []cliproto.UncollaredPipe) ([]cliproto.PipeDestroyRequest, []cliproto.PipeDestroyRequest, error) {
+	dotted := strings.Contains(pattern, ".")
+	var handlePat, namePat string
+	if dotted {
+		h, n, err := splitHandleName(pattern)
+		if err != nil {
+			return nil, nil, err
+		}
+		handlePat, namePat = h, n
+	} else {
+		namePat = pattern
+	}
+
+	var collared, uncollaredOut []cliproto.PipeDestroyRequest
+	for _, s := range sources {
+		// Dotted patterns constrain on handle; bare patterns match
+		// any source's user-pipes.
+		if dotted {
+			matched, err := path.Match(handlePat, s.Handle)
+			if err != nil {
+				return nil, nil, err
+			}
+			if !matched {
+				continue
+			}
+		}
+		for _, p := range s.PipeInfos {
+			if natsubj.AutoProvisionedPipes[p.Pipe] {
+				continue
+			}
+			matched, err := path.Match(namePat, p.Pipe)
+			if err != nil {
+				return nil, nil, err
+			}
+			if matched {
+				collared = append(collared, cliproto.PipeDestroyRequest{Handle: s.Handle, Name: p.Pipe})
+			}
+		}
+	}
+	// Uncollared pipes are only candidates for bare patterns —
+	// the dotted form (handle.pipe) requires a handle.
+	if !dotted {
+		for _, p := range uncollared {
+			matched, err := path.Match(namePat, p.Name)
+			if err != nil {
+				return nil, nil, err
+			}
+			if matched {
+				uncollaredOut = append(uncollaredOut, cliproto.PipeDestroyRequest{
+					BareTarget: p.Name,
+					Manifold:   p.Manifold,
+					Session:    sessionID(),
+				})
+			}
+		}
+	}
+	return collared, uncollaredOut, nil
 }
 
 // splitTargetAndFlags lets the user write the target before OR after flags.

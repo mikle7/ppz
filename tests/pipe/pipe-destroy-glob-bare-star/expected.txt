@@ -1,0 +1,9 @@
+--- before destroy ---
+chat.archive
+chat.inbox
+room
+destroyed pipe=chat.archive
+destroyed pipe=room
+--- after destroy ---
+chat.inbox
+exit=0
