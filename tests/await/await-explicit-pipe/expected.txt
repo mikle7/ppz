@@ -1,0 +1,2 @@
+HH:MM:SS  -             uncollared hello
+exit=0

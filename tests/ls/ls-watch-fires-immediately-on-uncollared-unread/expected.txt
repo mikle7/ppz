@@ -1,0 +1,3 @@
+--- watch returns immediately (uncollared level-triggered) ---
+plaza 1 1 RELATIVE preexisting foo
+exit=0

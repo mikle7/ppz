@@ -1,0 +1,2 @@
+WARNING_ON_STDERR=no
+exit=0

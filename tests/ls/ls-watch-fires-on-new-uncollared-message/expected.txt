@@ -1,0 +1,3 @@
+--- watch fired on new uncollared message ---
+plaza 1 1 RELATIVE new uncollared foo
+exit=0
