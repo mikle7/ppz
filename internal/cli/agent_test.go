@@ -336,3 +336,240 @@ func TestBuildNewWindowScript_CdEscapesSingleQuote(t *testing.T) {
 		t.Errorf("expected bash-safe single-quote escape (in AppleScript form), got:\n%s", cmd)
 	}
 }
+
+// --------------------------------------------------------------------------
+// Linux & WSL --new-window support (RED phase)
+//
+// The macOS path above drives osascript. Linux and WSL need different
+// dispatchers. The tests below pin the contract of four helpers:
+//
+//   selectLinuxTerminal     — pick which emulator to drive
+//   buildLinuxNewWindowArgv — translate (terminal, handle, cwd, argv) → exec argv
+//   isWSL                   — detect Windows Subsystem for Linux
+//   buildWSLNewWindowArgv   — wt.exe + wsl.exe argv for the WSL path
+//
+// Stubs live in agent.go; bodies land in the GREEN follow-up.
+// --------------------------------------------------------------------------
+
+// $TERMINAL is the user's explicit preference. When set, it wins over
+// the probe chain — even if the probe would have found something else.
+func TestSelectLinuxTerminal_RespectsTerminalEnv(t *testing.T) {
+	got, err := selectLinuxTerminal("konsole", func(string) bool { return false })
+	if err != nil {
+		t.Fatalf("selectLinuxTerminal: %v", err)
+	}
+	if got != "konsole" {
+		t.Errorf("got %q, want konsole — $TERMINAL must win", got)
+	}
+}
+
+// Empty $TERMINAL → fall back to the availability probe.
+func TestSelectLinuxTerminal_FallsBackToProbe(t *testing.T) {
+	available := func(name string) bool { return name == "xterm" }
+	got, err := selectLinuxTerminal("", available)
+	if err != nil {
+		t.Fatalf("selectLinuxTerminal: %v", err)
+	}
+	if got != "xterm" {
+		t.Errorf("got %q, want xterm", got)
+	}
+}
+
+// Probe order matters: gnome-terminal beats xterm when both are
+// installed. Pinning the priority avoids silently demoting a fully
+// featured emulator to bare xterm on stock GNOME desktops.
+func TestSelectLinuxTerminal_PrefersGnomeOverXterm(t *testing.T) {
+	available := func(name string) bool { return name == "gnome-terminal" || name == "xterm" }
+	got, err := selectLinuxTerminal("", available)
+	if err != nil {
+		t.Fatalf("selectLinuxTerminal: %v", err)
+	}
+	if got != "gnome-terminal" {
+		t.Errorf("got %q, want gnome-terminal (higher priority than xterm)", got)
+	}
+}
+
+func TestSelectLinuxTerminal_NoneAvailableErrors(t *testing.T) {
+	_, err := selectLinuxTerminal("", func(string) bool { return false })
+	if err == nil {
+		t.Fatal("expected error when no terminal is available")
+	}
+}
+
+// gnome-terminal famously requires `--` before the inner command:
+//
+//	gnome-terminal -- bash -c "<script>"
+//
+// Without the separator gnome-terminal swallows the bash invocation as
+// its own argument. Pin the shape.
+func TestBuildLinuxNewWindowArgv_GnomeTerminalUsesDashDashSeparator(t *testing.T) {
+	argv, err := buildLinuxNewWindowArgv("gnome-terminal", "alice", "", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if argv[0] != "gnome-terminal" {
+		t.Errorf("argv[0]=%q, want gnome-terminal", argv[0])
+	}
+	if !containsAdjacent(argv, "--", "bash") {
+		t.Errorf("gnome-terminal must use `-- bash` separator, got: %q", argv)
+	}
+}
+
+func TestBuildLinuxNewWindowArgv_KonsoleUsesDashE(t *testing.T) {
+	argv, err := buildLinuxNewWindowArgv("konsole", "alice", "", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if argv[0] != "konsole" || !containsAdjacent(argv, "-e", "bash") {
+		t.Errorf("konsole must use `-e bash`, got: %q", argv)
+	}
+}
+
+func TestBuildLinuxNewWindowArgv_XtermUsesDashE(t *testing.T) {
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if argv[0] != "xterm" || !containsAdjacent(argv, "-e", "bash") {
+		t.Errorf("xterm must use `-e bash`, got: %q", argv)
+	}
+}
+
+// Whatever the terminal, the *last* argv element is the bash -c script,
+// and it must contain `ppz terminal share <handle> --` followed by the
+// harness argv. Asserting on the last element keeps the test resilient
+// to per-terminal flag-shape differences.
+func TestBuildLinuxNewWindowArgv_IncludesShareInvocation(t *testing.T) {
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", []string{"claude", "-p", "hi"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "ppz terminal share alice -- claude") {
+		t.Errorf("script missing ppz share invocation, got: %q", script)
+	}
+}
+
+// Same cwd-inheritance bug exists on Linux: a fresh terminal opens in
+// $HOME, and claude treats trust per-folder. Prepend `cd '<cwd>' &&`.
+func TestBuildLinuxNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "/home/jamesmiles/work", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, `cd '/home/jamesmiles/work'`) {
+		t.Errorf("script missing cd to caller's cwd, got: %q", script)
+	}
+	cdIdx := strings.Index(script, "cd ")
+	shareIdx := strings.Index(script, "ppz terminal share")
+	if cdIdx < 0 || shareIdx < 0 || cdIdx > shareIdx {
+		t.Errorf("cd must appear before ppz terminal share, got: %q", script)
+	}
+}
+
+func TestBuildLinuxNewWindowArgv_EmptyCwdSkipsCd(t *testing.T) {
+	argv, err := buildLinuxNewWindowArgv("xterm", "alice", "", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	script := argv[len(argv)-1]
+	if strings.Contains(script, "cd ") {
+		t.Errorf("empty cwd must not produce a cd prefix, got: %q", script)
+	}
+}
+
+func TestBuildLinuxNewWindowArgv_UnknownTerminalErrors(t *testing.T) {
+	if _, err := buildLinuxNewWindowArgv("nonesuch", "alice", "", []string{"claude"}); err == nil {
+		t.Fatal("expected error for unknown terminal")
+	}
+}
+
+// ---- WSL ----
+
+func TestIsWSL_DetectsMicrosoftKernel(t *testing.T) {
+	// Matches the WSL2 kernel marker reported by /proc/version on
+	// modern WSL — including this dev box.
+	if !isWSL("Linux version 5.15.90.1-microsoft-standard-WSL2 (oe-user@oe-host)") {
+		t.Error("isWSL must return true for microsoft-tagged kernel")
+	}
+}
+
+func TestIsWSL_FalseOnNativeLinux(t *testing.T) {
+	if isWSL("Linux version 6.6.0-generic (buildd@lcy02-amd64-001) (gcc) #1 SMP Ubuntu") {
+		t.Error("isWSL must return false for vanilla Linux kernel")
+	}
+}
+
+// On WSL the new window opens on the *Windows* host via wt.exe
+// (Windows Terminal). We expect argv[0] to be the literal `wt.exe` —
+// resolution to a full path is left to os/exec.LookPath.
+func TestBuildWSLNewWindowArgv_UsesWtExe(t *testing.T) {
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if argv[0] != "wt.exe" {
+		t.Errorf("argv[0]=%q, want wt.exe", argv[0])
+	}
+}
+
+// wt.exe spawns the actual WSL session via `wsl.exe -d <distro>`. The
+// distro name comes from $WSL_DISTRO_NAME in the caller; without `-d`
+// wt would launch the default distro, which may not match the one the
+// user invoked ppz from.
+func TestBuildWSLNewWindowArgv_InvokesWslExeWithDistro(t *testing.T) {
+	argv, err := buildWSLNewWindowArgv("Ubuntu-22.04", "alice", "", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if !containsAdjacent(argv, "wsl.exe", "-d") {
+		t.Errorf("must invoke `wsl.exe -d`, got: %q", argv)
+	}
+	if !strings.Contains(strings.Join(argv, " "), "-d Ubuntu-22.04") {
+		t.Errorf("must include `-d Ubuntu-22.04`, got: %q", argv)
+	}
+}
+
+func TestBuildWSLNewWindowArgv_IncludesShareInvocation(t *testing.T) {
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", []string{"claude", "-p", "hi"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "ppz terminal share alice -- claude") {
+		t.Errorf("script missing ppz share invocation, got: %q", script)
+	}
+}
+
+func TestBuildWSLNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "/home/jamesmiles/work", []string{"claude"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, `cd '/home/jamesmiles/work'`) {
+		t.Errorf("script missing cd to caller's cwd, got: %q", script)
+	}
+}
+
+// Empty distro is a caller bug — $WSL_DISTRO_NAME was unset. Better to
+// error loudly than to silently fall through to the user's default
+// distro (which may be the wrong one).
+func TestBuildWSLNewWindowArgv_EmptyDistroErrors(t *testing.T) {
+	if _, err := buildWSLNewWindowArgv("", "alice", "", []string{"claude"}); err == nil {
+		t.Fatal("expected error for empty distro (caller forgot $WSL_DISTRO_NAME)")
+	}
+}
+
+// containsAdjacent reports whether xs contains a then b at adjacent
+// indices. Used to assert flag/value pairs in the Linux/WSL argv tests
+// without forcing a brittle exact-slice match.
+func containsAdjacent(xs []string, a, b string) bool {
+	for i := 0; i+1 < len(xs); i++ {
+		if xs[i] == a && xs[i+1] == b {
+			return true
+		}
+	}
+	return false
+}

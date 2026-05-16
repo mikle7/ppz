@@ -354,3 +354,37 @@ func escapeAppleScript(s string) string {
 type devNull struct{}
 
 func (devNull) Write(p []byte) (int, error) { return len(p), nil }
+
+// --- Linux & WSL --new-window support: RED-phase stubs ---------------------
+//
+// These are intentionally unimplemented. The accompanying tests in
+// agent_test.go pin the contract they must satisfy once GREEN lands.
+
+// selectLinuxTerminal chooses which terminal emulator to drive on Linux.
+// If termEnv (typically $TERMINAL) is non-empty it wins; otherwise the
+// caller-supplied availability probe is consulted in a fixed priority
+// order. Returns ("", error) when no candidate is available.
+func selectLinuxTerminal(termEnv string, available func(string) bool) (string, error) {
+	return "", fmt.Errorf("selectLinuxTerminal: not implemented")
+}
+
+// buildLinuxNewWindowArgv returns the exec argv that opens a new
+// <terminal> window running `ppz terminal share <handle> -- <argv...>`.
+// cwd, when non-empty, is prepended as `cd '<cwd>' && `.
+func buildLinuxNewWindowArgv(terminal, handle, cwd string, argv []string) ([]string, error) {
+	return nil, fmt.Errorf("buildLinuxNewWindowArgv: not implemented")
+}
+
+// isWSL reports whether the calling process is running under Windows
+// Subsystem for Linux. The caller passes the contents of /proc/version
+// so the function stays unit-testable.
+func isWSL(procVersion string) bool {
+	return false
+}
+
+// buildWSLNewWindowArgv returns the exec argv that drives wt.exe
+// (Windows Terminal) to open a new tab running `wsl.exe -d <distro>
+// bash -c 'cd <cwd> && ppz terminal share <handle> -- <argv...>'`.
+func buildWSLNewWindowArgv(distro, handle, cwd string, argv []string) ([]string, error) {
+	return nil, fmt.Errorf("buildWSLNewWindowArgv: not implemented")
+}
