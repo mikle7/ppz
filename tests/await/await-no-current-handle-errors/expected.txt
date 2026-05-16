@@ -1,3 +1,2 @@
-rc=2
-ERROR_CODE=E_NO_CURRENT_SOURCE
+rc=16
 exit=0
