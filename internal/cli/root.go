@@ -225,7 +225,12 @@ Messaging (the verbs you use most):
   ppz await [PATTERN...] [--tail --json --bare --tty --raw]
                                    block until a matching pipe has unread,
                                    then drain ONE pipe (oldest LastAt wins).
-                                   Default pattern: 'inbox' → <current>.inbox.
+                                   No args: watch <current>.inbox AND every
+                                   uncollared pipe at the current namespace
+                                   (rooms/lobbies). Other handles' inboxes
+                                   and pipes in other namespaces are NOT
+                                   included — address those by name to
+                                   include them.
                                    Patterns OR-combine; globs use '*' (quoted)
                                    or '%' (SQL-LIKE-style alias).
                                    Banner 'messages arrived on <pipe>' goes

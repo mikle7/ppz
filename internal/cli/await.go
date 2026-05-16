@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
+	"github.com/pipescloud/ppz/internal/daemon"
 )
 
 // cmdAwait: ppz await [PATTERN...] [--tail --json --bare --tty --raw]
@@ -55,23 +56,34 @@ func cmdAwait(args []string) error {
 		return err
 	}
 	patterns := fs.Args()
-	if len(patterns) == 0 {
-		patterns = []string{"inbox"}
-	}
 
-	// Resolve any bare "inbox" → "<current>.inbox" so the daemon-side
-	// matcher sees a concrete pattern. Mirrors cmdRead's currentInboxTarget.
-	resolved := make([]string, 0, len(patterns))
-	for _, p := range patterns {
-		if p == "inbox" {
-			handle, err := effectiveCurrentHandle()
-			if err != nil {
-				return err
-			}
-			resolved = append(resolved, handle+".inbox")
-			continue
+	// No-args default: <current>.inbox + every uncollared pipe at the
+	// current namespace. This is the "I'm an agent inhabiting a
+	// session" mode — surface my mail AND any room I'm in.
+	//
+	// Explicit args bypass this expansion entirely. Bare `inbox` in an
+	// explicit list still resolves to <current>.inbox for back-compat
+	// with the original verb shape.
+	var resolved []string
+	if len(patterns) == 0 {
+		expanded, err := awaitDefaultPatterns()
+		if err != nil {
+			return err
 		}
-		resolved = append(resolved, p)
+		resolved = expanded
+	} else {
+		resolved = make([]string, 0, len(patterns))
+		for _, p := range patterns {
+			if p == "inbox" {
+				handle, err := effectiveCurrentHandle()
+				if err != nil {
+					return err
+				}
+				resolved = append(resolved, handle+".inbox")
+				continue
+			}
+			resolved = append(resolved, p)
+		}
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -111,9 +123,48 @@ func cmdAwait(args []string) error {
 // enough that creating a pipe then waiting on it is a two-call flow
 // (create, then re-await).
 func defaultPatternsFromSnapshot(currentHandle, currentManifold string, uncollared []cliproto.UncollaredPipe) []string {
-	// RED stub.
-	_, _, _ = currentHandle, currentManifold, uncollared
-	return nil
+	patterns := []string{currentHandle + ".inbox"}
+	for _, uc := range uncollared {
+		if uc.Manifold != currentManifold {
+			continue
+		}
+		// Info.Pipe is the already-formatted dotted path
+		// ("manifold.name" or just "name"). Use it verbatim so the
+		// daemon-side matcher sees the same string the user would
+		// see in `ppz ls`.
+		path := uc.Info.Pipe
+		if path == "" {
+			// Defensive: fall back to manual format if Info isn't filled.
+			path = uc.Name
+			if uc.Manifold != "" {
+				path = uc.Manifold + "." + uc.Name
+			}
+		}
+		patterns = append(patterns, path)
+	}
+	return patterns
+}
+
+// awaitDefaultPatterns is the IPC-wiring side of the default expansion.
+// One IPCStatus call for handle+namespace, one IPCList call for the
+// uncollared snapshot, then delegate to the pure helper.
+func awaitDefaultPatterns() ([]string, error) {
+	var st cliproto.StatusReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
+		cliproto.StatusRequest{Session: sessionID()}, &st); err != nil {
+		return nil, err
+	}
+	if st.Current == "" {
+		return nil, cliproto.New(cliproto.ENoCurrentSource)
+	}
+
+	var lr cliproto.ListReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCList,
+		cliproto.ListRequest{Session: sessionID()}, &lr); err != nil {
+		return nil, err
+	}
+
+	return defaultPatternsFromSnapshot(st.Current, st.CurrentNamespace, lr.UncollaredPipes), nil
 }
 
 // awaitOnce performs one (block, pick, drain) cycle. Uses awaitBlock
@@ -134,33 +185,45 @@ func awaitOnce(ctx context.Context, patterns []string, asJSON, tty, raw, bare bo
 		return nil
 	}
 
+	// Two views of the same pipe:
+	//   displayPath — what the user sees ("team-a.chat", "foo.inbox").
+	//   target      — what we hand to runRead. runRead splits on the
+	//                 last dot and treats a dotted target as
+	//                 <handle>.<pipe> (collared). For UNCOLLARED pipes
+	//                 the displayed dotted form is manifold-prefixed,
+	//                 so we strip the prefix and pass just the leaf
+	//                 — the daemon then resolves it as uncollared at
+	//                 the session's current namespace (which must
+	//                 match for the read to land on the right pipe).
+	displayPath := pipe
 	target := pipe
 	if handle != "" {
 		target = handle + "." + pipe
+		displayPath = target
+	} else if idx := strings.LastIndex(pipe, "."); idx >= 0 {
+		target = pipe[idx+1:]
 	}
 
 	if asJSON {
-		evt := map[string]string{"event": "arrival", "pipe": target}
+		evt := map[string]string{"event": "arrival", "pipe": displayPath}
 		line, _ := json.Marshal(evt)
 		fmt.Fprintln(os.Stdout, string(line))
 	} else {
-		fmt.Fprintf(os.Stderr, "messages arrived on %s\n", target)
+		fmt.Fprintf(os.Stderr, "messages arrived on %s\n", displayPath)
 	}
 
 	// --tty against a non-stdout channel: warn but honor the flag.
 	// "channel" is the pipe's leaf name. For collared pipes that's the
-	// pipe field directly; for uncollared pipes the leaf is the last
-	// dotted segment (e.g. "team-a.chat" → "chat").
+	// pipe field directly; for uncollared pipes target is already the
+	// leaf (we stripped the manifold above).
 	channel := pipe
 	if handle == "" {
-		if idx := strings.LastIndex(pipe, "."); idx >= 0 {
-			channel = pipe[idx+1:]
-		}
+		channel = target
 	}
 	if tty && channel != "stdout" {
 		fmt.Fprintf(os.Stderr,
 			"ppz await: --tty is only meaningful for stdout-shape pipes; rendering %s anyway\n",
-			target)
+			displayPath)
 	}
 
 	return runRead(target, asJSON, false /* follow */, tty, raw, bare, false /* all */, 0, 0, 0)
