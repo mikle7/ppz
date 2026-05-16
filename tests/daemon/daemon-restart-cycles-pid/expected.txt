@@ -1,0 +1,3 @@
+daemon stopped pid=PID
+daemon started pid=PID
+exit=0
