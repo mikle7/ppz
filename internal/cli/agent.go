@@ -157,13 +157,13 @@ const defaultAgentPrompt = `You are an agent running inside a ppz (pipes) pty. Y
 Useful commands:
   ppz status                find out which source you are
   ppz ls                    list sources × pipes
+  ppz ls --watch            block until any pipe has unread, then print a snapshot (non-destructive)
   ppz read inbox            read new messages addressed to you
   ppz read <pipe>           read new messages from a pipe (e.g. a chat room)
-  ppz await                 follow your inbox & other uncollared pipes (e.g. chat rooms) in your current namespace
   ppz send <handle> <text>  send a message to another agent
   ppz send <pipe> <text>    send a message to a pipe
 
-Create a persistent Monitor on 'ppz await' generating PushNotification on new messages.`
+Create a persistent Monitor running ` + "`while true; do ppz ls --watch 2>/dev/null || sleep 1; done`" + ` that fires a PushNotification on each new message arrival.`
 
 // buildAgentArgv returns the argv that runs *inside* the wrapped pty
 // (i.e. the part after the `--` to `ppz terminal share`). It does not

@@ -209,14 +209,29 @@ func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
 	}
 }
 
-// TestDefaultAgentPrompt_MentionsAwait pins `ppz await` (v0.32.0) as
-// the recommended inbox-watching primitive. The pre-v0.32 prompt told
-// the agent to "poll" — that's strictly worse than a single blocking
-// `ppz await` call, and a regression to that wording is the failure
-// mode we're guarding against here.
-func TestDefaultAgentPrompt_MentionsAwait(t *testing.T) {
-	if !strings.Contains(defaultAgentPrompt, "ppz await") {
-		t.Errorf("defaultAgentPrompt should mention `ppz await` — the blocking-watch verb shipped in v0.32.0")
+// TestDefaultAgentPrompt_MentionsLsWatch pins `ppz ls --watch` as
+// the recommended inbox-awareness primitive for the Monitor pattern.
+// It blocks until any pipe has unread, prints a snapshot, and exits
+// without advancing any cursor — which is what a watch wants. The
+// previous recommendation (`ppz await`) drains as it follows, so a
+// Monitor wired to await races any later `ppz read inbox` and the
+// user-visible bug is "the agent claims it acted but my read shows
+// nothing".
+func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
+	if !strings.Contains(defaultAgentPrompt, "ppz ls --watch") {
+		t.Errorf("defaultAgentPrompt should reference `ppz ls --watch` — the non-destructive blocking-watch primitive used by the Monitor recipe")
+	}
+}
+
+// TestDefaultAgentPrompt_OmitsAwait — keep `ppz await` out of the
+// boot prompt. It's still a valid verb when the agent actively wants
+// to drain, but mentioning it in the useful-commands cheat sheet led
+// agents to wire it into a persistent Monitor, where it silently ate
+// inbox messages the user then asked them to `ppz read`. The watch
+// vs. read concerns belong on different verbs.
+func TestDefaultAgentPrompt_OmitsAwait(t *testing.T) {
+	if strings.Contains(defaultAgentPrompt, "ppz await") {
+		t.Errorf("defaultAgentPrompt must not mention `ppz await` — destructive read races `ppz read inbox`; use `ppz ls --watch` for awareness and `ppz read` for consumption")
 	}
 }
 
