@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -64,11 +65,16 @@ func runAgentInForeground(handle string, spec agentSpec) error {
 }
 
 // runAgentInNewWindow writes the prompt to $TMPDIR/ppz-agent-<handle>-
-// prompt.txt and asks osascript to open a new Terminal/iTerm window
+// prompt.txt and asks the host's window-manager to open a new terminal
 // running `ppz terminal share <handle> -- <harness> [...] "$(cat
 // FILE)"`. We use a temp file (not direct shell quoting) so prompts
 // containing newlines, quotes, $-expansions, and backticks all survive
 // untouched.
+//
+// Backend per platform:
+//   - darwin: osascript → Terminal.app / iTerm2 (see buildNewWindowScript)
+//   - linux (WSL):   wt.exe + wsl.exe (see buildWSLNewWindowArgv)
+//   - linux (native): $TERMINAL or probed emulator (see buildLinuxNewWindowArgv)
 func runAgentInNewWindow(handle string, spec agentSpec) error {
 	promptPath := filepath.Join(os.TempDir(), "ppz-agent-"+handle+"-prompt.txt")
 	if err := os.WriteFile(promptPath, []byte(spec.prompt), 0o600); err != nil {
@@ -88,13 +94,45 @@ func runAgentInNewWindow(handle string, spec agentSpec) error {
 	}
 
 	// Inherit the parent shell's cwd so the spawned harness boots in
-	// the folder the user already trusts. Without this, macOS's
-	// `do script` opens the new Terminal window in $HOME and claude
-	// shows a "trust this folder?" dialog on every run.
+	// the folder the user already trusts. Without this, the new
+	// terminal opens in $HOME and claude shows a "trust this folder?"
+	// dialog on every run.
 	cwd, _ := os.Getwd()
 
-	script := buildNewWindowScript(os.Getenv("TERM_PROGRAM"), handle, cwd, argv)
-	cmd := exec.Command("osascript", "-e", script)
+	switch runtime.GOOS {
+	case "darwin":
+		script := buildNewWindowScript(os.Getenv("TERM_PROGRAM"), handle, cwd, argv)
+		return runWindowCmd("osascript", []string{"-e", script})
+	case "linux":
+		procVersion, _ := os.ReadFile("/proc/version")
+		if isWSL(string(procVersion)) {
+			cmdArgv, err := buildWSLNewWindowArgv(os.Getenv("WSL_DISTRO_NAME"), handle, cwd, argv)
+			if err != nil {
+				return err
+			}
+			return runWindowCmd(cmdArgv[0], cmdArgv[1:])
+		}
+		terminal, err := selectLinuxTerminal(os.Getenv("TERMINAL"), func(name string) bool {
+			_, err := exec.LookPath(name)
+			return err == nil
+		})
+		if err != nil {
+			return err
+		}
+		cmdArgv, err := buildLinuxNewWindowArgv(terminal, handle, cwd, argv)
+		if err != nil {
+			return err
+		}
+		return runWindowCmd(cmdArgv[0], cmdArgv[1:])
+	}
+	return fmt.Errorf("--new-window: unsupported platform %q", runtime.GOOS)
+}
+
+// runWindowCmd is a thin wrapper around exec.Command that wires
+// stdout/stderr to the parent — used by all three --new-window
+// backends so they handle process-spawn the same way.
+func runWindowCmd(name string, args []string) error {
+	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -355,36 +393,83 @@ type devNull struct{}
 
 func (devNull) Write(p []byte) (int, error) { return len(p), nil }
 
-// --- Linux & WSL --new-window support: RED-phase stubs ---------------------
-//
-// These are intentionally unimplemented. The accompanying tests in
-// agent_test.go pin the contract they must satisfy once GREEN lands.
+// --- Linux & WSL --new-window support --------------------------------------
+
+// linuxTerminalPriority is the probe order used by selectLinuxTerminal
+// when $TERMINAL is unset. Higher-quality emulators come first; bare
+// xterm is the penultimate fallback, x-terminal-emulator (Debian
+// alternatives) is last so distros that ship it as a wrapper don't
+// shadow a real GUI emulator that's also installed.
+var linuxTerminalPriority = []string{
+	"gnome-terminal", "konsole", "xfce4-terminal", "tilix",
+	"wezterm", "kitty", "alacritty", "xterm", "x-terminal-emulator",
+}
 
 // selectLinuxTerminal chooses which terminal emulator to drive on Linux.
 // If termEnv (typically $TERMINAL) is non-empty it wins; otherwise the
 // caller-supplied availability probe is consulted in a fixed priority
 // order. Returns ("", error) when no candidate is available.
 func selectLinuxTerminal(termEnv string, available func(string) bool) (string, error) {
-	return "", fmt.Errorf("selectLinuxTerminal: not implemented")
+	if termEnv != "" {
+		return termEnv, nil
+	}
+	for _, name := range linuxTerminalPriority {
+		if available(name) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no supported terminal emulator on PATH; tried %v", linuxTerminalPriority)
 }
 
 // buildLinuxNewWindowArgv returns the exec argv that opens a new
 // <terminal> window running `ppz terminal share <handle> -- <argv...>`.
-// cwd, when non-empty, is prepended as `cd '<cwd>' && `.
+// cwd, when non-empty, is prepended as `cd '<cwd>' && ` so the spawned
+// harness boots in the folder the parent shell was running in
+// (matching the macOS path's claude-trust-folder fix).
 func buildLinuxNewWindowArgv(terminal, handle, cwd string, argv []string) ([]string, error) {
-	return nil, fmt.Errorf("buildLinuxNewWindowArgv: not implemented")
+	script := "ppz terminal share " + handle + " -- " + strings.Join(argv, " ")
+	if cwd != "" {
+		script = "cd " + bashSingleQuote(cwd) + " && " + script
+	}
+	switch terminal {
+	case "gnome-terminal":
+		// gnome-terminal swallows trailing argv as its own options unless
+		// `--` separates them from the inner command.
+		return []string{"gnome-terminal", "--", "bash", "-c", script}, nil
+	case "konsole", "xfce4-terminal", "tilix", "alacritty", "xterm", "x-terminal-emulator":
+		return []string{terminal, "-e", "bash", "-c", script}, nil
+	case "kitty":
+		// kitty treats trailing argv as the command directly — no flag.
+		return []string{"kitty", "bash", "-c", script}, nil
+	case "wezterm":
+		return []string{"wezterm", "start", "--", "bash", "-c", script}, nil
+	}
+	return nil, fmt.Errorf("unsupported terminal %q (supported: %v)", terminal, linuxTerminalPriority)
 }
 
 // isWSL reports whether the calling process is running under Windows
 // Subsystem for Linux. The caller passes the contents of /proc/version
-// so the function stays unit-testable.
+// so the function stays unit-testable. Both WSL1 and WSL2 tag their
+// kernel string with "microsoft" (case varies between releases).
 func isWSL(procVersion string) bool {
-	return false
+	return strings.Contains(strings.ToLower(procVersion), "microsoft")
 }
 
 // buildWSLNewWindowArgv returns the exec argv that drives wt.exe
 // (Windows Terminal) to open a new tab running `wsl.exe -d <distro>
 // bash -c 'cd <cwd> && ppz terminal share <handle> -- <argv...>'`.
+// The new tab pops on the Windows host — which is what users expect
+// from WSL — rather than trying to drive an X server inside the distro.
 func buildWSLNewWindowArgv(distro, handle, cwd string, argv []string) ([]string, error) {
-	return nil, fmt.Errorf("buildWSLNewWindowArgv: not implemented")
+	if distro == "" {
+		return nil, fmt.Errorf("buildWSLNewWindowArgv: empty distro (set $WSL_DISTRO_NAME)")
+	}
+	script := "ppz terminal share " + handle + " -- " + strings.Join(argv, " ")
+	if cwd != "" {
+		script = "cd " + bashSingleQuote(cwd) + " && " + script
+	}
+	// `-w 0` targets the current Windows Terminal window; `nt` opens a
+	// new tab inside it. Falls back to a new window if no WT instance
+	// exists yet.
+	return []string{"wt.exe", "-w", "0", "nt", "wsl.exe", "-d", distro, "bash", "-c", script}, nil
 }
