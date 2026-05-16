@@ -35,7 +35,11 @@ func cmdStatus(args []string) error {
 		return err
 	}
 	envCurrent := os.Getenv("PPZ_CURRENT_HANDLE")
-	cliproto.PrintStatusWithEnvAndCLIVersion(os.Stdout, st, envCurrent, st.CurrentPath, useColor(), version.Version)
-	maybeNotifyUpdate()
+	// Resolve the amber state inline: status no longer emits a
+	// trailing "update available: …" stderr line; the daemon line
+	// carries that signal instead. The fetch reuses the same
+	// short-timeout manifest call as maybeNotifyUpdate, and the same
+	// release-version guards (dev / dirty builds skip the network).
+	cliproto.PrintStatusWithUpdateInfo(os.Stdout, st, envCurrent, st.CurrentPath, useColor(), version.Version, updateAvailableForCLI())
 	return nil
 }

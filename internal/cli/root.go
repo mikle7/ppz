@@ -237,6 +237,9 @@ Acks (read receipts, v0.25):
 Setup (once per workstation):
   ppz daemon start                 start the local daemon
   ppz daemon stop                  stop the local daemon (idempotent)
+  ppz daemon restart               stop+start; use after 'ppz upgrade' when
+                                   'ppz status' reports the daemon out of
+                                   sync with the CLI
   ppz login URL -apikey K          shortcut for 'ppz daemon login'
   ppz daemon login URL -apikey K   log the daemon into a server with an api key
   ppz daemon logout                clear the stored credential

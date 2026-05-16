@@ -16,10 +16,10 @@ import (
 	"github.com/pipescloud/ppz/internal/daemon"
 )
 
-// cmdDaemonGroup dispatches `ppz daemon <subverb>` to start/stop/login/logout.
+// cmdDaemonGroup dispatches `ppz daemon <subverb>` to start/stop/restart/login/logout.
 func cmdDaemonGroup(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz daemon {start|stop|login|logout} [...]")
+		fmt.Fprintln(os.Stderr, "usage: ppz daemon {start|stop|restart|login|logout} [...]")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -27,6 +27,8 @@ func cmdDaemonGroup(args []string) error {
 		return cmdDaemonStart(args[1:])
 	case "stop":
 		return cmdDaemonStop(args[1:])
+	case "restart":
+		return cmdDaemonRestart(args[1:])
 	case "login":
 		return cmdDaemonLogin(args[1:])
 	case "logout":
@@ -35,6 +37,29 @@ func cmdDaemonGroup(args []string) error {
 	fmt.Fprintf(os.Stderr, "ppz daemon: unknown subcommand %q\n", args[0])
 	os.Exit(2)
 	return nil
+}
+
+// cmdDaemonRestart: stop+start in one verb. The "daemon out of sync
+// with ppz cli" state in `ppz status` recommends this — after an
+// upgrade, the running daemon is still the previous binary until it's
+// restarted, so a single command beats chaining `stop && start`.
+//
+// Output mirrors the two commands run in sequence: a "daemon stopped
+// pid=PID" (or "daemon not running") line first, then "daemon started
+// pid=PID" (or "daemon already running pid=PID" — though that's only
+// possible if a race spawned a new one between stop and start).
+//
+// No flags. Returns the error from start; stop's failures (other than
+// ESRCH-as-success) bubble up too.
+func cmdDaemonRestart(args []string) error {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "usage: ppz daemon restart")
+		os.Exit(2)
+	}
+	if err := cmdDaemonStop(nil); err != nil {
+		return err
+	}
+	return cmdDaemonStart(nil)
 }
 
 // cmdDaemonStart:

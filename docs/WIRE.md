@@ -270,15 +270,25 @@ Foreground (`--foreground`): same first line, then blocks.
 ### `ppz status`
 Logged in with a current source:
 ```
-daemon: logged in (pid=PID), <daemon_version> (<latest|not latest>)
+daemon: logged in (pid=PID), <daemon_version> (<state>)
 last token refresh: <relative time|->
 server: <URL>
 org: <org_name_or_id>
 nats: <connected|disconnected|connecting|unknown>
 current source: <handle>
 ```
+`<state>` is one of three values (since v0.31.9):
+  - `latest` (green) — daemon binary matches the CLI binary AND no
+    newer release is on the update manifest.
+  - `update available, run 'ppz upgrade'` (amber) — daemon matches the
+    CLI but the manifest advertises a newer release.
+  - `daemon out of sync with ppz cli, run 'ppz daemon restart'` (red) —
+    daemon binary disagrees with the CLI (typically right after `ppz
+    upgrade` ran but the old daemon is still resident). Out-of-sync
+    trumps update-available: restart first, upgrade after.
+
 Logged in, no current source: same with `current source: -`.
-Logged in, no auth: `daemon: not logged in (pid=PID), <daemon_version> (<latest|not latest>)` plus a login hint.
+Logged in, no auth: `daemon: not logged in (pid=PID), <daemon_version> (<state>)` plus a login hint.
 Daemon not running (exit 11): `daemon: not running`.
 
 The `nats:` line surfaces the daemon's current connection state to the
@@ -396,6 +406,18 @@ shape: `{"nats_state":str, "nats_drops_last_hour":int,
 
 ### `ppz kill`
 `daemon stopped pid=PID` if running, `daemon not running` if not. Exit 0 either way.
+
+### `ppz daemon restart`
+Runs `ppz daemon stop` followed by `ppz daemon start` — two output
+lines, both at exit 0:
+```
+daemon stopped pid=PID
+daemon started pid=PID
+```
+When no daemon was running, the first line is `daemon not running`
+instead. The verb exists so the red-state `ppz status` daemon line
+("daemon out of sync with ppz cli, run 'ppz daemon restart'") has a
+single command behind it.
 
 ### `ppz ls`
 One line per (source, pipe), sorted by `<handle>.<pipe>` ASC. Fields separated

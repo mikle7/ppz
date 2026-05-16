@@ -54,6 +54,31 @@ func maybeNotifyUpdate() {
 	fmt.Fprintln(os.Stderr, msg)
 }
 
+// updateAvailableForCLI returns true when the running CLI binary is
+// behind the published manifest. Honours the same skip rules as
+// maybeNotifyUpdate (PPZ_UPDATE_CHECK=0, dev/dirty builds) so e2e and
+// offline use don't flap into a perpetual "update available" state.
+//
+// Used by `ppz status` to drive the daemon line's amber state.
+// Failure to reach the manifest is silent — falls back to "no update
+// known" so transient network blips don't mislabel the daemon line.
+func updateAvailableForCLI() bool {
+	if os.Getenv("PPZ_UPDATE_CHECK") == "0" {
+		return false
+	}
+	if !isExactReleaseVersion(version.Version) {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	defer cancel()
+
+	manifest, err := fetchUpdateManifest(ctx)
+	if err != nil {
+		return false
+	}
+	return isNewerVersion(manifest.LatestVersion, version.Version)
+}
+
 // useStderrColor decides whether the update notice (written to stderr)
 // should carry ANSI escapes. NO_COLOR wins over everything per
 // https://no-color.org/. FORCE_COLOR turns it on regardless of tty.
