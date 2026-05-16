@@ -431,18 +431,22 @@ func buildLinuxNewWindowArgv(terminal, handle, cwd string, argv []string) ([]str
 	if cwd != "" {
 		script = "cd " + bashSingleQuote(cwd) + " && " + script
 	}
+	// `-lc` (login + command) makes bash source ~/.profile (and through
+	// it ~/.bashrc) before running the script. Plain `-c` is non-login
+	// and non-interactive, so it skips the user's PATH additions and
+	// the spawned `claude` reads as "executable file not found".
 	switch terminal {
 	case "gnome-terminal":
 		// gnome-terminal swallows trailing argv as its own options unless
 		// `--` separates them from the inner command.
-		return []string{"gnome-terminal", "--", "bash", "-c", script}, nil
+		return []string{"gnome-terminal", "--", "bash", "-lc", script}, nil
 	case "konsole", "xfce4-terminal", "tilix", "alacritty", "xterm", "x-terminal-emulator":
-		return []string{terminal, "-e", "bash", "-c", script}, nil
+		return []string{terminal, "-e", "bash", "-lc", script}, nil
 	case "kitty":
 		// kitty treats trailing argv as the command directly — no flag.
-		return []string{"kitty", "bash", "-c", script}, nil
+		return []string{"kitty", "bash", "-lc", script}, nil
 	case "wezterm":
-		return []string{"wezterm", "start", "--", "bash", "-c", script}, nil
+		return []string{"wezterm", "start", "--", "bash", "-lc", script}, nil
 	}
 	return nil, fmt.Errorf("unsupported terminal %q (supported: %v)", terminal, linuxTerminalPriority)
 }
@@ -470,6 +474,8 @@ func buildWSLNewWindowArgv(distro, handle, cwd string, argv []string) ([]string,
 	}
 	// `-w 0` targets the current Windows Terminal window; `nt` opens a
 	// new tab inside it. Falls back to a new window if no WT instance
-	// exists yet.
-	return []string{"wt.exe", "-w", "0", "nt", "wsl.exe", "-d", distro, "bash", "-c", script}, nil
+	// exists yet. `bash -lc` runs as a login shell so the spawned
+	// command sees the user's full PATH (claude usually lives in
+	// ~/.local/bin or an nvm/asdf prefix that only ~/.profile adds).
+	return []string{"wt.exe", "-w", "0", "nt", "wsl.exe", "-d", distro, "bash", "-lc", script}, nil
 }
