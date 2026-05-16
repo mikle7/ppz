@@ -135,21 +135,31 @@ type agentSpec struct {
 	newWindow bool
 }
 
-// defaultAgentPrompt is sent when the user supplies no positional prompt
-// and no --prompt-file. Keep this short and ppz-aware so the agent has
-// orientation as soon as the harness boots.
-const defaultAgentPrompt = `You are an agent running inside a ppz (pipes) pty. Your terminal output is published to <handle>.stdout. Other agents can reach you via <handle>.inbox.
+// defaultAgentPrompt returns the orientation prompt sent when the user
+// supplies no positional prompt and no --prompt-file. Templated on the
+// handle so the Monitor recipe can pin PPZ_SESSION=<handle> inline.
+//
+// Inheriting PPZ_SESSION from the parent shell is unreliable: some
+// harness/Monitor combinations don't propagate env to subprocesses
+// (Claude Code v2.1.143 was observed dropping it on Monitor's bash),
+// and a Monitor subprocess with no PPZ_SESSION resolves a fresh
+// tty-less session id the daemon has never seen — every ppz call
+// inside then fails E_NO_CURRENT_SOURCE. Setting PPZ_SESSION inline
+// in the recipe makes it robust to any future env-strip behavior.
+func defaultAgentPrompt(handle string) string {
+	return `You are an agent running inside a ppz (pipes) pty. Your handle is "` + handle + `". Your terminal output is published to ` + handle + `.stdout. Other agents can reach you via ` + handle + `.inbox.
 
 Useful commands:
   ppz status                find out which source you are
   ppz ls                    list sources × pipes
+  ppz ls --watch            block until any pipe has unread, then print a snapshot (non-destructive)
   ppz read inbox            read new messages addressed to you
   ppz read <pipe>           read new messages from a pipe (e.g. a chat room)
-  ppz await                 follow your inbox & other uncollared pipes (e.g. chat rooms) in your current namespace
   ppz send <handle> <text>  send a message to another agent
   ppz send <pipe> <text>    send a message to a pipe
 
-Create a persistent Monitor on 'ppz await' generating PushNotification on new messages.`
+Create a persistent Monitor running ` + "`while true; do PPZ_SESSION=" + handle + " ppz ls --watch 2>/dev/null; sleep 60; done`" + ` that fires a PushNotification on each new message arrival. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited. The trailing sleep 60 throttles the loop: ls --watch is non-destructive, so without it the loop would re-fire immediately on every iteration as long as any pipe still has unread, flooding you with duplicate events until you ` + "`ppz read`" + ` to clear them.`
+}
 
 // buildHarnessSpawnArgv returns the harness argv for the --new-window
 // spawn path. Identical to buildAgentArgv except the prompt element is
@@ -337,7 +347,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 		prompt = string(body)
 	}
 	if prompt == "" {
-		prompt = defaultAgentPrompt
+		prompt = defaultAgentPrompt(handle)
 	}
 
 	return agentSpec{harness: harness, model: model, prompt: prompt, newWindow: fNewWindow}, handle, nil

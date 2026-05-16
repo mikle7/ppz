@@ -204,19 +204,80 @@ func TestResolveAgentSpec_DefaultPromptUsedWhenNoneProvided(t *testing.T) {
 // the prompt and trying the command would hit `unknown command, exit 2`
 // and either retry-loop or hallucinate a workaround.
 func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt, "ppz broadcast") {
+	if strings.Contains(defaultAgentPrompt("test-handle"), "ppz broadcast") {
 		t.Errorf("defaultAgentPrompt references the removed `ppz broadcast` verb; agents will hit `unknown command` if they try it")
 	}
 }
 
-// TestDefaultAgentPrompt_MentionsAwait pins `ppz await` (v0.32.0) as
-// the recommended inbox-watching primitive. The pre-v0.32 prompt told
-// the agent to "poll" — that's strictly worse than a single blocking
-// `ppz await` call, and a regression to that wording is the failure
-// mode we're guarding against here.
-func TestDefaultAgentPrompt_MentionsAwait(t *testing.T) {
-	if !strings.Contains(defaultAgentPrompt, "ppz await") {
-		t.Errorf("defaultAgentPrompt should mention `ppz await` — the blocking-watch verb shipped in v0.32.0")
+// TestDefaultAgentPrompt_MentionsLsWatch pins `ppz ls --watch` as
+// the recommended inbox-awareness primitive for the Monitor pattern.
+// It blocks until any pipe has unread, prints a snapshot, and exits
+// without advancing any cursor — which is what a watch wants. The
+// previous recommendation (`ppz await`) drains as it follows, so a
+// Monitor wired to await races any later `ppz read inbox` and the
+// user-visible bug is "the agent claims it acted but my read shows
+// nothing".
+func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
+	if !strings.Contains(defaultAgentPrompt("test-handle"), "ppz ls --watch") {
+		t.Errorf("defaultAgentPrompt should reference `ppz ls --watch` — the non-destructive blocking-watch primitive used by the Monitor recipe")
+	}
+}
+
+// TestDefaultAgentPrompt_OmitsAwait — keep `ppz await` out of the
+// boot prompt. It's still a valid verb when the agent actively wants
+// to drain, but mentioning it in the useful-commands cheat sheet led
+// agents to wire it into a persistent Monitor, where it silently ate
+// inbox messages the user then asked them to `ppz read`. The watch
+// vs. read concerns belong on different verbs.
+func TestDefaultAgentPrompt_OmitsAwait(t *testing.T) {
+	if strings.Contains(defaultAgentPrompt("test-handle"), "ppz await") {
+		t.Errorf("defaultAgentPrompt must not mention `ppz await` — destructive read races `ppz read inbox`; use `ppz ls --watch` for awareness and `ppz read` for consumption")
+	}
+}
+
+// TestDefaultAgentPrompt_SubstitutesHandle pins the handle template
+// substitution. The prompt is built per-spawn with the actual handle
+// so the Monitor recipe can hard-code PPZ_SESSION=<handle> inline.
+// A regression to a const prompt would leave `<handle>` as a literal
+// placeholder in the recipe — the agent would then run a Monitor
+// keyed by the string "<handle>" instead of e.g. "eve".
+func TestDefaultAgentPrompt_SubstitutesHandle(t *testing.T) {
+	prompt := defaultAgentPrompt("alice")
+	if !strings.Contains(prompt, `"alice"`) {
+		t.Errorf("defaultAgentPrompt(\"alice\") should mention the handle literally; got: %q", prompt)
+	}
+	if strings.Contains(prompt, "<handle>.stdout") {
+		t.Errorf("defaultAgentPrompt should substitute the handle into `.stdout` / `.inbox` references, not leave the `<handle>` placeholder; got: %q", prompt)
+	}
+}
+
+// TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop — the Monitor
+// recipe must include a sleep on the success path. `ppz ls --watch`
+// is non-destructive: once a pipe has unread, every immediate re-arm
+// returns immediately with the same snapshot. Without the throttle
+// the loop spins as fast as the daemon can answer, flooding the
+// agent with duplicate events for the same unread state until it
+// runs `ppz read` to clear them. A trailing `sleep 60` between
+// iterations keeps the duplicate-event window bounded.
+func TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop(t *testing.T) {
+	prompt := defaultAgentPrompt("eve")
+	if !strings.Contains(prompt, "sleep 60") {
+		t.Errorf("defaultAgentPrompt Monitor recipe must throttle the loop with `sleep 60` so non-destructive ls --watch doesn't spin on persistent unread; got: %q", prompt)
+	}
+}
+
+// TestDefaultAgentPrompt_MonitorRecipePinsSession — the Monitor
+// recipe must set PPZ_SESSION=<handle> inline. Inheriting the parent
+// shell's PPZ_SESSION is unreliable across Claude Code versions; we
+// observed v2.1.143 dropping it on Monitor's bash subprocess, which
+// then resolved a fresh tty-less session id the daemon had never
+// seen and failed every ppz call with E_NO_CURRENT_SOURCE. Setting
+// PPZ_SESSION inline in the recipe makes the watch robust to that
+// behaviour.
+func TestDefaultAgentPrompt_MonitorRecipePinsSession(t *testing.T) {
+	prompt := defaultAgentPrompt("eve")
+	if !strings.Contains(prompt, "PPZ_SESSION=eve ppz ls --watch") {
+		t.Errorf("defaultAgentPrompt Monitor recipe should set PPZ_SESSION=<handle> inline so it survives env-strip on Monitor subprocesses; got: %q", prompt)
 	}
 }
 
@@ -226,7 +287,7 @@ func TestDefaultAgentPrompt_MentionsAwait(t *testing.T) {
 // Mis-spelling it leaves an agent unable to grep / Ctrl-F into the
 // actual docs and tests.
 func TestDefaultAgentPrompt_UsesUncollaredTerminology(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt, "uncoloured") {
+	if strings.Contains(defaultAgentPrompt("test-handle"), "uncoloured") {
 		t.Errorf("defaultAgentPrompt has the `uncoloured` typo; wire vocab is `uncollared` (WIRE.md §1)")
 	}
 }
@@ -240,7 +301,7 @@ func TestDefaultAgentPrompt_UsesUncollaredTerminology(t *testing.T) {
 // undo today's alignment work.
 func TestDefaultAgentPrompt_CommandColumnIsAligned(t *testing.T) {
 	descCol := -1
-	for i, line := range strings.Split(defaultAgentPrompt, "\n") {
+	for i, line := range strings.Split(defaultAgentPrompt("test-handle"), "\n") {
 		if !strings.HasPrefix(line, "  ppz ") {
 			continue
 		}
