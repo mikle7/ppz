@@ -158,11 +158,12 @@ Useful commands:
   ppz status                find out which source you are
   ppz ls                    list sources × pipes
   ppz read inbox            read new messages addressed to you
-  ppz read inbox --tail     follow your inbox live
+  ppz read <pipe>           read new messages from a pipe (e.g. a chat room)
+  ppz await                 follow your inbox & other uncollared pipes (e.g. chat rooms) in your current namespace
   ppz send <handle> <text>  send a message to another agent
-  ppz broadcast -m <text>   broadcast to your source's broadcast pipe
+  ppz send <pipe> <text>    send a message to a pipe
 
-Poll your inbox periodically while waiting for instructions.`
+Create a persistent Monitor on 'ppz await' generating PushNotification on new messages.`
 
 // buildAgentArgv returns the argv that runs *inside* the wrapped pty
 // (i.e. the part after the `--` to `ppz terminal share`). It does not

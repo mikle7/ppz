@@ -198,6 +198,83 @@ func TestResolveAgentSpec_DefaultPromptUsedWhenNoneProvided(t *testing.T) {
 	}
 }
 
+// TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb keeps `ppz broadcast`
+// (removed in v0.30.0 — see tests/broadcast/broadcast-returns-unknown-command)
+// from creeping back into the spawn-time orientation. An agent reading
+// the prompt and trying the command would hit `unknown command, exit 2`
+// and either retry-loop or hallucinate a workaround.
+func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
+	if strings.Contains(defaultAgentPrompt, "ppz broadcast") {
+		t.Errorf("defaultAgentPrompt references the removed `ppz broadcast` verb; agents will hit `unknown command` if they try it")
+	}
+}
+
+// TestDefaultAgentPrompt_MentionsAwait pins `ppz await` (v0.32.0) as
+// the recommended inbox-watching primitive. The pre-v0.32 prompt told
+// the agent to "poll" — that's strictly worse than a single blocking
+// `ppz await` call, and a regression to that wording is the failure
+// mode we're guarding against here.
+func TestDefaultAgentPrompt_MentionsAwait(t *testing.T) {
+	if !strings.Contains(defaultAgentPrompt, "ppz await") {
+		t.Errorf("defaultAgentPrompt should mention `ppz await` — the blocking-watch verb shipped in v0.32.0")
+	}
+}
+
+// TestDefaultAgentPrompt_UsesUncollaredTerminology fixes a "uncoloured"
+// → "uncollared" typo. The wire vocabulary in WIRE.md §1 is "collared"
+// (source-bound) vs "uncollared" (sourceless, e.g. chat-room pipes).
+// Mis-spelling it leaves an agent unable to grep / Ctrl-F into the
+// actual docs and tests.
+func TestDefaultAgentPrompt_UsesUncollaredTerminology(t *testing.T) {
+	if strings.Contains(defaultAgentPrompt, "uncoloured") {
+		t.Errorf("defaultAgentPrompt has the `uncoloured` typo; wire vocab is `uncollared` (WIRE.md §1)")
+	}
+}
+
+// TestDefaultAgentPrompt_CommandColumnIsAligned walks every "  ppz …"
+// line in the prompt and asserts that the description begins at the
+// same column on every row. Mis-aligned columns aren't a correctness
+// bug, but the prompt is a man-page-style cheat sheet — a drifting
+// column makes it harder to scan and signals "nobody runs this through
+// a check". Allowing per-row variance lets a future edit silently
+// undo today's alignment work.
+func TestDefaultAgentPrompt_CommandColumnIsAligned(t *testing.T) {
+	descCol := -1
+	for i, line := range strings.Split(defaultAgentPrompt, "\n") {
+		if !strings.HasPrefix(line, "  ppz ") {
+			continue
+		}
+		// Description starts after the first run of 2+ spaces past the
+		// leading indent — same rule the CLI's usage-text wrapper uses
+		// (cli/root.go wrapUsageText).
+		idx := -1
+		for j := 2; j < len(line); j++ {
+			if line[j] == ' ' && j+1 < len(line) && line[j+1] == ' ' {
+				k := j
+				for k < len(line) && line[k] == ' ' {
+					k++
+				}
+				idx = k
+				break
+			}
+		}
+		if idx < 0 {
+			t.Errorf("line %d (%q) has no description column", i, line)
+			continue
+		}
+		if descCol == -1 {
+			descCol = idx
+			continue
+		}
+		if idx != descCol {
+			t.Errorf("line %d (%q) starts description at col %d; expected col %d (matching the first command line)", i, line, idx, descCol)
+		}
+	}
+	if descCol == -1 {
+		t.Fatalf("defaultAgentPrompt has no `  ppz …` lines to align")
+	}
+}
+
 func TestResolveAgentSpec_PromptFileReadFromDisk(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/p.txt"
