@@ -1,0 +1,4 @@
+first_msg_received: 1
+daemon_same_pid: yes
+second_msg_received: 1
+exit=0

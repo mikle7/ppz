@@ -81,6 +81,18 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
+	// Register follow conns BEFORE the jetstream.New(d.NC) capture so a
+	// concurrent swapNC (refresh-loop firing on another goroutine)
+	// can't slip in between js binding and registry insertion — that
+	// window would leave the follow anchored to a stale NC with no
+	// eviction path. With registration first, any swap during the
+	// drain or consumer-setup phases closes the conn cleanly and the
+	// CLI's outer redial loop reconnects.
+	if req.Follow && d.Follows != nil {
+		d.Follows.add(conn)
+		defer d.Follows.remove(conn)
+	}
+
 	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
 		writeReadErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad account id"})
@@ -302,6 +314,11 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
+	// Follow conn was already registered up top (before js capture)
+	// so swapNC can evict it cleanly. Pinned by the share-stdin- and
+	// share-inbox-alerts-survives-share-daemon-{logout,relogin,
+	// restart} e2e tests.
+	//
 	// Follow mode: open a live consumer starting just after the last
 	// sequence we drained (so we don't double-deliver). Stream until the
 	// CLI closes the socket or the request ctx is cancelled.

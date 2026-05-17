@@ -250,14 +250,14 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 	// it. Phase 3.5: connection reads its JWT/seed from the refresh
 	// loop on every (re)connect, so when the loop rotates creds the
 	// next NATS reconnect picks them up automatically.
-	if d.NC != nil {
-		d.NC.Close()
-		d.NC = nil
-	}
+	//
+	// swapNC handles the close-old/install-new dance AND evicts any
+	// active follow conns — re-running login while a `terminal share`
+	// is active would otherwise silently break the .stdin /.inbox
+	// relays anchored to the prior NC.
 	d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
-	if nc, err := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents); err == nil {
-		d.NC = nc
-	}
+	newNC, _ := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents)
+	d.swapNC(newNC)
 
 	writeIPC(conn, cliproto.LoginReply{URL: req.URL, KeyPrefix: prefix, AccountID: ex.AccountID})
 }
@@ -282,8 +282,12 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 			return cliproto.New(cliproto.EServerUnreachable)
 		}
 		if refreshed && d.NC != nil {
-			d.NC.Close()
-			d.NC = nil
+			// Refresh-time creds rotation — drop NC and evict any
+			// live follow conns so the CLI redials against the
+			// post-rotation NATS connection. Same shape as logout /
+			// re-login; centralizing via swapNC makes this
+			// deterministic across every NC-replacement site.
+			d.swapNC(nil)
 		}
 	}
 	if d.NC != nil && d.NC.IsConnected() {
@@ -336,10 +340,11 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	if err != nil {
 		return cliproto.New(cliproto.ENATSUnreachable)
 	}
-	if d.NC != nil {
-		d.NC.Close()
-	}
-	d.NC = nc
+	// swapNC handles close-old + install-new + evict-follows. Any
+	// existing follows anchored to the prior (disconnected) NC would
+	// otherwise stay on a dead consumer — see the
+	// share-stdin-survives-share-daemon-logout / -relogin pins.
+	d.swapNC(nc)
 	if wasDisconnected && d.NATSEvents != nil {
 		d.NATSEvents.Append("reconnect", "ensureNATS rebuilt connection", time.Now())
 	}

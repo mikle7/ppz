@@ -44,6 +44,13 @@ type Daemon struct {
 	// source, populated by handleSend / handleSendBatch on the fly.
 	// Read by `ppz who`. Memory-only — cleared on daemon restart.
 	Heartbeats *HeartbeatCache
+
+	// Follows tracks live IPC conns that handleRead is streaming
+	// JetStream events on (Follow: true). Used by swapNC to evict
+	// stale follows when the NATS connection is replaced — the old
+	// consumers go silent and the CLI needs to redial against the
+	// new NC. See follow_registry.go.
+	Follows *followRegistry
 }
 
 func New(home, sock string) *Daemon {
@@ -55,7 +62,28 @@ func New(home, sock string) *Daemon {
 		Cursors:    newCursors(home),
 		NATSEvents: newNATSEventRing(natsEventRingCap),
 		Heartbeats: NewHeartbeatCache(),
+		Follows:    newFollowRegistry(),
 	}
+}
+
+// swapNC replaces d.NC, first evicting every live follow conn so the
+// CLI redials against the fresh NATS connection. Centralizing this
+// pattern guarantees that watcher / handleLogin / ensureNATS all
+// invalidate stale follows identically; any future NC-replacement
+// path picks up the same behaviour for free.
+//
+// `newNC` may be nil — used by the watcher when credentials disappear
+// and there's no replacement to install. Callers are responsible for
+// any nats.Conn lifecycle (connectNATSWithRefresh ownership) outside
+// of swapping the pointer.
+func (d *Daemon) swapNC(newNC *nats.Conn) {
+	if d.Follows != nil {
+		d.Follows.closeAll()
+	}
+	if d.NC != nil && d.NC != newNC {
+		d.NC.Close()
+	}
+	d.NC = newNC
 }
 
 // Run runs the daemon in the foreground. Returns when ctx is cancelled or

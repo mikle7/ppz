@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -326,9 +327,15 @@ func cmdTerminalShare(args []string) error {
 	}
 
 	var wg sync.WaitGroup
+	// IdleAfter / Cooldown are tunable via env so e2e tests can drive
+	// the alert pump within the harness 30s ceiling. Production
+	// defaults (15s idle, 30s cooldown) stand unless explicitly
+	// overridden; the env names are intentionally test-flavored.
+	idleAfter := envDurationMS("PPZ_TERMINAL_INBOX_IDLE_MS", 15*time.Second)
+	cooldown := envDurationMS("PPZ_TERMINAL_INBOX_COOLDOWN_MS", 30*time.Second)
 	inboxAlerts := newTerminalInboxAlertPumpForPTY(terminalInboxAlertConfig{
-		IdleAfter: 15 * time.Second,
-		Cooldown:  30 * time.Second,
+		IdleAfter: idleAfter,
+		Cooldown:  cooldown,
 		Message:   terminalInboxAlertMessage,
 	}, ptmx)
 
@@ -732,7 +739,34 @@ func (r *seenIDRing) add(id string) {
 	r.idx = (r.idx + 1) % r.cap
 }
 
+// forwardInboxAlerts subscribes to <handle>.inbox and feeds every
+// observed message to the alert pump. Resilient to daemon-NC swaps
+// (logout, re-login, refresh-time rotation) by the same shape as
+// forwardStdin: redial in an outer loop whenever the IPC conn drops,
+// dedupe redelivered messages via a seen-ID ring.
+//
+// Without redial, a single daemon recycle silently disables inbox
+// alerts for the rest of the share session. Pinned by
+// share-inbox-alerts-survives-share-daemon-restart.
 func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxAlertPump) {
+	seen := newSeenIDRing(1024)
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		streamForwardInboxAlertsOnce(ctx, handle, pump, seen)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
+
+func streamForwardInboxAlertsOnce(ctx context.Context, handle string, pump *terminalInboxAlertPump, seen *seenIDRing) {
 	conn, err := net.Dial("unix", ipcSocket())
 	if err != nil {
 		return
@@ -749,7 +783,15 @@ func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxA
 		return
 	}
 
-	go func() { <-ctx.Done(); _ = conn.Close() }()
+	stopCloser := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stopCloser:
+		}
+	}()
+	defer close(stopCloser)
 
 	dec := bufio.NewScanner(conn)
 	dec.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -761,7 +803,11 @@ func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxA
 		if evt.Message == nil {
 			continue
 		}
+		if seen.has(evt.Message.ID) {
+			continue
+		}
 		pump.ObserveInboxMessage(time.Now(), *evt.Message)
+		seen.add(evt.Message.ID)
 	}
 }
 
@@ -884,6 +930,20 @@ func cmdTerminalView(args []string) error {
 		}
 	}
 	return nil
+}
+
+// envDurationMS reads an integer-millisecond env var, returning the
+// fallback if unset or unparseable. Negative values fall back too.
+func envDurationMS(name string, fallback time.Duration) time.Duration {
+	v := os.Getenv(name)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fallback
+	}
+	return time.Duration(n) * time.Millisecond
 }
 
 // silence unused import errors when we trim things out during dev.
