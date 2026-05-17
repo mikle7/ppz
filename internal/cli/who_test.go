@@ -13,7 +13,7 @@ import (
 // Build a deterministic set of who-rows for renderer tests. Times are
 // expressed relative to a fixed `now` so the AGE column is stable.
 func sampleWhoEntries(now time.Time) []cliproto.WhoEntry {
-	beat := func(handle, harness, model string, age time.Duration, seq uint64) cliproto.WhoEntry {
+	beat := func(handle, harness, model, owner string, age time.Duration, seq uint64) cliproto.WhoEntry {
 		payload := HeartbeatPayload{
 			TS:          now.Add(-age).Format(time.RFC3339),
 			Seq:         seq,
@@ -30,15 +30,16 @@ func sampleWhoEntries(now time.Time) []cliproto.WhoEntry {
 		raw, _ := json.Marshal(payload)
 		return cliproto.WhoEntry{
 			Handle:    handle,
+			Owner:     owner,
 			Payload:   string(raw),
 			ArrivedAt: now.Add(-age),
 		}
 	}
 	return []cliproto.WhoEntry{
-		beat("alice", "claude", "opus", 10*time.Second, 5),    // online
-		beat("bob", "codex", "", 120*time.Second, 2),          // stale
-		beat("carol", "gemini", "pro", 10*time.Minute, 99),    // offline
-		beat("dave", "claude", "sonnet", 5*time.Second, 1),    // online
+		beat("alice", "claude", "opus", "alice-owner", 10*time.Second, 5),    // online
+		beat("bob", "codex", "", "bob-owner", 120*time.Second, 2),            // stale
+		beat("carol", "gemini", "pro", "", 10*time.Minute, 99),               // offline, no owner
+		beat("dave", "claude", "sonnet", "alice-owner", 5*time.Second, 1),    // online, same owner as alice
 	}
 }
 
@@ -50,9 +51,9 @@ func TestRenderWho_TablePlainText(t *testing.T) {
 	entries := sampleWhoEntries(now)
 	out := renderWho(entries, now, whoRenderOpts{Format: "table", UseColor: false})
 
-	for _, want := range []string{"HANDLE", "STATUS", "HARNESS", "MODEL", "HOST", "OS/ARCH", "CREATED",
-		"alice", "online", "claude", "opus",
-		"bob", "stale", "codex",
+	for _, want := range []string{"HANDLE", "STATUS", "HARNESS", "MODEL", "HOST", "OS/ARCH", "CREATED", "OWNER",
+		"alice", "online", "claude", "opus", "alice-owner",
+		"bob", "stale", "codex", "bob-owner",
 		"carol", "offline", "gemini", "pro",
 		"dave", "sonnet"} {
 		if !strings.Contains(out, want) {
@@ -150,6 +151,63 @@ func TestRenderWho_ColorRenderAlignsWithPlainAfterStrip(t *testing.T) {
 	stripped := ansi.ReplaceAllString(colored, "")
 	if stripped != plain {
 		t.Fatalf("ANSI-stripped colored render must equal plain render — tabwriter is over-padding because escape bytes count toward column width.\n--- plain ---\n%s\n--- stripped ---\n%s", plain, stripped)
+	}
+}
+
+// Empty Owner renders as "-" (matches HARNESS/MODEL/HOST fallback) so
+// the column never collapses and pre-ownership-resolution rows stay
+// visually consistent with the rest.
+func TestRenderWho_OwnerEmptyShowsDash(t *testing.T) {
+	now := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	entries := sampleWhoEntries(now)
+	out := renderWho(entries, now, whoRenderOpts{Format: "table", UseColor: false})
+
+	// carol has Owner == "" in sampleWhoEntries — its data row should
+	// carry a "-" in the OWNER column.
+	var carolLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "carol ") {
+			carolLine = line
+			break
+		}
+	}
+	if carolLine == "" {
+		t.Fatalf("carol row missing in output:\n%s", out)
+	}
+	// OWNER is the last column. After the trailing "CREATED" value,
+	// the line ends with " - " or just "-" depending on tab alignment.
+	// Assert the line ends with "-" (with optional trailing whitespace).
+	trimmed := strings.TrimRight(carolLine, " \t")
+	if !strings.HasSuffix(trimmed, "-") {
+		t.Errorf("carol's OWNER cell should be '-' for empty owner; line was:\n%s", carolLine)
+	}
+}
+
+// --owner=X filters in AND-combination with --harness, symmetric with
+// how --harness works today.
+func TestFilterWhoEntries_ByOwner(t *testing.T) {
+	now := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	entries := sampleWhoEntries(now)
+	got := filterWhoEntries(entries, now, whoFilter{Owner: "alice-owner"})
+	if h := handlesOf(got); !equalStrSlice(h, []string{"alice", "dave"}) {
+		t.Errorf("--owner=alice-owner: want [alice dave], got %v", h)
+	}
+	got = filterWhoEntries(entries, now, whoFilter{Owner: "nobody"})
+	if len(got) != 0 {
+		t.Errorf("--owner=nobody: want empty, got %v", handlesOf(got))
+	}
+}
+
+// JSON wire shape carries the owner verbatim so consumers don't have
+// to make a separate lookup.
+func TestRenderWho_JSONIncludesOwner(t *testing.T) {
+	now := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	entries := sampleWhoEntries(now)
+	out := renderWho(entries, now, whoRenderOpts{Format: "json", UseColor: false})
+	for _, owner := range []string{"alice-owner", "bob-owner"} {
+		if !strings.Contains(out, `"owner": "`+owner+`"`) && !strings.Contains(out, `"owner":"`+owner+`"`) {
+			t.Errorf("JSON missing owner %q; got:\n%s", owner, out)
+		}
 	}
 }
 

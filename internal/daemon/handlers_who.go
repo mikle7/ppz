@@ -13,20 +13,24 @@ import (
 // when the daemon has no NATS connection: an operator looking up "who
 // was running before my daemon got sick" should always get an answer.
 //
-// All filter / colour / format work happens client-side in cmdWho; the
-// daemon's only job is to dump the cache.
+// Owner enrichment: we fetch /api/v1/sources and join each cached
+// heartbeat's handle to its source's CreatedBy. Doing it at query
+// time (rather than embedding owner in the heartbeat payload) means
+// transfer-of-ownership server-side reflects in `ppz who` on the next
+// call without restarting agents. If the server call fails — daemon
+// offline, server down, NATS broken — we fall through with empty
+// owners rather than fail the whole verb; the cache snapshot is still
+// the more useful answer.
+//
+// All filter / colour / format work happens client-side in cmdWho.
 func (d *Daemon) handleWho(ctx context.Context, conn net.Conn, params json.RawMessage) {
-	_ = ctx
 	var req cliproto.WhoRequest
 	_ = json.Unmarshal(params, &req) // currently empty; reserved for future scoping
 
-	reply := cliproto.WhoReply{Entries: []cliproto.WhoEntry{}}
-	for _, e := range d.Heartbeats.Snapshot() {
-		reply.Entries = append(reply.Entries, cliproto.WhoEntry{
-			Handle:    e.Handle,
-			Payload:   e.Payload,
-			ArrivedAt: e.ArrivedAt,
-		})
-	}
-	writeIPC(conn, reply)
+	cache := d.Heartbeats.Snapshot()
+
+	var lr cliproto.ListSourcesReply
+	_ = d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr)
+
+	writeIPC(conn, cliproto.WhoReply{Entries: enrichEntriesWithOwners(cache, lr.Sources)})
 }
