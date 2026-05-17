@@ -1,0 +1,3 @@
+first_alert_count: 1
+alert_fired_again: yes
+exit=0

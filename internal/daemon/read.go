@@ -302,6 +302,19 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
+	// Follow mode: register the conn so swapNC can evict it when the
+	// daemon's NATS connection is replaced (logout, re-login, refresh
+	// rotation). Without this, the JetStream consumer below ends up
+	// anchored to a NC that gets closed under our feet and silently
+	// stops delivering events — the CLI sits on a still-open IPC
+	// socket forever. Pinned by the share-stdin-survives-share-
+	// daemon-{logout,relogin} and share-inbox-alerts-survives-share-
+	// daemon-restart e2e tests.
+	if d.Follows != nil {
+		d.Follows.add(conn)
+		defer d.Follows.remove(conn)
+	}
+
 	// Follow mode: open a live consumer starting just after the last
 	// sequence we drained (so we don't double-deliver). Stream until the
 	// CLI closes the socket or the request ctx is cancelled.

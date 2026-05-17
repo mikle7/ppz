@@ -35,8 +35,12 @@ func (d *Daemon) watchState(ctx context.Context, hupCh <-chan os.Signal) {
 		}
 		_ = d.State.LoadFromDisk()
 		if _, ok := d.State.Credentials(); !ok && d.NC != nil {
-			d.NC.Close()
-			d.NC = nil
+			// Logout / creds-deleted-out-of-band: drop NC and evict
+			// every live follow conn so the CLI sees EOF on its IPC
+			// socket and redials. Without the follow eviction the
+			// stdin/inbox forwarders sit on a healthy-looking conn
+			// whose underlying JetStream consumer just died.
+			d.swapNC(nil)
 		}
 		// Capture sigs after LoadFromDisk so hup-triggered reloads also
 		// align the cache.
