@@ -356,8 +356,10 @@ Other:
   ppz who [--json] [--online]      list every agent the local daemon has
          [--stale] [--offline]     seen a heartbeat from, with online /
          [--harness=X]             stale / offline status, harness, model,
-                                   host, os/arch and age. Filters combine
-                                   OR for status, AND for harness.
+                                   host, os/arch and CREATED (uptime as a
+                                   relative duration, e.g. "5 minutes ago").
+                                   Filters combine OR for status, AND for
+                                   harness.
   ppz completion {bash|zsh}        tab-completion script
                                    add 'eval "$(ppz completion bash)"' to
                                    your shell rc`

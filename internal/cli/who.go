@@ -161,7 +161,7 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 	// so the inserted bytes don't shift visible alignment.
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "HANDLE\tSTATUS\tHARNESS\tMODEL\tHOST\tOS/ARCH\tAGE")
+	fmt.Fprintln(w, "HANDLE\tSTATUS\tHARNESS\tMODEL\tHOST\tOS/ARCH\tCREATED")
 	statuses := make([]string, 0, len(entries))
 	for _, e := range entries {
 		var p HeartbeatPayload
@@ -179,7 +179,7 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 			fallback(p.Model, "-"),
 			fallback(p.Hostname, "-"),
 			fallback(osArch, "-"),
-			formatAge(now.Sub(e.ArrivedAt)),
+			createdRelative(p.StartedAt, now),
 		)
 	}
 	_ = w.Flush()
@@ -251,19 +251,19 @@ func fallback(s, dflt string) string {
 	return s
 }
 
-// formatAge renders the duration since the last beat in a compact
-// human form: <60s as "Ns", <60min as "Nm", else "Nh". Heartbeats
-// arriving at the daemon are always recent (typically <interval) so
-// the longer buckets are rarely seen in healthy fleets.
-func formatAge(d time.Duration) string {
-	if d < 0 {
-		d = 0
+// createdRelative renders the CREATED column for one row: a relative
+// duration (matching `ppz ls`'s "N seconds ago" style via the shared
+// cliproto.RelativeTime helper) computed from the heartbeat payload's
+// started_at field. An unparseable or empty started_at (no payload,
+// not-yet-fully-populated cache) falls back to "-" so the cell is
+// always present and the column never collapses.
+func createdRelative(startedAt string, now time.Time) string {
+	if startedAt == "" {
+		return "-"
 	}
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
+	t, err := time.Parse(time.RFC3339, startedAt)
+	if err != nil {
+		return "-"
 	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	}
-	return fmt.Sprintf("%dh", int(d.Hours()))
+	return cliproto.RelativeTime(t, now)
 }

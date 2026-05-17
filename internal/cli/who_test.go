@@ -50,7 +50,7 @@ func TestRenderWho_TablePlainText(t *testing.T) {
 	entries := sampleWhoEntries(now)
 	out := renderWho(entries, now, whoRenderOpts{Format: "table", UseColor: false})
 
-	for _, want := range []string{"HANDLE", "STATUS", "HARNESS", "MODEL", "HOST", "OS/ARCH", "AGE",
+	for _, want := range []string{"HANDLE", "STATUS", "HARNESS", "MODEL", "HOST", "OS/ARCH", "CREATED",
 		"alice", "online", "claude", "opus",
 		"bob", "stale", "codex",
 		"carol", "offline", "gemini", "pro",
@@ -82,6 +82,53 @@ func TestRenderWho_TableColorWrapsStatus(t *testing.T) {
 	}
 	if !strings.Contains(out, "\x1b[31moffline\x1b[0m") {
 		t.Errorf("expected red-wrapped offline, got:\n%s", out)
+	}
+}
+
+// The CREATED column should show when the agent was started — derived
+// from the heartbeat payload's started_at — as a relative-time string
+// matching `ppz ls` semantics ("just now" / "N seconds ago" / "N
+// minutes ago" / ...). A healthy agent beats every 60s, so the prior
+// "time since last beat" reading bounced between 0–60s and duplicated
+// information already in STATUS. CREATED matches `kubectl get pods`'s
+// AGE column / `docker ps`'s CREATED column.
+func TestRenderWho_CreatedColumnIsRelativeTimeFromStartedAt(t *testing.T) {
+	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)
+	beat := func(handle string, startedAgo, arrivedAgo time.Duration) cliproto.WhoEntry {
+		payload := HeartbeatPayload{
+			TS:          now.Add(-arrivedAgo).Format(time.RFC3339),
+			Seq:         1,
+			Hostname:    "h",
+			OS:          "linux",
+			Arch:        "amd64",
+			StartedAt:   now.Add(-startedAgo).Format(time.RFC3339),
+			IntervalSec: 60,
+		}
+		raw, _ := json.Marshal(payload)
+		return cliproto.WhoEntry{
+			Handle:    handle,
+			Payload:   string(raw),
+			ArrivedAt: now.Add(-arrivedAgo),
+		}
+	}
+	entries := []cliproto.WhoEntry{
+		// fresh beat (5s ago) but long-lived agent (2h uptime) → "2 hours ago".
+		beat("long-lived", 2*time.Hour, 5*time.Second),
+		// stale-ish beat (90s ago) on a young agent (90s uptime) → "1 minute ago".
+		beat("just-booted", 90*time.Second, 90*time.Second),
+	}
+	out := renderWho(entries, now, whoRenderOpts{Format: "table", UseColor: false})
+
+	for _, want := range []string{"CREATED", "long-lived", "just-booted", "2 hours ago", "1 minute ago"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered table missing %q; got:\n%s", want, out)
+		}
+	}
+	// Make sure we're not falling back to ArrivedAt: an arrival 5
+	// seconds ago on long-lived would show "5 seconds ago" and betray
+	// the bug.
+	if strings.Contains(out, "5 seconds ago") {
+		t.Errorf("CREATED column shows beat freshness (5 seconds ago) instead of uptime; got:\n%s", out)
 	}
 }
 
