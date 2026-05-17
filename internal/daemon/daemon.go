@@ -39,6 +39,11 @@ type Daemon struct {
 	// registered on the very first nats.Connect have a non-nil ring
 	// to append to.
 	NATSEvents *NATSEventRing
+
+	// Heartbeats holds the most recent <handle>.heartbeat payload per
+	// source, populated by handleSend / handleSendBatch on the fly.
+	// Read by `ppz who`. Memory-only — cleared on daemon restart.
+	Heartbeats *HeartbeatCache
 }
 
 func New(home, sock string) *Daemon {
@@ -49,6 +54,7 @@ func New(home, sock string) *Daemon {
 		HTTP:       &http.Client{Timeout: 5 * time.Second},
 		Cursors:    newCursors(home),
 		NATSEvents: newNATSEventRing(natsEventRingCap),
+		Heartbeats: NewHeartbeatCache(),
 	}
 }
 

@@ -15,7 +15,7 @@ func TestSourcePipes_MessageSourceIncludesInbox(t *testing.T) {
 
 func TestSourcePipes_PTYSourceIncludesInbox(t *testing.T) {
 	got := (Source{Kind: SourceKindPTY}).Pipes()
-	want := []string{"stdin", "stdout", "stdctrl", "inbox"}
+	want := []string{"stdin", "stdout", "stdctrl", "inbox", "heartbeat"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("pty source pipes = %#v, want %#v", got, want)
 	}
@@ -37,7 +37,7 @@ func TestIsAutoPipe_MessageSource(t *testing.T) {
 
 func TestIsAutoPipe_PTYSource(t *testing.T) {
 	src := Source{Kind: SourceKindPTY}
-	for _, pipe := range []string{"inbox", "stdin", "stdout", "stdctrl"} {
+	for _, pipe := range []string{"inbox", "stdin", "stdout", "stdctrl", "heartbeat"} {
 		if !src.IsAutoPipe(pipe) {
 			t.Errorf("IsAutoPipe(%q) = false for pty source, want true", pipe)
 		}

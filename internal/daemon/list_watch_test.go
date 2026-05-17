@@ -66,7 +66,7 @@ func TestPipesForKindIncludesInbox(t *testing.T) {
 		{
 			name: "pty source",
 			kind: "pty",
-			want: []string{"inbox", "stdctrl", "stdin", "stdout"},
+			want: []string{"heartbeat", "inbox", "stdctrl", "stdin", "stdout"},
 		},
 	}
 	for _, c := range cases {

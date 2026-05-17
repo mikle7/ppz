@@ -53,14 +53,47 @@ func cmdAgentCreate(args []string) error {
 
 // runAgentInForeground hands off to cmdTerminalShare in-process. The
 // argv shape is `<handle> -- <harness-argv...>` so terminal share runs
-// the harness inside the wrapped pty.
+// the harness inside the wrapped pty. Before handing off, the agent
+// identity env (PPZ_AGENT_HARNESS / PPZ_AGENT_MODEL) is exported into
+// the current process so terminalShareEnv picks it up via os.Environ()
+// — that's how heartbeats learn what harness they're stamping.
 func runAgentInForeground(handle string, spec agentSpec) error {
 	argv, err := buildAgentArgv(spec)
 	if err != nil {
 		return err
 	}
+	setAgentEnv(spec)
 	shareArgs := append([]string{handle, "--"}, argv...)
 	return cmdTerminalShare(shareArgs)
+}
+
+// agentEnvPairs returns the agent-identity env-var assignments the pty
+// wrapper reads to stamp every heartbeat. Always two keys so the wire
+// schema stays consistent regardless of harness; model may be empty
+// when the agent harness has no default (e.g. copilot/codex without
+// --model).
+func agentEnvPairs(spec agentSpec) []string {
+	return []string{
+		"PPZ_AGENT_HARNESS=" + spec.harness,
+		"PPZ_AGENT_MODEL=" + spec.model,
+	}
+}
+
+// setAgentEnv exports agentEnvPairs into the current process env. The
+// foreground path relies on this — cmdTerminalShare is called in-
+// process, and terminalShareEnv appends os.Environ() to the wrapped
+// child's env, so the agent identity flows through transitively. The
+// new-window path can't share process state with the spawned terminal,
+// so it injects the same pairs as a shell `env KEY=VAL ...` prefix
+// instead — see runAgentInNewWindow.
+func setAgentEnv(spec agentSpec) {
+	for _, kv := range agentEnvPairs(spec) {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		_ = os.Setenv(k, v)
+	}
 }
 
 // runAgentInNewWindow asks the host's window-manager to open a new
@@ -84,15 +117,16 @@ func runAgentInNewWindow(handle string, spec agentSpec) error {
 	// terminal opens in $HOME and claude shows a "trust this folder?"
 	// dialog on every run.
 	cwd, _ := os.Getwd()
+	envPairs := agentEnvPairs(spec)
 
 	switch runtime.GOOS {
 	case "darwin":
-		script := buildNewWindowScript(os.Getenv("TERM_PROGRAM"), handle, cwd, argv)
+		script := buildNewWindowScript(os.Getenv("TERM_PROGRAM"), handle, cwd, envPairs, argv)
 		return runWindowCmd("osascript", []string{"-e", script})
 	case "linux":
 		procVersion, _ := os.ReadFile("/proc/version")
 		if isWSL(string(procVersion)) {
-			cmdArgv, err := buildWSLNewWindowArgv(os.Getenv("WSL_DISTRO_NAME"), handle, cwd, argv)
+			cmdArgv, err := buildWSLNewWindowArgv(os.Getenv("WSL_DISTRO_NAME"), handle, cwd, envPairs, argv)
 			if err != nil {
 				return err
 			}
@@ -105,7 +139,7 @@ func runAgentInNewWindow(handle string, spec agentSpec) error {
 		if err != nil {
 			return err
 		}
-		cmdArgv, err := buildLinuxNewWindowArgv(terminal, handle, cwd, argv)
+		cmdArgv, err := buildLinuxNewWindowArgv(terminal, handle, cwd, envPairs, argv)
 		if err != nil {
 			return err
 		}
@@ -365,8 +399,8 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 // folder the parent shell was running in. macOS otherwise opens the new
 // Terminal window in $HOME, and claude treats trust per-folder, so every
 // run pops a "trust this folder?" dialog. Empty cwd is a graceful no-op.
-func buildNewWindowScript(termProgram, handle, cwd string, argv []string) string {
-	cmd := "ppz terminal share " + handle + " -- " + strings.Join(argv, " ")
+func buildNewWindowScript(termProgram, handle, cwd string, envPairs []string, argv []string) string {
+	cmd := shareInvocation(handle, envPairs, argv)
 	if cwd != "" {
 		cmd = "cd " + bashSingleQuote(cwd) + " && " + cmd
 	}
@@ -389,6 +423,20 @@ end tell`
     activate
 end tell`
 	}
+}
+
+// shareInvocation builds the `[env KEY=VAL ...] ppz terminal share
+// <handle> -- <argv...>` command string used by every --new-window
+// backend. envPairs is the agent identity (PPZ_AGENT_HARNESS, etc.) —
+// prepended via `env` so the spawned `ppz terminal share` sees the
+// pairs in its environment regardless of the user's shell. Empty
+// envPairs is a clean no-op for non-agent shares.
+func shareInvocation(handle string, envPairs, argv []string) string {
+	prefix := ""
+	if len(envPairs) > 0 {
+		prefix = "env " + strings.Join(envPairs, " ") + " "
+	}
+	return prefix + "ppz terminal share " + handle + " -- " + strings.Join(argv, " ")
 }
 
 // bashSingleQuote wraps s in bash-safe single quotes. Embedded single
@@ -446,8 +494,8 @@ func selectLinuxTerminal(termEnv string, available func(string) bool) (string, e
 // cwd, when non-empty, is prepended as `cd '<cwd>' && ` so the spawned
 // harness boots in the folder the parent shell was running in
 // (matching the macOS path's claude-trust-folder fix).
-func buildLinuxNewWindowArgv(terminal, handle, cwd string, argv []string) ([]string, error) {
-	script := "ppz terminal share " + handle + " -- " + strings.Join(argv, " ")
+func buildLinuxNewWindowArgv(terminal, handle, cwd string, envPairs []string, argv []string) ([]string, error) {
+	script := shareInvocation(handle, envPairs, argv)
 	if cwd != "" {
 		script = "cd " + bashSingleQuote(cwd) + " && " + script
 	}
@@ -484,11 +532,11 @@ func isWSL(procVersion string) bool {
 // bash -c 'cd <cwd> && ppz terminal share <handle> -- <argv...>'`.
 // The new tab pops on the Windows host — which is what users expect
 // from WSL — rather than trying to drive an X server inside the distro.
-func buildWSLNewWindowArgv(distro, handle, cwd string, argv []string) ([]string, error) {
+func buildWSLNewWindowArgv(distro, handle, cwd string, envPairs []string, argv []string) ([]string, error) {
 	if distro == "" {
 		return nil, fmt.Errorf("buildWSLNewWindowArgv: empty distro (set $WSL_DISTRO_NAME)")
 	}
-	script := "ppz terminal share " + handle + " -- " + strings.Join(argv, " ")
+	script := shareInvocation(handle, envPairs, argv)
 	if cwd != "" {
 		script = "cd " + bashSingleQuote(cwd) + " && " + script
 	}

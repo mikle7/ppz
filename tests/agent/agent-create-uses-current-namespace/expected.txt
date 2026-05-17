@@ -1,3 +1,4 @@
+pixel.cindy.heartbeat
 pixel.cindy.inbox
 pixel.cindy.stdctrl
 pixel.cindy.stdin
