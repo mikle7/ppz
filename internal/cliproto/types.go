@@ -581,8 +581,16 @@ type WhoRequest struct{}
 // verbatim heartbeat JSON the pty wrapper published; consumers
 // (cmdWho) unmarshal it as HeartbeatPayload to extract harness/model/
 // host fields.
+//
+// Owner is the username that owns the underlying source — resolved at
+// query time from the server's source listing rather than embedded in
+// the heartbeat payload, so transferring ownership server-side
+// reflects in `ppz who` on the next call without restarting the
+// agent. Empty when the daemon couldn't reach the server, or when the
+// cache has a beat for a source the server no longer knows about.
 type WhoEntry struct {
 	Handle    string    `json:"handle"`
+	Owner     string    `json:"owner,omitempty"`
 	Payload   string    `json:"payload"`
 	ArrivedAt time.Time `json:"arrived_at"`
 }

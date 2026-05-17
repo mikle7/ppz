@@ -37,6 +37,7 @@ func cmdWho(args []string) error {
 	onlyStale := fs.Bool("stale", false, "show only stale agents")
 	onlyOffline := fs.Bool("offline", false, "show only offline agents")
 	harness := fs.String("harness", "", "show only agents with this harness (claude/codex/copilot/gemini/...)")
+	owner := fs.String("owner", "", "show only agents whose source owner matches this username")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -52,6 +53,7 @@ func cmdWho(args []string) error {
 		Stale:   *onlyStale,
 		Offline: *onlyOffline,
 		Harness: *harness,
+		Owner:   *owner,
 	})
 
 	format := "table"
@@ -89,12 +91,14 @@ type whoRenderOpts struct {
 }
 
 // whoFilter is the client-side filter applied to the daemon's raw
-// snapshot. Multiple status flags combine OR; harness combines AND.
+// snapshot. Multiple status flags combine OR; harness and owner each
+// combine AND with whatever else is set.
 type whoFilter struct {
 	Online  bool
 	Stale   bool
 	Offline bool
 	Harness string
+	Owner   string
 }
 
 // filterWhoEntries returns the entries matching the filter. An empty
@@ -107,6 +111,9 @@ func filterWhoEntries(entries []cliproto.WhoEntry, now time.Time, f whoFilter) [
 		var p HeartbeatPayload
 		_ = json.Unmarshal([]byte(e.Payload), &p)
 		if f.Harness != "" && p.Harness != f.Harness {
+			continue
+		}
+		if f.Owner != "" && e.Owner != f.Owner {
 			continue
 		}
 		if statusFilter {
@@ -161,7 +168,7 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 	// so the inserted bytes don't shift visible alignment.
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "HANDLE\tSTATUS\tHARNESS\tMODEL\tHOST\tOS/ARCH\tCREATED")
+	fmt.Fprintln(w, "HANDLE\tSTATUS\tHARNESS\tMODEL\tHOST\tOS/ARCH\tCREATED\tOWNER")
 	statuses := make([]string, 0, len(entries))
 	for _, e := range entries {
 		var p HeartbeatPayload
@@ -172,7 +179,7 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 		if p.Arch != "" {
 			osArch = p.OS + "/" + p.Arch
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			e.Handle,
 			status,
 			fallback(p.Harness, "-"),
@@ -180,6 +187,7 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 			fallback(p.Hostname, "-"),
 			fallback(osArch, "-"),
 			createdRelative(p.StartedAt, now),
+			fallback(e.Owner, "-"),
 		)
 	}
 	_ = w.Flush()
@@ -219,13 +227,15 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 }
 
 // whoJSONRow is the per-row shape `ppz who --json` emits. Includes the
-// derived `status` so consumers don't have to re-implement the
-// classifier.
+// derived `status` and the owner the daemon resolved (so consumers
+// don't have to re-implement the classifier or hit /api/v1/sources
+// themselves).
 type whoJSONRow struct {
-	Handle     string           `json:"handle"`
-	Status     string           `json:"status"`
-	ArrivedAt  time.Time        `json:"arrived_at"`
-	Heartbeat  HeartbeatPayload `json:"heartbeat"`
+	Handle    string           `json:"handle"`
+	Status    string           `json:"status"`
+	Owner     string           `json:"owner"`
+	ArrivedAt time.Time        `json:"arrived_at"`
+	Heartbeat HeartbeatPayload `json:"heartbeat"`
 }
 
 func renderWhoJSON(entries []cliproto.WhoEntry, now time.Time) string {
@@ -236,6 +246,7 @@ func renderWhoJSON(entries []cliproto.WhoEntry, now time.Time) string {
 		rows = append(rows, whoJSONRow{
 			Handle:    e.Handle,
 			Status:    daemon.ClassifyHeartbeatStatus(e.ArrivedAt, now, p.IntervalSec),
+			Owner:     e.Owner,
 			ArrivedAt: e.ArrivedAt,
 			Heartbeat: p,
 		})

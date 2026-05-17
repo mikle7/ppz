@@ -355,11 +355,14 @@ Other:
                                    "not running" or "authentication error".
   ppz who [--json] [--online]      list every agent the local daemon has
          [--stale] [--offline]     seen a heartbeat from, with online /
-         [--harness=X]             stale / offline status, harness, model,
-                                   host, os/arch and CREATED (uptime as a
-                                   relative duration, e.g. "5 minutes ago").
+         [--harness=X] [--owner=X] stale / offline status, harness, model,
+                                   host, os/arch, CREATED (uptime as a
+                                   relative duration, e.g. "5 minutes ago")
+                                   and OWNER (the source's creator,
+                                   resolved at query time so transfer of
+                                   ownership reflects immediately).
                                    Filters combine OR for status, AND for
-                                   harness.
+                                   harness and owner.
   ppz completion {bash|zsh}        tab-completion script
                                    add 'eval "$(ppz completion bash)"' to
                                    your shell rc`
