@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+// HeartbeatIntervalSec is the canonical heartbeat cadence. The ticker
+// runs every HeartbeatIntervalSec seconds, the payload's interval_sec
+// field carries the same value so consumers (notably `ppz who`'s
+// classifier) can scale online/stale/offline thresholds proportionally.
+// Keep this as the single source of truth — three earlier copies of
+// `60` (ticker, payload field, doc) drifted apart in review.
+const HeartbeatIntervalSec = 60
+
 // HeartbeatPayload is the wire shape published to <handle>.heartbeat.
 // Every beat is fully self-describing — there is no "hello + delta"
 // split — so consumers (notably `ppz who`) can read a single message

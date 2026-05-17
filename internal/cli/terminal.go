@@ -392,13 +392,14 @@ func cmdTerminalShare(args []string) error {
 		forwardInboxAlerts(ctx, handle, inboxAlerts)
 	}()
 
-	// Heartbeat ticker: publishes <handle>.heartbeat every 60s with the
-	// agent identity (harness/model from PPZ_AGENT_* env vars set by
-	// `ppz agent create`) plus host/runtime fields. First beat fires
-	// immediately so `ppz who` shows a freshly-booted agent without
-	// waiting for the first interval. Lives inside the share's ctx so
-	// it stops cleanly when the wrapped child exits.
-	hbTicker := time.NewTicker(60 * time.Second)
+	// Heartbeat ticker: publishes <handle>.heartbeat every
+	// HeartbeatIntervalSec seconds with the agent identity (harness /
+	// model from PPZ_AGENT_* env vars set by `ppz agent create`) plus
+	// host/runtime fields. First beat fires immediately so `ppz who`
+	// shows a freshly-booted agent without waiting for the first
+	// interval. Lives inside the share's ctx so it stops cleanly when
+	// the wrapped child exits.
+	hbTicker := time.NewTicker(time.Duration(HeartbeatIntervalSec) * time.Second)
 	defer hbTicker.Stop()
 	wg.Add(1)
 	go func() {
@@ -414,7 +415,7 @@ func cmdTerminalShare(args []string) error {
 			PID:         os.Getpid(),
 			PPZVersion:  version.Version,
 			StartedAt:   time.Now(),
-			IntervalSec: 60,
+			IntervalSec: HeartbeatIntervalSec,
 		})
 	}()
 
