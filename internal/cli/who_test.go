@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,27 @@ func TestRenderWho_TableColorWrapsStatus(t *testing.T) {
 	}
 	if !strings.Contains(out, "\x1b[31moffline\x1b[0m") {
 		t.Errorf("expected red-wrapped offline, got:\n%s", out)
+	}
+}
+
+// tabwriter measures column widths in bytes, not visible glyphs. If
+// the renderer feeds it cells that already contain ANSI escape
+// sequences, the STATUS column gets padded by the escape-byte
+// overhead — the header line ends up ~9 spaces wider than the data
+// cell beneath it. Fix: render uncolored first so tabwriter pads on
+// visible width, then inject ANSI codes into the status cell as a
+// post-pass. Pin the contract by asserting that stripping ANSI from
+// the colored render yields exactly the plain render.
+func TestRenderWho_ColorRenderAlignsWithPlainAfterStrip(t *testing.T) {
+	now := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	entries := sampleWhoEntries(now)
+	plain := renderWho(entries, now, whoRenderOpts{Format: "table", UseColor: false})
+	colored := renderWho(entries, now, whoRenderOpts{Format: "table", UseColor: true})
+
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	stripped := ansi.ReplaceAllString(colored, "")
+	if stripped != plain {
+		t.Fatalf("ANSI-stripped colored render must equal plain render — tabwriter is over-padding because escape bytes count toward column width.\n--- plain ---\n%s\n--- stripped ---\n%s", plain, stripped)
 	}
 }
 

@@ -137,36 +137,44 @@ const (
 	ansiRed   = "\x1b[31m"
 )
 
-func colorStatus(status string, useColor bool) string {
-	if !useColor {
-		return status
-	}
+// statusAnsiPrefix returns the ANSI colour code for status, or "" if
+// the status isn't one of the three known buckets.
+func statusAnsiPrefix(status string) string {
 	switch status {
 	case "online":
-		return ansiGreen + status + ansiReset
+		return ansiGreen
 	case "stale":
-		return ansiAmber + status + ansiReset
+		return ansiAmber
 	case "offline":
-		return ansiRed + status + ansiReset
+		return ansiRed
 	}
-	return status
+	return ""
 }
 
 func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) string {
+	// tabwriter measures column widths in bytes, not visible glyphs.
+	// Feeding it ANSI-coloured cells over-pads every column whose data
+	// contains escape sequences — the header row (uncoloured) ends up
+	// ~9 spaces wider than the data cells below it. Render uncoloured
+	// first so columns align on visible width, then post-process to
+	// wrap status cells. ANSI escapes are zero-width on the terminal,
+	// so the inserted bytes don't shift visible alignment.
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "HANDLE\tSTATUS\tHARNESS\tMODEL\tHOST\tOS/ARCH\tAGE")
+	statuses := make([]string, 0, len(entries))
 	for _, e := range entries {
 		var p HeartbeatPayload
 		_ = json.Unmarshal([]byte(e.Payload), &p)
 		status := daemon.ClassifyHeartbeatStatus(e.ArrivedAt, now, p.IntervalSec)
+		statuses = append(statuses, status)
 		osArch := p.OS
 		if p.Arch != "" {
 			osArch = p.OS + "/" + p.Arch
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			e.Handle,
-			colorStatus(status, useColor),
+			status,
 			fallback(p.Harness, "-"),
 			fallback(p.Model, "-"),
 			fallback(p.Hostname, "-"),
@@ -175,7 +183,39 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 		)
 	}
 	_ = w.Flush()
-	return buf.String()
+
+	if !useColor {
+		return buf.String()
+	}
+
+	// Walk data rows, wrap the status word with ANSI codes. The
+	// status word always starts at the first non-space position
+	// after the handle column ends — find it via the first 2+
+	// space gap from column 0. Replacing on first match keeps a
+	// handle that happens to be "online" from getting recoloured.
+	lines := strings.Split(buf.String(), "\n")
+	for i, status := range statuses {
+		rowIdx := i + 1 // line 0 is the header
+		if rowIdx >= len(lines) {
+			break
+		}
+		prefix := statusAnsiPrefix(status)
+		if prefix == "" {
+			continue
+		}
+		// Anchor on the first occurrence of " <status>" (one space +
+		// the status word) so we don't accidentally match a substring
+		// inside the handle column when the handle is e.g. "online".
+		needle := " " + status
+		idx := strings.Index(lines[rowIdx], needle)
+		if idx < 0 {
+			continue
+		}
+		start := idx + 1 // skip the anchor space
+		end := start + len(status)
+		lines[rowIdx] = lines[rowIdx][:start] + prefix + status + ansiReset + lines[rowIdx][end:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // whoJSONRow is the per-row shape `ppz who --json` emits. Includes the
