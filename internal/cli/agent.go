@@ -126,7 +126,12 @@ func runAgentInNewWindow(handle string, spec agentSpec) error {
 	case "linux":
 		procVersion, _ := os.ReadFile("/proc/version")
 		if isWSL(string(procVersion)) {
-			cmdArgv, err := buildWSLNewWindowArgv(os.Getenv("WSL_DISTRO_NAME"), handle, cwd, envPairs, argv)
+			body := buildWSLScript(handle, cwd, envPairs, argv)
+			scriptPath, err := writeAgentSpawnScript("", handle, body)
+			if err != nil {
+				return err
+			}
+			cmdArgv, err := buildWSLNewWindowArgv(os.Getenv("WSL_DISTRO_NAME"), scriptPath)
 			if err != nil {
 				return err
 			}
@@ -528,46 +533,84 @@ func isWSL(procVersion string) bool {
 	return strings.Contains(strings.ToLower(procVersion), "microsoft")
 }
 
-// buildWSLNewWindowArgv returns the exec argv that drives wt.exe
-// (Windows Terminal) to open a new tab running `wsl.exe -d <distro>
-// bash -c 'cd <cwd> && ppz terminal share <handle> -- <argv...>'`.
-// The new tab pops on the Windows host — which is what users expect
-// from WSL — rather than trying to drive an X server inside the distro.
-func buildWSLNewWindowArgv(distro, handle, cwd string, envPairs []string, argv []string) ([]string, error) {
-	if distro == "" {
-		return nil, fmt.Errorf("buildWSLNewWindowArgv: empty distro (set $WSL_DISTRO_NAME)")
-	}
+// buildWSLScript returns the bash script body that boots the agent.
+// Pure — no side effects. The caller writes the body to a tempfile via
+// writeAgentSpawnScript and passes the path to buildWSLNewWindowArgv.
+//
+// We don't inline this script into the wt.exe argv anymore. wt.exe's
+// argv tokenizer corrupts the script in two ways that together break
+// every realistic agent prompt:
+//
+//  1. It treats `;` as a sub-command separator. The default agent
+//     prompt's Monitor recipe (`while true; do ... ; sleep 60 ; done`)
+//     contains three of them; wt.exe truncates the script at the first
+//     one and launches the trailing chunks as standalone Windows
+//     programs.
+//  2. It collapses `''` (adjacent close-quote / open-quote) sequences,
+//     which is exactly the middle of the standard bash single-quote
+//     escape `'\''` (used by bashSingleQuote to embed a literal `'`
+//     into a single-quoted string). A prompt containing `isn't`
+//     becomes `isn'\''t` in the script, which wt.exe collapses to
+//     `isn'\t'` — bash then sees an unmatched closing quote and hangs
+//     at the PS2 continuation prompt. The "flashing cursor, no source
+//     created" symptom on WSL.
+//
+// Routing the script through a tempfile means wt.exe only sees a
+// benign path (no `;`, no `'`), and bash reads the script byte-for-
+// byte from disk with its own quoting rules intact.
+func buildWSLScript(handle, cwd string, envPairs []string, argv []string) string {
 	script := shareInvocation(handle, envPairs, argv)
 	if cwd != "" {
 		script = "cd " + bashSingleQuote(cwd) + " && " + script
 	}
-	// `-w 0` targets the current Windows Terminal window; `nt` opens a
-	// new tab inside it. Falls back to a new window if no WT instance
-	// exists yet. `bash -lc` runs as a login shell so the spawned
-	// command sees the user's full PATH (claude usually lives in
-	// ~/.local/bin or an nvm/asdf prefix that only ~/.profile adds).
-	//
-	// escapeForWtExe escapes `;` for wt.exe's argv parser — wt.exe uses
-	// `;` as a sub-command separator in its own command line, and a
-	// literal `;` in the script (e.g. the defaultAgentPrompt Monitor
-	// recipe's `while true; do ... ; sleep 60 ; done`, or any user
-	// prompt that happens to contain one) otherwise truncates the bash
-	// script and Windows tries to launch the trailing chunks as
-	// standalone programs.
-	return []string{"wt.exe", "-w", "0", "nt", "wsl.exe", "-d", distro, "bash", "-lc", escapeForWtExe(script)}, nil
+	return script
 }
 
-// escapeForWtExe escapes characters that wt.exe (Windows Terminal)
-// treats as command-line metacharacters when parsing its argv. Today
-// that's just `;`, which wt.exe uses as a sub-command separator (the
-// `wt new-tab ... ; new-tab ...` chaining syntax). The backslash is
-// consumed by wt.exe's own parser, so the downstream `wsl.exe -d
-// <distro> bash -lc <script>` receives a literal `;`.
+// writeAgentSpawnScript writes the bash script body to a tempfile and
+// returns its path. The written script self-cleans (rm -f) on EXIT so
+// /tmp doesn't accumulate one-shot helpers. dir is the temp directory
+// to use — empty means os.TempDir().
 //
-// Apply this only at the wt.exe boundary (i.e. inside
-// buildWSLNewWindowArgv when composing the final argv). Don't apply it
-// earlier — `\;` is not a valid bash escape and would leak through to
-// the harness if a downstream layer ever stopped routing through wt.exe.
-func escapeForWtExe(s string) string {
-	return strings.ReplaceAll(s, ";", `\;`)
+// The shebang isn't load-bearing (the script is invoked as `bash -l
+// <path>`, which reads commands directly without honoring shebangs)
+// but it's set so a user inspecting the leftover file knows what it
+// is.
+func writeAgentSpawnScript(dir, handle, body string) (string, error) {
+	f, err := os.CreateTemp(dir, "ppz-agent-"+handle+"-*.sh")
+	if err != nil {
+		return "", fmt.Errorf("ppz agent spawn script: %w", err)
+	}
+	defer f.Close()
+	content := "#!/bin/bash\ntrap 'rm -f -- " + bashSingleQuote(f.Name()) + "' EXIT\n" + body + "\n"
+	if _, err := f.WriteString(content); err != nil {
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("ppz agent spawn script: %w", err)
+	}
+	if err := os.Chmod(f.Name(), 0o700); err != nil {
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("ppz agent spawn script: %w", err)
+	}
+	return f.Name(), nil
+}
+
+// buildWSLNewWindowArgv returns the exec argv that drives wt.exe
+// (Windows Terminal) to open a new tab running `wsl.exe -d <distro>
+// bash -l <scriptPath>`. The script must already be on disk — see
+// writeAgentSpawnScript and the buildWSLScript comment for why the
+// script can't be inlined into the argv.
+//
+// `-w 0` targets the current Windows Terminal window; `nt` opens a new
+// tab inside it. Falls back to a new window if no WT instance exists
+// yet. `bash -l <scriptPath>` runs the script as a *login* shell so it
+// sources ~/.profile / ~/.bash_profile — most users' PATH additions
+// for claude (npm-global, nvm, asdf, ~/.local/bin) live there and a
+// plain non-login `bash <path>` would fail to find the binary.
+func buildWSLNewWindowArgv(distro, scriptPath string) ([]string, error) {
+	if distro == "" {
+		return nil, fmt.Errorf("buildWSLNewWindowArgv: empty distro (set $WSL_DISTRO_NAME)")
+	}
+	if scriptPath == "" {
+		return nil, fmt.Errorf("buildWSLNewWindowArgv: empty scriptPath")
+	}
+	return []string{"wt.exe", "-w", "0", "nt", "wsl.exe", "-d", distro, "bash", "-l", scriptPath}, nil
 }

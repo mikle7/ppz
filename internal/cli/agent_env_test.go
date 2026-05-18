@@ -81,14 +81,13 @@ func TestBuildLinuxNewWindowArgv_InjectsAgentEnvPairs(t *testing.T) {
 	}
 }
 
-func TestBuildWSLNewWindowArgv_InjectsAgentEnvPairs(t *testing.T) {
+// On WSL the script is on disk (see buildWSLScript / writeAgentSpawnScript)
+// rather than inline in the wt.exe argv, so this asserts on the script
+// body rather than `strings.Join(argv, " ")` like the Linux variant.
+func TestBuildWSLScript_InjectsAgentEnvPairs(t *testing.T) {
 	pairs := []string{"PPZ_AGENT_HARNESS=claude", "PPZ_AGENT_MODEL=opus"}
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", pairs, []string{"claude"})
-	if err != nil {
-		t.Fatalf("buildWSLNewWindowArgv: %v", err)
-	}
-	joined := strings.Join(argv, " ")
-	if !strings.Contains(joined, "env PPZ_AGENT_HARNESS=claude PPZ_AGENT_MODEL=opus ppz terminal share") {
-		t.Errorf("expected env-prefixed share invocation in argv, got:\n%s", joined)
+	script := buildWSLScript("alice", "", pairs, []string{"claude"})
+	if !strings.Contains(script, "env PPZ_AGENT_HARNESS=claude PPZ_AGENT_MODEL=opus ppz terminal share") {
+		t.Errorf("expected env-prefixed share invocation in script, got:\n%s", script)
 	}
 }
