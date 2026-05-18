@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.32.0 — Auth surface restructure + /orgs → /accounts rename (Phase 2)
+## v0.34.0 — Auth surface restructure + /orgs → /accounts rename (Phase 2)
 
 **Breaking release.** Pre-launch schema bump + URL surface change — cutover via Reset Database action then redeploy.
 
@@ -39,7 +39,7 @@ Restructures admin-UI authentication around an env-var-driven mode (`PPZ_SERVER_
 Pre-launch schema bump. Same sequence as v0.31.x:
 
 1. Reset Database action — drops + recreates production DB, ppz-server stopped.
-2. Deploy v0.32.0 — `systemctl restart` brings up the new binary against the empty DB; baseline + 0002 + 0003 migrations run cleanly.
+2. Deploy v0.34.0 — `systemctl restart` brings up the new binary against the empty DB; baseline + 0002 + 0003 migrations run cleanly.
 3. Smoke-test.
 
 See `pipes-internal/docs/PHASE-2-IMPLEMENTATION-PLAN.md` for the full TDD cycle log and `pipes-internal/docs/OSS-PIPESCLOUD-ARCHITECTURE-SPLIT.md` for the strategic context.
