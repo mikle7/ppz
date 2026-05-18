@@ -1,10 +1,15 @@
 package cli
 
 import (
+	"context"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Default: --claude --opus, prompt as last positional argument.
@@ -882,6 +887,133 @@ func TestWriteAgentSpawnScript_RestrictedMode(t *testing.T) {
 	}
 	if mode := info.Mode().Perm(); mode != 0o700 {
 		t.Errorf("script mode = %#o, want 0700 (owner-only — prompt may contain sensitive context)", mode)
+	}
+}
+
+// TestSpawnScript_RunsUnderBashLoginShell is the bash-script-level e2e
+// test for the WSL --new-window flow. It does NOT invoke wt.exe (CI
+// runners aren't WSL and have no Windows Terminal) but it DOES
+// exercise the layer that hung on WSL in v0.33.4: bash itself parsing
+// and running the script we write to disk.
+//
+// Why this catches a class of bug the invariant tests miss:
+//
+//   - The invariant tests (DoesNotExposeScriptToWtExe etc.) prove the
+//     script doesn't pass through wt.exe's tokeniser. They say nothing
+//     about whether bash can actually parse the script. PR #65 shipped
+//     a green-CI build that hung at PS2 the moment bash hit the bash-
+//     quote-escape `'\''` — we never exec'd the script.
+//   - The realistic input here is the default agent prompt, which has
+//     both pathologies that previously broke WSL: `;` inside a
+//     single-quoted bash arg (Monitor recipe) AND embedded `'` (bash
+//     contractions like `isn't`) that produce `'\''` escapes in the
+//     script. If our quoting is broken, bash hangs and the 10s
+//     timeout fires; if our env-prefix or `cd` is wrong, the stubs'
+//     log shows the wrong shape.
+//
+// Setup: two stubs in a TempDir on PATH — a `ppz` that appends its
+// argv and selected env vars to a log file, and a `claude` that's a
+// no-op (otherwise it'd try to launch the interactive harness and
+// hang). HOME is also a TempDir so `bash -l` doesn't source the
+// developer's real ~/.profile and contaminate the run.
+func TestSpawnScript_RunsUnderBashLoginShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires POSIX bash")
+	}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available on $PATH")
+	}
+
+	stubDir := t.TempDir()
+	logPath := filepath.Join(stubDir, "ppz.log")
+
+	// `ppz` stub: append a delimited record of argv and PPZ_AGENT_*
+	// env vars to logPath. `set -u` would trip on the env vars when
+	// unset, so reference them with the `:-` default so an absent
+	// env shows up as an empty value rather than aborting the stub.
+	ppzStub := "#!/bin/bash\n" +
+		"{\n" +
+		"  echo '--- ppz invocation ---'\n" +
+		"  echo \"argv: $*\"\n" +
+		"  echo \"PPZ_AGENT_HARNESS=${PPZ_AGENT_HARNESS:-}\"\n" +
+		"  echo \"PPZ_AGENT_MODEL=${PPZ_AGENT_MODEL:-}\"\n" +
+		"  echo \"PWD=$PWD\"\n" +
+		"} >> " + logPath + "\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "ppz"), []byte(ppzStub), 0o700); err != nil {
+		t.Fatalf("write ppz stub: %v", err)
+	}
+	// `claude` stub: no-op. The real harness would try to render an
+	// interactive TUI and hang under `bash -l`.
+	if err := os.WriteFile(filepath.Join(stubDir, "claude"), []byte("#!/bin/bash\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("write claude stub: %v", err)
+	}
+
+	// Build the spawn script via the same code path runAgentInNewWindow's
+	// WSL branch uses, with the *default* agent prompt as input — that's
+	// the realistic case that hung in v0.33.4.
+	spec := agentSpec{
+		harness: "claude",
+		model:   "opus",
+		prompt:  defaultAgentPrompt("alice"),
+	}
+	harnessArgv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	body := buildWSLScript("alice", stubDir, agentEnvPairs(spec), harnessArgv)
+	scriptPath, err := writeAgentSpawnScript(t.TempDir(), "alice", body)
+	if err != nil {
+		t.Fatalf("writeAgentSpawnScript: %v", err)
+	}
+
+	// Run with our stubs winning on PATH. A 10s timeout catches the
+	// "flashing cursor" / PS2-hang failure mode — if bash can't parse
+	// the script, it'll wait indefinitely for more input.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "-l", scriptPath)
+	// HOME=TempDir so `bash -l` doesn't source the developer's real
+	// ~/.profile (which might do anything from setting unrelated env
+	// to running other commands, contaminating our assertions).
+	cmd.Env = []string{
+		"PATH=" + stubDir + ":" + os.Getenv("PATH"),
+		"HOME=" + t.TempDir(),
+	}
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("bash hung — script likely has unclosed quoting or another parse error; output so far:\n%s", out)
+	}
+	if err != nil {
+		t.Fatalf("bash failed: %v\noutput:\n%s", err, out)
+	}
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v\nbash output:\n%s", err, out)
+	}
+	logStr := string(log)
+
+	// The stub should have been invoked once with the full ppz argv.
+	if !strings.Contains(logStr, "--- ppz invocation ---") {
+		t.Errorf("stub ppz was never invoked — bash parsed the script but didn't reach the ppz call; log was:\n%s\n\nbash output:\n%s", logStr, out)
+	}
+	// argv shape: `ppz terminal share alice -- claude --dangerously-skip-permissions --model opus <prompt>`
+	// We assert on the discriminating subset.
+	for _, want := range []string{"terminal", "share", "alice", "--", "claude"} {
+		if !strings.Contains(logStr, want) {
+			t.Errorf("ppz argv missing token %q; log:\n%s", want, logStr)
+		}
+	}
+	// Env-prefix carried through `env A=... B=... ppz ...`.
+	if !strings.Contains(logStr, "PPZ_AGENT_HARNESS=claude") {
+		t.Errorf("PPZ_AGENT_HARNESS didn't reach ppz — `env` prefix is broken; log:\n%s", logStr)
+	}
+	if !strings.Contains(logStr, "PPZ_AGENT_MODEL=opus") {
+		t.Errorf("PPZ_AGENT_MODEL didn't reach ppz; log:\n%s", logStr)
+	}
+	// cwd: `cd '<dir>' && ...` should have taken effect before ppz ran.
+	if !strings.Contains(logStr, "PWD="+stubDir) {
+		t.Errorf("cwd was not %q when ppz ran — `cd` is broken; log:\n%s", stubDir, logStr)
 	}
 }
 
