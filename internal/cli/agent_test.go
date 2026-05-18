@@ -223,6 +223,18 @@ func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
 	}
 }
 
+// TestDefaultAgentPrompt_MentionsWho pins `ppz who` in the cheat
+// sheet. Without it, an agent reading the prompt knows how to list
+// pipes (`ppz ls`) and message peers (`ppz send <handle>`) but has
+// no documented way to discover *which* handles exist — agents were
+// observed inventing handles or asking the user, instead of running
+// the verb the daemon already exposes.
+func TestDefaultAgentPrompt_MentionsWho(t *testing.T) {
+	if !strings.Contains(defaultAgentPrompt("test-handle"), "ppz who") {
+		t.Errorf("defaultAgentPrompt should reference `ppz who` so agents can discover which peers are online before trying to `ppz send`")
+	}
+}
+
 // TestDefaultAgentPrompt_OmitsAwait — keep `ppz await` out of the
 // boot prompt. It's still a valid verb when the agent actively wants
 // to drain, but mentioning it in the useful-commands cheat sheet led
@@ -697,6 +709,110 @@ func TestBuildWSLNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
 func TestBuildWSLNewWindowArgv_EmptyDistroErrors(t *testing.T) {
 	if _, err := buildWSLNewWindowArgv("", "alice", "", nil, []string{"claude"}); err == nil {
 		t.Fatal("expected error for empty distro (caller forgot $WSL_DISTRO_NAME)")
+	}
+}
+
+// TestBuildWSLNewWindowArgv_EscapesSemicolonsForWtExe pins the wt.exe
+// argv-tokenisation contract: wt.exe (Windows Terminal) uses `;` as a
+// sub-command separator in its own command line, so any literal `;` we
+// want bash to receive downstream must be escaped as `\;` before being
+// placed in the wt.exe argv.
+//
+// The bug this guards against: `ppz agent create <handle> --new-window`
+// on WSL invokes the default agent prompt, whose Monitor recipe is
+// `while true; do PPZ_SESSION=<handle> ppz ls --watch 2>/dev/null;
+// sleep 60; done` — three literal semicolons inside a bash-single-
+// quoted prompt argument. Without escaping, wt.exe sees those `;`s and
+// truncates the script at the first one, then tries to launch each
+// subsequent chunk (` do PPZ_SESSION=…`, ` sleep 60`, ` done that fires
+// a PushNotification…`) as a separate Windows program. The user sees
+// `[error 2147942402 (0x80070002) when launching …] The system cannot
+// find the file specified.` in four sibling tabs, plus the first tab's
+// bash reports `unexpected EOF while looking for matching ` because the
+// truncation severs the Monitor recipe inside its opening backtick.
+//
+// Realistic input: round-trip the default agent prompt through
+// buildHarnessSpawnArgv (which bash-single-quotes the prompt for
+// inline embedding) and then buildWSLNewWindowArgv. The final argv
+// element is the bash script handed to `bash -lc`; every `;` in it
+// must be backslash-escaped for wt.exe.
+func TestBuildWSLNewWindowArgv_EscapesSemicolonsForWtExe(t *testing.T) {
+	spec := agentSpec{
+		harness: "claude",
+		model:   "opus",
+		prompt:  defaultAgentPrompt("alice"),
+	}
+	harnessArgv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", agentEnvPairs(spec), harnessArgv)
+	if err != nil {
+		t.Fatalf("buildWSLNewWindowArgv: %v", err)
+	}
+	script := argv[len(argv)-1]
+	// Sanity: the Monitor recipe's three semicolons should be present
+	// in some form. If they aren't we've lost the prompt entirely and
+	// any "no unescaped ;" assertion below is a false positive.
+	if !strings.Contains(script, "while true") || !strings.Contains(script, "sleep 60") {
+		t.Fatalf("script does not contain the default prompt's Monitor recipe; test setup is wrong, got: %q", script)
+	}
+	for i := 0; i < len(script); i++ {
+		if script[i] != ';' {
+			continue
+		}
+		if i == 0 || script[i-1] != '\\' {
+			t.Errorf("script contains an unescaped `;` at byte %d — wt.exe will split the argv here and Windows will try to launch the trailing chunk as a program; got: %q", i, script)
+			return
+		}
+	}
+}
+
+// TestBuildWSLNewWindowArgv_EscapesSemicolonsInUserPrompt covers the
+// non-default-prompt case: a user runs `ppz agent create alice
+// --new-window "do X; then Y"`. The `;` belongs to the user's prompt
+// text — they did not type it as a shell separator — but wt.exe will
+// still see it once we've inlined the prompt into the bash script, and
+// will still split. The escape contract must hold regardless of where
+// the `;` came from, not just for our baked-in defaultAgentPrompt.
+//
+// Distinct from the previous test in two ways:
+//
+//  1. The `;` is in a user-supplied prompt, not the orientation prompt
+//     — so a future rewrite that drops `;` from defaultAgentPrompt
+//     won't accidentally let this regress.
+//  2. The argv is constructed via buildHarnessSpawnArgv (the same path
+//     the foreground CLI uses), which bash-single-quotes the prompt.
+//     We're asserting that the wt.exe escape applies *outside* the
+//     bash single-quoting — bash unescapes nothing inside single
+//     quotes, so without the wt.exe-layer escape, the `;` rides
+//     through the single quote intact and trips wt.exe's tokeniser.
+func TestBuildWSLNewWindowArgv_EscapesSemicolonsInUserPrompt(t *testing.T) {
+	spec := agentSpec{
+		harness: "claude",
+		model:   "opus",
+		prompt:  "do X; then Y; finally Z",
+	}
+	harnessArgv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", agentEnvPairs(spec), harnessArgv)
+	if err != nil {
+		t.Fatalf("buildWSLNewWindowArgv: %v", err)
+	}
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "do X") || !strings.Contains(script, "finally Z") {
+		t.Fatalf("script does not contain the user prompt; test setup is wrong, got: %q", script)
+	}
+	for i := 0; i < len(script); i++ {
+		if script[i] != ';' {
+			continue
+		}
+		if i == 0 || script[i-1] != '\\' {
+			t.Errorf("script contains an unescaped `;` at byte %d (from a user-supplied prompt) — wt.exe will split the argv here; got: %q", i, script)
+			return
+		}
 	}
 }
 

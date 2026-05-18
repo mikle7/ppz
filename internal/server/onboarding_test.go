@@ -40,10 +40,10 @@ func TestDashboard_ShowsOnboardingWhenNoPipes(t *testing.T) {
 		t.Errorf("dashboard body missing %q when HasNoPipes=true", onboardingMarker)
 	}
 	for _, hint := range []string{
-		"install.sh",                         // step 1: install command
-		"ppz login https://example.test",     // step 2: simplified login with SiteURL substitution
-		"create a team of 4x agents",         // step 3: AI harness prompt
-		`class="copy-btn"`,                   // each step has a copy button
+		"install.sh",                       // step 1: install command
+		"ppz login https://example.test",   // step 2: simplified login with SiteURL substitution
+		"ppz agent create alice",           // step 3: copy-pasteable ppz command block
+		`class="copy-btn"`,                 // each step has a copy button
 		`data-copy-target='[data-cmd="install"]'`,
 		`data-copy-target='[data-cmd="login"]'`,
 		`data-copy-target='[data-cmd="prompt"]'`,

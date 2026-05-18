@@ -185,6 +185,7 @@ func defaultAgentPrompt(handle string) string {
 
 Useful commands:
   ppz status                find out which source you are
+  ppz who                   see which other agents are online
   ppz ls                    list sources × pipes
   ppz ls --watch            block until any pipe has unread, then print a snapshot (non-destructive)
   ppz read inbox            read new messages addressed to you
@@ -545,5 +546,28 @@ func buildWSLNewWindowArgv(distro, handle, cwd string, envPairs []string, argv [
 	// exists yet. `bash -lc` runs as a login shell so the spawned
 	// command sees the user's full PATH (claude usually lives in
 	// ~/.local/bin or an nvm/asdf prefix that only ~/.profile adds).
-	return []string{"wt.exe", "-w", "0", "nt", "wsl.exe", "-d", distro, "bash", "-lc", script}, nil
+	//
+	// escapeForWtExe escapes `;` for wt.exe's argv parser — wt.exe uses
+	// `;` as a sub-command separator in its own command line, and a
+	// literal `;` in the script (e.g. the defaultAgentPrompt Monitor
+	// recipe's `while true; do ... ; sleep 60 ; done`, or any user
+	// prompt that happens to contain one) otherwise truncates the bash
+	// script and Windows tries to launch the trailing chunks as
+	// standalone programs.
+	return []string{"wt.exe", "-w", "0", "nt", "wsl.exe", "-d", distro, "bash", "-lc", escapeForWtExe(script)}, nil
+}
+
+// escapeForWtExe escapes characters that wt.exe (Windows Terminal)
+// treats as command-line metacharacters when parsing its argv. Today
+// that's just `;`, which wt.exe uses as a sub-command separator (the
+// `wt new-tab ... ; new-tab ...` chaining syntax). The backslash is
+// consumed by wt.exe's own parser, so the downstream `wsl.exe -d
+// <distro> bash -lc <script>` receives a literal `;`.
+//
+// Apply this only at the wt.exe boundary (i.e. inside
+// buildWSLNewWindowArgv when composing the final argv). Don't apply it
+// earlier — `\;` is not a valid bash escape and would leak through to
+// the harness if a downstream layer ever stopped routing through wt.exe.
+func escapeForWtExe(s string) string {
+	return strings.ReplaceAll(s, ";", `\;`)
 }
