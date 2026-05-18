@@ -1,10 +1,15 @@
 package cli
 
 import (
+	"context"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Default: --claude --opus, prompt as last positional argument.
@@ -655,7 +660,7 @@ func TestIsWSL_FalseOnNativeLinux(t *testing.T) {
 // (Windows Terminal). We expect argv[0] to be the literal `wt.exe` —
 // resolution to a full path is left to os/exec.LookPath.
 func TestBuildWSLNewWindowArgv_UsesWtExe(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", nil, []string{"claude"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "/tmp/ppz-agent-alice.sh")
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -669,7 +674,7 @@ func TestBuildWSLNewWindowArgv_UsesWtExe(t *testing.T) {
 // wt would launch the default distro, which may not match the one the
 // user invoked ppz from.
 func TestBuildWSLNewWindowArgv_InvokesWslExeWithDistro(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu-22.04", "alice", "", nil, []string{"claude"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu-22.04", "/tmp/ppz-agent-alice.sh")
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -681,23 +686,20 @@ func TestBuildWSLNewWindowArgv_InvokesWslExeWithDistro(t *testing.T) {
 	}
 }
 
-func TestBuildWSLNewWindowArgv_IncludesShareInvocation(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", nil, []string{"claude", "-p", "hi"})
-	if err != nil {
-		t.Fatalf("build: %v", err)
-	}
-	script := argv[len(argv)-1]
+// The script-builder is the source-of-truth for what bash actually
+// runs. Pin the ppz share invocation here (no wt.exe in the loop).
+func TestBuildWSLScript_IncludesShareInvocation(t *testing.T) {
+	script := buildWSLScript("alice", "", nil, []string{"claude", "-p", "hi"})
 	if !strings.Contains(script, "ppz terminal share alice -- claude") {
 		t.Errorf("script missing ppz share invocation, got: %q", script)
 	}
 }
 
-func TestBuildWSLNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "/home/jamesmiles/work", nil, []string{"claude"})
-	if err != nil {
-		t.Fatalf("build: %v", err)
-	}
-	script := argv[len(argv)-1]
+// cwd is inherited from the parent shell so the spawned harness boots
+// in a folder the user already trusts. Without it, claude shows a
+// "trust this folder?" dialog on every run.
+func TestBuildWSLScript_PrependsCdToCallersCwd(t *testing.T) {
+	script := buildWSLScript("alice", "/home/jamesmiles/work", nil, []string{"claude"})
 	if !strings.Contains(script, `cd '/home/jamesmiles/work'`) {
 		t.Errorf("script missing cd to caller's cwd, got: %q", script)
 	}
@@ -707,111 +709,80 @@ func TestBuildWSLNewWindowArgv_PrependsCdToCallersCwd(t *testing.T) {
 // error loudly than to silently fall through to the user's default
 // distro (which may be the wrong one).
 func TestBuildWSLNewWindowArgv_EmptyDistroErrors(t *testing.T) {
-	if _, err := buildWSLNewWindowArgv("", "alice", "", nil, []string{"claude"}); err == nil {
+	if _, err := buildWSLNewWindowArgv("", "/tmp/ppz-agent-alice.sh"); err == nil {
 		t.Fatal("expected error for empty distro (caller forgot $WSL_DISTRO_NAME)")
 	}
 }
 
-// TestBuildWSLNewWindowArgv_EscapesSemicolonsForWtExe pins the wt.exe
-// argv-tokenisation contract: wt.exe (Windows Terminal) uses `;` as a
-// sub-command separator in its own command line, so any literal `;` we
-// want bash to receive downstream must be escaped as `\;` before being
-// placed in the wt.exe argv.
-//
-// The bug this guards against: `ppz agent create <handle> --new-window`
-// on WSL invokes the default agent prompt, whose Monitor recipe is
-// `while true; do PPZ_SESSION=<handle> ppz ls --watch 2>/dev/null;
-// sleep 60; done` — three literal semicolons inside a bash-single-
-// quoted prompt argument. Without escaping, wt.exe sees those `;`s and
-// truncates the script at the first one, then tries to launch each
-// subsequent chunk (` do PPZ_SESSION=…`, ` sleep 60`, ` done that fires
-// a PushNotification…`) as a separate Windows program. The user sees
-// `[error 2147942402 (0x80070002) when launching …] The system cannot
-// find the file specified.` in four sibling tabs, plus the first tab's
-// bash reports `unexpected EOF while looking for matching ` because the
-// truncation severs the Monitor recipe inside its opening backtick.
-//
-// Realistic input: round-trip the default agent prompt through
-// buildHarnessSpawnArgv (which bash-single-quotes the prompt for
-// inline embedding) and then buildWSLNewWindowArgv. The final argv
-// element is the bash script handed to `bash -lc`; every `;` in it
-// must be backslash-escaped for wt.exe.
-func TestBuildWSLNewWindowArgv_EscapesSemicolonsForWtExe(t *testing.T) {
-	spec := agentSpec{
-		harness: "claude",
-		model:   "opus",
-		prompt:  defaultAgentPrompt("alice"),
-	}
-	harnessArgv, err := buildHarnessSpawnArgv(spec)
-	if err != nil {
-		t.Fatalf("buildHarnessSpawnArgv: %v", err)
-	}
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", agentEnvPairs(spec), harnessArgv)
-	if err != nil {
-		t.Fatalf("buildWSLNewWindowArgv: %v", err)
-	}
-	script := argv[len(argv)-1]
-	// Sanity: the Monitor recipe's three semicolons should be present
-	// in some form. If they aren't we've lost the prompt entirely and
-	// any "no unescaped ;" assertion below is a false positive.
-	if !strings.Contains(script, "while true") || !strings.Contains(script, "sleep 60") {
-		t.Fatalf("script does not contain the default prompt's Monitor recipe; test setup is wrong, got: %q", script)
-	}
-	for i := 0; i < len(script); i++ {
-		if script[i] != ';' {
-			continue
-		}
-		if i == 0 || script[i-1] != '\\' {
-			t.Errorf("script contains an unescaped `;` at byte %d — wt.exe will split the argv here and Windows will try to launch the trailing chunk as a program; got: %q", i, script)
-			return
-		}
+// Empty scriptPath is a caller bug — writeAgentSpawnScript wasn't run
+// (or failed silently). Error loudly so we don't hand wt.exe a `bash
+// -l` with no positional arg, which would open an empty WSL shell
+// (the previously-reported "flashing cursor" symptom).
+func TestBuildWSLNewWindowArgv_EmptyScriptPathErrors(t *testing.T) {
+	if _, err := buildWSLNewWindowArgv("Ubuntu", ""); err == nil {
+		t.Fatal("expected error for empty scriptPath")
 	}
 }
 
-// TestBuildWSLNewWindowArgv_EscapesSemicolonsInUserPrompt covers the
-// non-default-prompt case: a user runs `ppz agent create alice
-// --new-window "do X; then Y"`. The `;` belongs to the user's prompt
-// text — they did not type it as a shell separator — but wt.exe will
-// still see it once we've inlined the prompt into the bash script, and
-// will still split. The escape contract must hold regardless of where
-// the `;` came from, not just for our baked-in defaultAgentPrompt.
+// TestBuildWSLNewWindowArgv_DoesNotExposeScriptToWtExe is the
+// load-bearing regression test for the v0.33.4 hang on WSL.
 //
-// Distinct from the previous test in two ways:
+// History: between v0.32 and v0.33 the default agent prompt grew a
+// Monitor recipe (`while true; do … ; sleep 60 ; done`) with three
+// semicolons inside a bash-single-quoted prompt argument. Inlining
+// that script into wt.exe's argv broke `ppz agent create --new-window`
+// on WSL in two stacked ways:
 //
-//  1. The `;` is in a user-supplied prompt, not the orientation prompt
-//     — so a future rewrite that drops `;` from defaultAgentPrompt
-//     won't accidentally let this regress.
-//  2. The argv is constructed via buildHarnessSpawnArgv (the same path
-//     the foreground CLI uses), which bash-single-quotes the prompt.
-//     We're asserting that the wt.exe escape applies *outside* the
-//     bash single-quoting — bash unescapes nothing inside single
-//     quotes, so without the wt.exe-layer escape, the `;` rides
-//     through the single quote intact and trips wt.exe's tokeniser.
-func TestBuildWSLNewWindowArgv_EscapesSemicolonsInUserPrompt(t *testing.T) {
+//  1. wt.exe treats `;` as a sub-command separator in its own argv
+//     and splits the script there, launching each trailing chunk as
+//     a standalone Windows program (`error 2147942402 The system
+//     cannot find the file specified.`).
+//  2. Even with `\;` escapes added, wt.exe collapses the `''`
+//     close-quote/open-quote pair that sits in the middle of the
+//     standard bash escape `'\''` (used by bashSingleQuote for any
+//     `'` inside the prompt — e.g. `isn't`). The collapse turns
+//     `isn'\''t` into `isn'\t'`, leaving bash with an unmatched
+//     closing quote and hanging at PS2: "flashing cursor, no source
+//     created, no claude UI".
+//
+// The fix is structural: never expose the bash script to wt.exe's
+// tokenizer at all. Write the script to a tempfile and invoke `bash
+// -l <path>` — wt.exe sees only a benign path. This test pins the
+// invariant: no element of the wt.exe argv may contain either of
+// the two metacharacters wt.exe mishandles (`;` or the `'\''` bash
+// escape), regardless of how exotic the harness argv is.
+func TestBuildWSLNewWindowArgv_DoesNotExposeScriptToWtExe(t *testing.T) {
+	// A prompt that triggers BOTH wt.exe pathologies: a semicolon
+	// (split-on-`;`) and an embedded `'` (`'\''` collapse).
 	spec := agentSpec{
 		harness: "claude",
 		model:   "opus",
-		prompt:  "do X; then Y; finally Z",
+		prompt:  "isn't ready; do X",
 	}
 	harnessArgv, err := buildHarnessSpawnArgv(spec)
 	if err != nil {
 		t.Fatalf("buildHarnessSpawnArgv: %v", err)
 	}
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", agentEnvPairs(spec), harnessArgv)
+	body := buildWSLScript("alice", "/home/u", agentEnvPairs(spec), harnessArgv)
+	// Sanity: the body itself must contain both pathologies (otherwise
+	// the assertions below pass trivially and the test is useless).
+	if !strings.Contains(body, ";") {
+		t.Fatalf("test setup: script body must contain `;`, got: %q", body)
+	}
+	if !strings.Contains(body, `'\''`) {
+		t.Fatalf("test setup: script body must contain the bash quote escape `'\\''`, got: %q", body)
+	}
+	scriptPath := "/tmp/ppz-agent-alice-XXXXX.sh"
+	argv, err := buildWSLNewWindowArgv("Ubuntu", scriptPath)
 	if err != nil {
 		t.Fatalf("buildWSLNewWindowArgv: %v", err)
 	}
-	script := argv[len(argv)-1]
-	if !strings.Contains(script, "do X") || !strings.Contains(script, "finally Z") {
-		t.Fatalf("script does not contain the user prompt; test setup is wrong, got: %q", script)
-	}
-	for i := 0; i < len(script); i++ {
-		if script[i] != ';' {
-			continue
+	for i, elt := range argv {
+		if strings.Contains(elt, ";") {
+			t.Errorf("argv[%d] contains `;` (wt.exe will split here): %q", i, elt)
 		}
-		if i == 0 || script[i-1] != '\\' {
-			t.Errorf("script contains an unescaped `;` at byte %d (from a user-supplied prompt) — wt.exe will split the argv here; got: %q", i, script)
-			return
+		if strings.Contains(elt, `'\''`) {
+			t.Errorf("argv[%d] contains the bash quote escape `'\\''` (wt.exe collapses the `''` pair, breaking bash quoting): %q", i, elt)
 		}
 	}
 }
@@ -838,15 +809,211 @@ func TestBuildLinuxNewWindowArgv_UsesLoginShell(t *testing.T) {
 // Same constraint applies to the WSL path: `wsl.exe -d <distro> bash`
 // spawns a bash that inherits PATH from wsl.exe (a Windows process),
 // which means *only* the system minimum PATH unless we ask for login
-// shell semantics. Without -lc this reproducibly fails with
+// shell semantics. Without `-l` this reproducibly fails with
 // "exec: claude: executable file not found in $PATH".
+//
+// Note: the script is sourced via `bash -l <path>` rather than `bash
+// -lc <inline-script>` so wt.exe never sees the script content — see
+// buildWSLScript's doc-comment for the rationale.
 func TestBuildWSLNewWindowArgv_UsesLoginShell(t *testing.T) {
-	argv, err := buildWSLNewWindowArgv("Ubuntu", "alice", "", nil, []string{"claude"})
+	argv, err := buildWSLNewWindowArgv("Ubuntu", "/tmp/ppz-agent-alice.sh")
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	if !containsAdjacent(argv, "bash", "-lc") {
-		t.Errorf("WSL path must invoke `bash -lc`, got: %q", argv)
+	if !containsAdjacent(argv, "bash", "-l") {
+		t.Errorf("WSL path must invoke `bash -l`, got: %q", argv)
+	}
+}
+
+// TestWriteAgentSpawnScript_SelfCleans pins the trap that removes
+// the tempfile on EXIT. Without it, every `ppz agent create
+// --new-window` leaks a /tmp/ppz-agent-*.sh helper that builds up
+// indefinitely. The trap fires on normal exit, errors, and signals
+// (e.g. user Ctrl-Cs the spawned harness) — bash's EXIT pseudo-signal
+// covers all three.
+func TestWriteAgentSpawnScript_SelfCleans(t *testing.T) {
+	dir := t.TempDir()
+	path, err := writeAgentSpawnScript(dir, "alice", "echo hello")
+	if err != nil {
+		t.Fatalf("writeAgentSpawnScript: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read tempfile: %v", err)
+	}
+	if !strings.Contains(string(body), "trap ") {
+		t.Errorf("script must install an EXIT trap to self-clean, got: %q", body)
+	}
+	if !strings.Contains(string(body), "EXIT") {
+		t.Errorf("self-cleanup trap must fire on EXIT (covers normal exit, errors, and signals), got: %q", body)
+	}
+	if !strings.Contains(string(body), "rm -f -- '"+path+"'") {
+		t.Errorf("self-cleanup must `rm -f -- <this script's path>`, got: %q", body)
+	}
+	if !strings.Contains(string(body), "echo hello") {
+		t.Errorf("script body must be embedded verbatim, got: %q", body)
+	}
+}
+
+// The tempfile must be in the requested dir (so tests can use
+// t.TempDir() for hermetic cleanup) and must be named with the
+// handle so a developer eyeballing /tmp can tell which agent's
+// script leaked if cleanup ever breaks.
+func TestWriteAgentSpawnScript_NamesByHandleInDir(t *testing.T) {
+	dir := t.TempDir()
+	path, err := writeAgentSpawnScript(dir, "alice", "echo hi")
+	if err != nil {
+		t.Fatalf("writeAgentSpawnScript: %v", err)
+	}
+	if !strings.HasPrefix(path, dir+string(os.PathSeparator)) {
+		t.Errorf("script path %q must live under requested dir %q", path, dir)
+	}
+	if !strings.Contains(path, "alice") {
+		t.Errorf("script path %q must include the handle so leaks are diagnosable", path)
+	}
+}
+
+// Mode must be 0700: world-readable scripts are a leak surface (the
+// embedded prompt may include sensitive context). Owner-only.
+func TestWriteAgentSpawnScript_RestrictedMode(t *testing.T) {
+	dir := t.TempDir()
+	path, err := writeAgentSpawnScript(dir, "alice", "echo hi")
+	if err != nil {
+		t.Fatalf("writeAgentSpawnScript: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o700 {
+		t.Errorf("script mode = %#o, want 0700 (owner-only — prompt may contain sensitive context)", mode)
+	}
+}
+
+// TestSpawnScript_RunsUnderBashLoginShell is the bash-script-level e2e
+// test for the WSL --new-window flow. It does NOT invoke wt.exe (CI
+// runners aren't WSL and have no Windows Terminal) but it DOES
+// exercise the layer that hung on WSL in v0.33.4: bash itself parsing
+// and running the script we write to disk.
+//
+// Why this catches a class of bug the invariant tests miss:
+//
+//   - The invariant tests (DoesNotExposeScriptToWtExe etc.) prove the
+//     script doesn't pass through wt.exe's tokeniser. They say nothing
+//     about whether bash can actually parse the script. PR #65 shipped
+//     a green-CI build that hung at PS2 the moment bash hit the bash-
+//     quote-escape `'\''` — we never exec'd the script.
+//   - The realistic input here is the default agent prompt, which has
+//     both pathologies that previously broke WSL: `;` inside a
+//     single-quoted bash arg (Monitor recipe) AND embedded `'` (bash
+//     contractions like `isn't`) that produce `'\''` escapes in the
+//     script. If our quoting is broken, bash hangs and the 10s
+//     timeout fires; if our env-prefix or `cd` is wrong, the stubs'
+//     log shows the wrong shape.
+//
+// Setup: two stubs in a TempDir on PATH — a `ppz` that appends its
+// argv and selected env vars to a log file, and a `claude` that's a
+// no-op (otherwise it'd try to launch the interactive harness and
+// hang). HOME is also a TempDir so `bash -l` doesn't source the
+// developer's real ~/.profile and contaminate the run.
+func TestSpawnScript_RunsUnderBashLoginShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires POSIX bash")
+	}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available on $PATH")
+	}
+
+	stubDir := t.TempDir()
+	logPath := filepath.Join(stubDir, "ppz.log")
+
+	// `ppz` stub: append a delimited record of argv and PPZ_AGENT_*
+	// env vars to logPath. `set -u` would trip on the env vars when
+	// unset, so reference them with the `:-` default so an absent
+	// env shows up as an empty value rather than aborting the stub.
+	ppzStub := "#!/bin/bash\n" +
+		"{\n" +
+		"  echo '--- ppz invocation ---'\n" +
+		"  echo \"argv: $*\"\n" +
+		"  echo \"PPZ_AGENT_HARNESS=${PPZ_AGENT_HARNESS:-}\"\n" +
+		"  echo \"PPZ_AGENT_MODEL=${PPZ_AGENT_MODEL:-}\"\n" +
+		"  echo \"PWD=$PWD\"\n" +
+		"} >> " + logPath + "\n"
+	if err := os.WriteFile(filepath.Join(stubDir, "ppz"), []byte(ppzStub), 0o700); err != nil {
+		t.Fatalf("write ppz stub: %v", err)
+	}
+	// `claude` stub: no-op. The real harness would try to render an
+	// interactive TUI and hang under `bash -l`.
+	if err := os.WriteFile(filepath.Join(stubDir, "claude"), []byte("#!/bin/bash\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("write claude stub: %v", err)
+	}
+
+	// Build the spawn script via the same code path runAgentInNewWindow's
+	// WSL branch uses, with the *default* agent prompt as input — that's
+	// the realistic case that hung in v0.33.4.
+	spec := agentSpec{
+		harness: "claude",
+		model:   "opus",
+		prompt:  defaultAgentPrompt("alice"),
+	}
+	harnessArgv, err := buildHarnessSpawnArgv(spec)
+	if err != nil {
+		t.Fatalf("buildHarnessSpawnArgv: %v", err)
+	}
+	body := buildWSLScript("alice", stubDir, agentEnvPairs(spec), harnessArgv)
+	scriptPath, err := writeAgentSpawnScript(t.TempDir(), "alice", body)
+	if err != nil {
+		t.Fatalf("writeAgentSpawnScript: %v", err)
+	}
+
+	// Run with our stubs winning on PATH. A 10s timeout catches the
+	// "flashing cursor" / PS2-hang failure mode — if bash can't parse
+	// the script, it'll wait indefinitely for more input.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "-l", scriptPath)
+	// HOME=TempDir so `bash -l` doesn't source the developer's real
+	// ~/.profile (which might do anything from setting unrelated env
+	// to running other commands, contaminating our assertions).
+	cmd.Env = []string{
+		"PATH=" + stubDir + ":" + os.Getenv("PATH"),
+		"HOME=" + t.TempDir(),
+	}
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("bash hung — script likely has unclosed quoting or another parse error; output so far:\n%s", out)
+	}
+	if err != nil {
+		t.Fatalf("bash failed: %v\noutput:\n%s", err, out)
+	}
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v\nbash output:\n%s", err, out)
+	}
+	logStr := string(log)
+
+	// The stub should have been invoked once with the full ppz argv.
+	if !strings.Contains(logStr, "--- ppz invocation ---") {
+		t.Errorf("stub ppz was never invoked — bash parsed the script but didn't reach the ppz call; log was:\n%s\n\nbash output:\n%s", logStr, out)
+	}
+	// argv shape: `ppz terminal share alice -- claude --dangerously-skip-permissions --model opus <prompt>`
+	// We assert on the discriminating subset.
+	for _, want := range []string{"terminal", "share", "alice", "--", "claude"} {
+		if !strings.Contains(logStr, want) {
+			t.Errorf("ppz argv missing token %q; log:\n%s", want, logStr)
+		}
+	}
+	// Env-prefix carried through `env A=... B=... ppz ...`.
+	if !strings.Contains(logStr, "PPZ_AGENT_HARNESS=claude") {
+		t.Errorf("PPZ_AGENT_HARNESS didn't reach ppz — `env` prefix is broken; log:\n%s", logStr)
+	}
+	if !strings.Contains(logStr, "PPZ_AGENT_MODEL=opus") {
+		t.Errorf("PPZ_AGENT_MODEL didn't reach ppz; log:\n%s", logStr)
+	}
+	// cwd: `cd '<dir>' && ...` should have taken effect before ppz ran.
+	if !strings.Contains(logStr, "PWD="+stubDir) {
+		t.Errorf("cwd was not %q when ppz ran — `cd` is broken; log:\n%s", stubDir, logStr)
 	}
 }
 
