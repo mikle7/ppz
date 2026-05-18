@@ -91,6 +91,41 @@ func TestLogin_ModeOAuth_RedirectsToProvider(t *testing.T) {
 	}
 }
 
+// TestLogin_NextSanitizedAgainstOpenRedirect — the ?next= query
+// parameter is attacker-controlled, so the rendered login page must
+// never echo it back in a way that produces a protocol-relative or
+// off-site URL. safeNext substitutes /dashboard for any unsafe input
+// before the value reaches the template.
+func TestLogin_NextSanitizedAgainstOpenRedirect(t *testing.T) {
+	for _, tc := range []struct{ name, mode, next string }{
+		{"none mode, protocol-relative", "none", "//evil.com"},
+		{"none mode, absolute URL", "none", "https://evil.com/x"},
+		{"password mode, protocol-relative", "password", "//evil.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var m AuthMode
+			switch tc.mode {
+			case "none":
+				m = AuthModeNone
+			case "password":
+				m = AuthModePassword
+			}
+			s := &Server{AuthMode: m, Version: "test"}
+			req := httptest.NewRequest(http.MethodGet, "/login?next="+tc.next, nil)
+			w := httptest.NewRecorder()
+			s.Routes().ServeHTTP(w, req)
+
+			body := w.Body.String()
+			if strings.Contains(body, tc.next) {
+				t.Errorf("rendered body echoes unsafe next=%q verbatim:\n%s", tc.next, body)
+			}
+			if strings.Contains(body, "evil.com") {
+				t.Errorf("rendered body contains evil.com — open redirect not closed:\n%s", body)
+			}
+		})
+	}
+}
+
 // TestProvider_InterfaceContract — compile-time pin on the Provider
 // interface methods. Cycle D Phase 4 (pipescloud) implements this.
 func TestProvider_InterfaceContract(t *testing.T) {

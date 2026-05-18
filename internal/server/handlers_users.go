@@ -44,11 +44,11 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if password != "" {
 		hash, err := db.HashPassword(password)
 		if err != nil {
-			http.Error(w, "hash password: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "could not store password", http.StatusInternalServerError)
 			return
 		}
 		if err := db.SetUserPasswordHash(ctx, s.Pool, user.ID, hash); err != nil {
-			http.Error(w, "store password: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "could not store password", http.StatusInternalServerError)
 			return
 		}
 	}

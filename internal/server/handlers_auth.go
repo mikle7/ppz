@@ -38,9 +38,14 @@ const sessionTTL = 7 * 24 * time.Hour // 7 days
 // session cookie. See pipes-internal/docs/PHASE-2-IMPLEMENTATION-PLAN.md
 // Cycles D + F.
 func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
+	// Sanitize Next once at the top — every code path below either
+	// redirects to it or interpolates it into a template. safeNext
+	// rejects open-redirect shapes ("//evil.com", absolute URLs,
+	// whitespace) and falls back to /dashboard.
+	next := safeNext(r.URL.Query().Get("next"))
+
 	// If already signed in, send them where they were going (or /dashboard).
 	if uid, ok := s.verifyRequestSession(r); ok && uid != uuid.Nil {
-		next := safeNext(r.URL.Query().Get("next"))
 		http.Redirect(w, r, next, http.StatusFound)
 		return
 	}
@@ -56,17 +61,33 @@ func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tmpl.ExecuteTemplate(w, "login_password.html", map[string]any{
-			"Next": r.URL.Query().Get("next"),
+			"Next": next,
 		})
 		return
 	default:
-		// AuthModeNone (and any unset zero-value): render the upgrade
-		// panel. Session auto-completion is best-effort: if Pool is
-		// nil (middleware-only unit tests), skip the cookie write
-		// and just render the panel.
+		// AuthModeNone (and any unset zero-value): admin UI is open
+		// per docs/AUTH.md — "trusted-network deploys, firewall
+		// yourself". Auto-mint a session for the oldest user so
+		// requireSession-gated routes are reachable. If no users
+		// exist yet (fresh boot), render the upgrade panel pointing
+		// the operator at the bootstrap steps.
+		if s.Pool != nil && s.SessionKey != nil {
+			u, err := db.FirstUser(r.Context(), s.Pool)
+			if err == nil {
+				cookieValue, cerr := SignSessionCookie(s.SessionKey, SessionPayload{
+					UserID:    u.ID,
+					ExpiresAt: time.Now().Add(sessionTTL),
+				})
+				if cerr == nil {
+					s.setSessionCookie(w, cookieValue)
+					http.Redirect(w, r, next, http.StatusFound)
+					return
+				}
+			}
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tmpl.ExecuteTemplate(w, "login.html", map[string]any{
-			"Next": r.URL.Query().Get("next"),
+			"Next": next,
 		})
 		return
 	}
@@ -91,7 +112,7 @@ func (s *Server) handleLoginPasswordPost(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = tmpl.ExecuteTemplate(w, "login_password.html", map[string]any{
-			"Next":  r.URL.Query().Get("next"),
+			"Next":  next,
 			"Error": "invalid username or password",
 		})
 	}

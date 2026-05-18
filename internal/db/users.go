@@ -83,6 +83,21 @@ func SetUserPasswordHash(ctx context.Context, p *Pool, userID uuid.UUID, hash st
 	return err
 }
 
+// FirstUser returns the oldest user row, used by auth_mode=none to
+// auto-mint a session. Returns pgx.ErrNoRows when the table is empty
+// (i.e. fresh boot, no users created yet) — callers should treat
+// that as "fall back to the upgrade panel" rather than an error.
+func FirstUser(ctx context.Context, p *Pool) (User, error) {
+	var u User
+	var mode string
+	err := p.QueryRow(ctx,
+		`SELECT id, username, email, mode, github_id, COALESCE(avatar_url,''), created_at
+		   FROM users ORDER BY created_at ASC LIMIT 1`).
+		Scan(&u.ID, &u.Username, &u.Email, &mode, &u.GitHubID, &u.AvatarURL, &u.CreatedAt)
+	u.Mode = UserMode(mode)
+	return u, err
+}
+
 // UsernamesByIDs resolves a set of user IDs to {id → username}. Used by
 // the server's list endpoints that need to attribute every source/pipe
 // row to a user (HUMAN column). Single round-trip via ANY($1::uuid[]).
