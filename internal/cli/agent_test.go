@@ -223,6 +223,18 @@ func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
 	}
 }
 
+// TestDefaultAgentPrompt_MentionsWho pins `ppz who` in the cheat
+// sheet. Without it, an agent reading the prompt knows how to list
+// pipes (`ppz ls`) and message peers (`ppz send <handle>`) but has
+// no documented way to discover *which* handles exist — agents were
+// observed inventing handles or asking the user, instead of running
+// the verb the daemon already exposes.
+func TestDefaultAgentPrompt_MentionsWho(t *testing.T) {
+	if !strings.Contains(defaultAgentPrompt("test-handle"), "ppz who") {
+		t.Errorf("defaultAgentPrompt should reference `ppz who` so agents can discover which peers are online before trying to `ppz send`")
+	}
+}
+
 // TestDefaultAgentPrompt_OmitsAwait — keep `ppz await` out of the
 // boot prompt. It's still a valid verb when the agent actively wants
 // to drain, but mentioning it in the useful-commands cheat sheet led

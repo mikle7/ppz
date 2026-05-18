@@ -185,6 +185,7 @@ func defaultAgentPrompt(handle string) string {
 
 Useful commands:
   ppz status                find out which source you are
+  ppz who                   see which other agents are online
   ppz ls                    list sources × pipes
   ppz ls --watch            block until any pipe has unread, then print a snapshot (non-destructive)
   ppz read inbox            read new messages addressed to you
