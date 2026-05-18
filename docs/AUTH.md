@@ -6,7 +6,7 @@ Three modes are supported:
 
 | Mode | Behaviour | Use case |
 |---|---|---|
-| `none` (default) | Admin UI is unauthenticated. Session auto-completes via `/login`. | Trusted-network deploys — firewall yourself. |
+| `none` (default) | `/login` renders an informational upgrade-path panel; sessions are still required by GUI routes — bootstrap via the dev-login entry point or by switching to `password`. | Trusted-network / dev deploys — firewall yourself. |
 | `password` | Username + password form against `users.password_hash` (bcrypt). | Self-hosters who want auth but no SSO. |
 | `oauth` | Delegates to an out-of-tree `auth.Provider` implementation. OSS ships a stub returning "not configured". | Pipescloud's hosted product (GitHub OAuth, SAML, etc.). |
 

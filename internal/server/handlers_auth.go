@@ -65,26 +65,11 @@ func (s *Server) handleGUILogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	default:
-		// AuthModeNone (and any unset zero-value): admin UI is open
-		// per docs/AUTH.md — "trusted-network deploys, firewall
-		// yourself". Auto-mint a session for the oldest user so
-		// requireSession-gated routes are reachable. If no users
-		// exist yet (fresh boot), render the upgrade panel pointing
-		// the operator at the bootstrap steps.
-		if s.Pool != nil && s.SessionKey != nil {
-			u, err := db.FirstUser(r.Context(), s.Pool)
-			if err == nil {
-				cookieValue, cerr := SignSessionCookie(s.SessionKey, SessionPayload{
-					UserID:    u.ID,
-					ExpiresAt: time.Now().Add(sessionTTL),
-				})
-				if cerr == nil {
-					s.setSessionCookie(w, cookieValue)
-					http.Redirect(w, r, next, http.StatusFound)
-					return
-				}
-			}
-		}
+		// AuthModeNone (and any unset zero-value): render the
+		// informational upgrade panel. Routes still go through
+		// requireSession; the bootstrap path for these deployments
+		// is the seed flow + a /dev/login-style entry point — not
+		// /login itself. (See docs/AUTH.md "bootstrap flow".)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tmpl.ExecuteTemplate(w, "login.html", map[string]any{
 			"Next": next,
