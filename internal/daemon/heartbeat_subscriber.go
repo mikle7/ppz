@@ -27,9 +27,10 @@ import (
 // is in the Payload field. We unmarshal the envelope and stamp the cache
 // with the inner payload, matching the shape handleSend writes.
 //
-// Called once per NATS connect in ensureNATS after swapNC. The prior
-// subscription is destroyed automatically when swapNC closes the old
-// nats.Conn.
+// Called after every NATS (re)connect — from handleLogin once the
+// initial connection is established, and from ensureNATS whenever it
+// rebuilds the connection. The prior subscription is destroyed
+// automatically when swapNC closes the old nats.Conn.
 func (d *Daemon) subscribeOrgHeartbeats(accountID uuid.UUID) {
 	prefix := accountID.String() + "."
 	const suffix = ".heartbeat"
