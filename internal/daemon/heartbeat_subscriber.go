@@ -18,10 +18,20 @@ import (
 // handleWho only shows agents whose heartbeats arrived via the local
 // handleSend path.
 //
-// Subjects follow the shape <accountID>.<manifold...>.<handle>.heartbeat.
+// Subjects follow the shape <accountID>.<manifold?>.<handle>.heartbeat.
 // We subscribe to <accountID>.> and filter client-side for the
 // .heartbeat suffix; NATS does not support wildcards in the middle of a
 // subject pattern.
+//
+// Cache-key shape must match handleSend, which stamps with the bare
+// handle (req.Handle) — never manifold-prefixed. The handle is the
+// second-to-last subject segment by construction (natsubj.BuildSubject
+// emits <acct>.<manifold?>.<source>.<pipe>, and heartbeats are always
+// source-published). NATS echoes a daemon's own publishes back to its
+// own subscriptions, so if we stamped a manifold-prefixed key here the
+// publishing daemon would end up with the same agent in its cache
+// twice under two different keys, and remote daemons would render
+// namespaced agents under unexpected keys.
 //
 // Each NATS message body is an envelope.Message; the raw heartbeat JSON
 // is in the Payload field. We unmarshal the envelope and stamp the cache
@@ -34,23 +44,28 @@ import (
 func (d *Daemon) subscribeOrgHeartbeats(accountID uuid.UUID) {
 	prefix := accountID.String() + "."
 	const suffix = ".heartbeat"
-	_, _ = d.NC.Subscribe(prefix+">", func(msg *nats.Msg) {
+	_, err := d.NC.Subscribe(prefix+">", func(msg *nats.Msg) {
 		subj := msg.Subject
 		if !strings.HasSuffix(subj, suffix) {
 			return
 		}
-		// Handle is everything between the account prefix and .heartbeat,
-		// e.g. "agent-b" for root-manifold or "ns.agent-b" for namespaced.
-		handle := strings.TrimSuffix(strings.TrimPrefix(subj, prefix), suffix)
+		parts := strings.Split(subj, ".")
+		// Need at least <acct>.<handle>.heartbeat for there to be a
+		// handle segment at all.
+		if len(parts) < 3 {
+			return
+		}
+		handle := parts[len(parts)-2]
 		if handle == "" {
 			return
 		}
-		// NATS messages are envelope-wrapped; the heartbeat JSON is the
-		// inner Payload field, matching what handleSend stamps directly.
 		var env envelope.Message
 		if err := json.Unmarshal(msg.Data, &env); err != nil {
 			return
 		}
 		d.Heartbeats.Stamp(handle, env.Payload, time.Now())
 	})
+	if err != nil && d.NATSEvents != nil {
+		d.NATSEvents.Append("warn", "subscribeOrgHeartbeats: "+err.Error(), time.Now())
+	}
 }
