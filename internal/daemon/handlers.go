@@ -258,6 +258,11 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 	d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
 	newNC, _ := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents)
 	d.swapNC(newNC)
+	if newNC != nil {
+		if aid, err := uuid.Parse(ex.AccountID); err == nil {
+			d.subscribeOrgHeartbeats(aid)
+		}
+	}
 
 	writeIPC(conn, cliproto.LoginReply{URL: req.URL, KeyPrefix: prefix, AccountID: ex.AccountID})
 }
