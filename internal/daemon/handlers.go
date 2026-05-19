@@ -348,6 +348,10 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	if wasDisconnected && d.NATSEvents != nil {
 		d.NATSEvents.Append("reconnect", "ensureNATS rebuilt connection", time.Now())
 	}
+	// Subscribe to all org heartbeats so ppz who is cross-daemon-aware.
+	if aid, err := uuid.Parse(d.State.AccountID()); err == nil {
+		d.subscribeOrgHeartbeats(aid)
+	}
 	return nil
 }
 
