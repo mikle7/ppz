@@ -275,6 +275,46 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, row)
 		}
 	}
+	// Phase 1.5: uncollared (sourceless) pipes live in the `pipes`
+	// table with source_id IS NULL, so walking sources alone misses
+	// them and the GUI table silently drops every row a user created
+	// via `ppz pipe create <leaf>` at the account root.
+	uncollared, err := db.ListUncollaredPipesForAccount(ctx, s.Pool, org.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if len(uncollared) > 0 {
+		js, _ := s.JSFor(ctx, org.ID)
+		for _, up := range uncollared {
+			pipePath := up.Name
+			if up.Manifold != "" {
+				pipePath = up.Manifold + "." + up.Name
+			}
+			row := sourceRow{
+				Handle:   "",
+				Pipe:     pipePath,
+				PipeLink: fmt.Sprintf("/orgs/%s/pipes/%s", org.Name, pipePath),
+			}
+			if js != nil {
+				streamName := natsubj.BuildStreamName(org.ID, up.Manifold, "", up.Name)
+				if stream, err := js.Stream(ctx, streamName); err == nil {
+					if info, ierr := stream.Info(ctx); ierr == nil && info.State.Msgs > 0 {
+						if !info.State.LastTime.IsZero() {
+							row.LastMessageAt = cliproto.RelativeTime(info.State.LastTime, now)
+							row.HasLastMessage = true
+						}
+						if msg, mErr := stream.GetMsg(ctx, info.State.LastSeq); mErr == nil {
+							if env, eErr := envelope.Unmarshal(msg.Data); eErr == nil {
+								row.PayloadDisplay = cliproto.TruncatePayload(env.Payload)
+							}
+						}
+					}
+				}
+			}
+			rows = append(rows, row)
+		}
+	}
 
 	owner, err := db.GetUser(ctx, s.Pool, org.OwnerUserID)
 	if err != nil {
