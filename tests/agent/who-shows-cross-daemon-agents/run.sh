@@ -30,6 +30,9 @@ PID_B=$!
 wait_for 50 "ppz_b who | grep -q agent-b" || { echo "timeout: agent-b never appeared in daemon-b"; exit 1; }
 wait_for 50 "ppz_a who | grep -q agent-a" || { echo "timeout: agent-a never appeared in daemon-a"; exit 1; }
 
-# daemon-a's ppz who must list both agents. Without the fix it only
-# lists agent-a because handleWho reads only the local daemon's cache.
-ppz_a who | awk '{print $1}' | sort
+# daemon-a's ppz who must list both agents. Filter to ^agent- so
+# heartbeats leaked from prior scenarios (e.g. "cindy" from
+# agent-create-uses-current-namespace) don't pollute the assertion —
+# the in-memory cache persists across scenarios. Without the fix only
+# agent-a appears because handleWho reads only the local daemon's cache.
+ppz_a who | awk '/^agent-/ {print $1}' | sort

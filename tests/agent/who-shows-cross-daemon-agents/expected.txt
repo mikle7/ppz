@@ -1,4 +1,3 @@
-HANDLE
 agent-a
 agent-b
 exit=0
