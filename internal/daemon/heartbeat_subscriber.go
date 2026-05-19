@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+
+	"github.com/pipescloud/ppz/internal/envelope"
 )
 
 // subscribeOrgHeartbeats sets up a NATS subscription on the current
@@ -19,6 +22,10 @@ import (
 // We subscribe to <accountID>.> and filter client-side for the
 // .heartbeat suffix; NATS does not support wildcards in the middle of a
 // subject pattern.
+//
+// Each NATS message body is an envelope.Message; the raw heartbeat JSON
+// is in the Payload field. We unmarshal the envelope and stamp the cache
+// with the inner payload, matching the shape handleSend writes.
 //
 // Called once per NATS connect in ensureNATS after swapNC. The prior
 // subscription is destroyed automatically when swapNC closes the old
@@ -37,6 +44,12 @@ func (d *Daemon) subscribeOrgHeartbeats(accountID uuid.UUID) {
 		if handle == "" {
 			return
 		}
-		d.Heartbeats.Stamp(handle, string(msg.Data), time.Now())
+		// NATS messages are envelope-wrapped; the heartbeat JSON is the
+		// inner Payload field, matching what handleSend stamps directly.
+		var env envelope.Message
+		if err := json.Unmarshal(msg.Data, &env); err != nil {
+			return
+		}
+		d.Heartbeats.Stamp(handle, env.Payload, time.Now())
 	})
 }
