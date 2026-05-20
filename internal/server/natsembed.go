@@ -35,6 +35,7 @@ func startEmbeddedNATS(cfg Config) (*natsserver.Server, func(), error) {
 		OperatorJWT:      cfg.NATSOperatorJWT,
 		SystemAccountJWT: cfg.NATSSystemAccountJWT,
 		JetStream:        true,
+		StoreDir:         cfg.NATSJetStreamStoreDir,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("start embedded nats: %w", err)

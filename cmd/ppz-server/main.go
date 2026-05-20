@@ -28,10 +28,11 @@ func main() {
 		GitHubUserURL:      envOr("PPZ_GITHUB_USER_URL", ""),
 		DevLogin:           envOr("PPZ_DEV_LOGIN", "") == "true",
 		// Auth V2 §Phase 3.5 — NATS NSC/JWT auth.
-		NATSOperatorSeed:     envOr("PPZ_NATS_OPERATOR_SEED", ""),
-		NATSOperatorJWT:      envOr("PPZ_NATS_OPERATOR_JWT", ""),
-		NATSSystemAccountJWT: envOr("PPZ_NATS_SYSTEM_ACCOUNT_JWT", ""),
-		Version:              version.Version,
+		NATSOperatorSeed:      envOr("PPZ_NATS_OPERATOR_SEED", ""),
+		NATSOperatorJWT:       envOr("PPZ_NATS_OPERATOR_JWT", ""),
+		NATSSystemAccountJWT:  envOr("PPZ_NATS_SYSTEM_ACCOUNT_JWT", ""),
+		NATSJetStreamStoreDir: envOr("PPZ_JETSTREAM_STORE_DIR", ""),
+		Version:               version.Version,
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
