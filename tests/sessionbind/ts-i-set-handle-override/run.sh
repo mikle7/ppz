@@ -19,13 +19,13 @@ ppz_a unset handle >/dev/null
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share cindy -- sh -c '
     # Step 1: baseline — auto-write populates cindy.
-    ppz status 2>&1 | grep -E "^current:" | sed "s/^/step1 /" > /tmp/ts-i-cap.txt
+    ppz status 2>&1 | grep -E "^(current source|namespace):" | sed "s/^/step1 /" > /tmp/ts-i-cap.txt
     # Step 2: explicit override to bob.
     ppz set handle bob >/dev/null
-    ppz status 2>&1 | grep -E "^current:" | sed "s/^/step2 /" >> /tmp/ts-i-cap.txt
+    ppz status 2>&1 | grep -E "^(current source|namespace):" | sed "s/^/step2 /" >> /tmp/ts-i-cap.txt
     # Step 3: unset → next status re-fires auto-write back to cindy.
     ppz unset handle >/dev/null
-    ppz status 2>&1 | grep -E "^current:" | sed "s/^/step3 /" >> /tmp/ts-i-cap.txt
+    ppz status 2>&1 | grep -E "^(current source|namespace):" | sed "s/^/step3 /" >> /tmp/ts-i-cap.txt
   ' </dev/null >/dev/null 2>&1
 
 cat /tmp/ts-i-cap.txt

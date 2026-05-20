@@ -14,7 +14,7 @@ PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
     # First subprocess: set namespace.
     ppz set namespace team-a >/dev/null
     # Second subprocess: read it back.
-    ppz status 2>&1 | grep -E "^namespace:" > /tmp/si-4-cap.txt
+    ppz status 2>&1 | grep -E "^(current source|namespace):" > /tmp/si-4-cap.txt
   ' </dev/null >/dev/null 2>&1
 
 cat /tmp/si-4-cap.txt

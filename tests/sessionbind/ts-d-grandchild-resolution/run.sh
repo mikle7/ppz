@@ -12,7 +12,7 @@ ppz_a unset namespace >/dev/null
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share cindy -- sh -c '
     sh -c "
-      sh -c \"ppz status 2>&1 | grep -E \\\"^current:\\\" > /tmp/ts-d-cap.txt\"
+      sh -c \"ppz status 2>&1 | grep -E \\\"^(current source|namespace):\\\" > /tmp/ts-d-cap.txt\"
     "
   ' </dev/null >/dev/null 2>&1
 

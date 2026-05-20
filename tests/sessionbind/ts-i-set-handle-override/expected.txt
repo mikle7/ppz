@@ -1,4 +1,4 @@
-step1 current: cindy
-step2 current: bob
-step3 current: cindy
+step1 current source: cindy
+step2 current source: bob
+step3 current source: cindy
 exit=0

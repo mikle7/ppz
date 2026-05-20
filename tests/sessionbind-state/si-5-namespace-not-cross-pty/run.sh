@@ -10,15 +10,15 @@ ppz_a unset namespace >/dev/null
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share cindy -- sh -c '
     ppz set namespace team-a >/dev/null
-    ppz status 2>&1 | grep -E "^namespace:" > /tmp/si-5-cindy.txt
+    ppz status 2>&1 | grep -E "^(current source|namespace):" > /tmp/si-5-cindy.txt
   ' </dev/null >/dev/null 2>&1
 echo "cindy_pty: $(cat /tmp/si-5-cindy.txt 2>/dev/null)"
 
 # Bob's pty separately — no namespace set in his session.
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share bob -- sh -c '
-    if ppz status 2>&1 | grep -qE "^namespace:"; then
-      ppz status 2>&1 | grep -E "^namespace:" > /tmp/si-5-bob.txt
+    if ppz status 2>&1 | grep -qE "^(current source|namespace):"; then
+      ppz status 2>&1 | grep -E "^(current source|namespace):" > /tmp/si-5-bob.txt
     else
       echo "namespace: (none)" > /tmp/si-5-bob.txt
     fi

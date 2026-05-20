@@ -13,7 +13,7 @@ ppz_a unset namespace >/dev/null
 # still leads back through outer sh → terminal share → daemon binding.
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share cindy -- sh -c '
-    bash -c "ppz status 2>&1 | grep -E \"^current:\" > /tmp/ts-b-cap.txt"
+    bash -c "ppz status 2>&1 | grep -E \"^(current source|namespace):\" > /tmp/ts-b-cap.txt"
   ' </dev/null >/dev/null 2>&1
 
 cat /tmp/ts-b-cap.txt

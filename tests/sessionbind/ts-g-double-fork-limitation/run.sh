@@ -26,7 +26,7 @@ PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ' </dev/null >/dev/null 2>&1
 
 # Acceptance: detached child does NOT report cindy as current.
-if grep -qE "^current: cindy" /tmp/ts-g-cap.txt 2>/dev/null; then
+if grep -qE "^(current source|namespace): cindy" /tmp/ts-g-cap.txt 2>/dev/null; then
   echo "result: incorrectly resolved to cindy (limitation should hold)"
 else
   echo "result: clean fallback (not cindy)"

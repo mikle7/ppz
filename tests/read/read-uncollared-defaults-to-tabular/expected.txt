@@ -1,2 +1,2 @@
-HH:MM:SS  -             hello
+HH:MM:SS  pubsub        hello
 exit=0

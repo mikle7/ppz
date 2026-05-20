@@ -107,29 +107,35 @@ func (s *State) LookupAgentBindingByPID(sharePID int) *AgentBinding {
 	return &out
 }
 
-// lookupAgentBindingValidated is the resolver's variant of lookup: it
-// returns the binding only if the SharePID is still alive. Dead-pid
-// entries are dropped from the table (lazy validation) and nil is
-// returned. Persists on drop. Hot path; called per ancestor pid.
+// lookupAgentBindingValidated is the resolver's variant of lookup. It
+// deliberately does NOT validate pid-aliveness on the request path:
+// the daemon and CLI may run in separate PID namespaces (docker
+// compose, k8s, sandboxed runtimes), where a kill(pid, 0) from the
+// daemon's namespace returns ESRCH for every legitimate caller pid.
+// Dropping bindings on that signal would break Layer 1 entirely in
+// containerized setups.
+//
+// Stale-binding cleanup happens through three other paths:
+//   - explicit IPCUnregisterAgentBinding on share teardown (the
+//     normal case);
+//   - validate-on-load at daemon startup (catches abnormal exits
+//     across daemon restarts);
+//   - source-destroy cascade via SweepAgentBindingsForHandle.
+//
+// The cost: a share that's killed -9 with the daemon still up will
+// leak its binding until next daemon restart. Acceptable — the
+// orphaned pid won't collide unless the OS reuses it AND a new ppz
+// CLI happens to walk through it, which is statistically negligible
+// on a typical host within one daemon lifetime.
 func (s *State) lookupAgentBindingValidated(sharePID int) *AgentBinding {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	b, ok := s.agentBindings[sharePID]
-	s.mu.RUnlock()
 	if !ok {
 		return nil
 	}
-	if pidAlive(b.SharePID) {
-		out := *b
-		return &out
-	}
-	// Drop the dead entry under write lock.
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if cur, stillThere := s.agentBindings[sharePID]; stillThere && cur.SharePID == b.SharePID {
-		delete(s.agentBindings, sharePID)
-		_ = s.persistAgentBindingsLocked()
-	}
-	return nil
+	out := *b
+	return &out
 }
 
 // SweepAgentBindingsForHandle drops every binding whose Handle equals

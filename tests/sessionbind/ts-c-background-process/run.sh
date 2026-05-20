@@ -16,5 +16,5 @@ PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
     wait "$BGPID"
   ' </dev/null >/dev/null 2>&1
 
-grep -E "^current:" /tmp/ts-c-cap.txt
+grep -E "^(current source|namespace):" /tmp/ts-c-cap.txt
 rm -f /tmp/ts-c-cap.txt
