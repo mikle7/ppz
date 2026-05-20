@@ -18,7 +18,7 @@ ppz_a unset namespace >/dev/null
 # Output redirected to a file so we don't have to drain cindy.stdout.
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share cindy -- sh -c '
-    ppz status 2>&1 | grep -E "^(current|namespace):" > /tmp/ts-a-cap.txt
+    env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz status 2>&1 | grep -E "^current source:" > /tmp/ts-a-cap.txt
   ' </dev/null >/dev/null 2>&1
 
 # Show what the in-pty `ppz status` reported.

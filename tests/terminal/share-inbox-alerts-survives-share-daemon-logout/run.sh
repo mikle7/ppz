@@ -43,7 +43,7 @@ wait_for 50 "ppz_s ls 2>/dev/null | grep -q '^share-inbox-logout.stdout'"
 
 # Pre-recycle: alert fires on first .inbox message, count via --raw +
 # grep -o so concatenated payloads don't hide additional matches.
-ppz_b send share-inbox-logout.inbox "msg-1" >/dev/null
+ppz_b send --from pubsub share-inbox-logout.inbox "msg-1" >/dev/null
 wait_for 50 "ppz_s reread share-inbox-logout.stdout --raw 2>/dev/null | grep -q \"Please run 'ppz read inbox'\""
 ALERT_COUNT_PRE=$(ppz_s reread share-inbox-logout.stdout --raw 2>/dev/null | grep -o "Please run 'ppz read inbox'" | wc -l)
 echo "first_alert_count: $ALERT_COUNT_PRE"
@@ -57,7 +57,7 @@ ppz_s daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 PID_AFTER=$(cat "$HOME_S/daemon.pid")
 [[ "$PID_BEFORE" = "$PID_AFTER" ]] && echo "daemon_same_pid: yes" || echo "daemon_same_pid: no"
 
-ppz_b send share-inbox-logout.inbox "msg-2" >/dev/null
+ppz_b send --from pubsub share-inbox-logout.inbox "msg-2" >/dev/null
 wait_for 60 "[ \"\$(ppz_s reread share-inbox-logout.stdout --raw 2>/dev/null | grep -o \"Please run 'ppz read inbox'\" | wc -l)\" -gt $ALERT_COUNT_PRE ]"
 ALERT_COUNT_POST=$(ppz_s reread share-inbox-logout.stdout --raw 2>/dev/null | grep -o "Please run 'ppz read inbox'" | wc -l)
 [[ "$ALERT_COUNT_POST" -gt "$ALERT_COUNT_PRE" ]] && echo "alert_fired_again: yes" || echo "alert_fired_again: no"

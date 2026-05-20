@@ -1,3 +1,3 @@
-cindy_pty: current: cindy
-bob_pty:   current: bob
+cindy_pty: current source: cindy
+bob_pty:   current source: bob
 exit=0

@@ -14,7 +14,7 @@ ppz_a unset namespace >/dev/null
 (
   PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
     ppz terminal share cindy -- sh -c '
-      ppz status 2>&1 | grep -E "^(current source|namespace):" > /tmp/ts-e-cindy.txt
+      env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz status 2>&1 | grep -E "^(current source|namespace):" > /tmp/ts-e-cindy.txt
     ' </dev/null >/dev/null 2>&1
 ) &
 PID_C=$!
@@ -22,7 +22,7 @@ PID_C=$!
 (
   PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
     ppz terminal share bob -- sh -c '
-      ppz status 2>&1 | grep -E "^(current source|namespace):" > /tmp/ts-e-bob.txt
+      env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz status 2>&1 | grep -E "^(current source|namespace):" > /tmp/ts-e-bob.txt
     ' </dev/null >/dev/null 2>&1
 ) &
 PID_B=$!

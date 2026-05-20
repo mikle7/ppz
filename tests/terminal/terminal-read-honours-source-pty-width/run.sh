@@ -17,13 +17,13 @@ ppz_a terminal share wide -- true >/dev/null
 wait_for 20 "ppz_a ls | ls_normalize | grep -q '^wide.stdctrl'" >/dev/null
 
 # Simulate a 220×50 source by writing a resize event to stdctrl.
-ppz_a send wide.stdctrl '{"type":"resize","cols":220,"rows":50}' >/dev/null
+ppz_a send --from pubsub wide.stdctrl '{"type":"resize","cols":220,"rows":50}' >/dev/null
 wait_for 20 "ppz_a reread wide.stdctrl --json | tail -1 | jq -r '.payload' | grep -q '\"cols\":220'" >/dev/null
 
 # Push a 210-X line to stdout — exceeds the 200-col default but fits
 # in the 220-col actual source size.
 LONG=$(printf 'X%.0s' $(seq 1 210))
-ppz_a send wide.stdout "$LONG" >/dev/null
+ppz_a send --from pubsub wide.stdout "$LONG" >/dev/null
 wait_for 20 "ppz_a reread wide.stdout --raw | tr -d '\\n' | grep -q 'X\\{210\\}'" >/dev/null
 
 echo "--- terminal read renders all 210 X's on a single row ---"

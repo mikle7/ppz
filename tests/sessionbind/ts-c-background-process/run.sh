@@ -11,10 +11,10 @@ ppz_a unset namespace >/dev/null
 
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share cindy -- sh -c '
-    nohup ppz status > /tmp/ts-c-cap.txt 2>&1 &
+    nohup env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz status > /tmp/ts-c-cap.txt 2>&1 &
     BGPID=$!
     wait "$BGPID"
   ' </dev/null >/dev/null 2>&1
 
-grep -E "^(current source|namespace):" /tmp/ts-c-cap.txt
+grep -E "^current source:" /tmp/ts-c-cap.txt
 rm -f /tmp/ts-c-cap.txt

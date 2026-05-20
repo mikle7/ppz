@@ -10,20 +10,21 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a unset handle >/dev/null
 ppz_a unset namespace >/dev/null
 
-# Pre-send a message so cindy.inbox has unread.
-ppz_a source create cindy >/dev/null  # ensure source exists; share will use it
+# Create cindy as message-kind and pre-send to her inbox. Use bare
+# `terminal share --` afterwards so we don't try to re-create cindy
+# as a fresh PTY source (which would conflict).
+ppz_a source create cindy >/dev/null
 ppz_a send --from pubsub cindy "msg-for-cursor-test" >/dev/null
-ppz_a unset handle >/dev/null
 
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
-  ppz terminal share cindy -- sh -c '
-    # First subprocess: drain new messages.
+  ppz terminal share -- sh -c '
+    # First subprocess: drain new messages. env -u strips the env
+    # pins so resolution depends on daemon-side binding.
     echo "sub1:" > /tmp/si-2-cap.txt
-    ppz read inbox --bare 2>/dev/null >> /tmp/si-2-cap.txt
+    env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz read inbox --bare 2>/dev/null >> /tmp/si-2-cap.txt
     echo "sub2:" >> /tmp/si-2-cap.txt
-    # Second subprocess in the same pty: cursor should be past the
-    # message, no new output expected.
-    ppz read inbox --bare 2>/dev/null >> /tmp/si-2-cap.txt
+    # Second subprocess: cursor should be past the message, no output.
+    env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz read inbox --bare 2>/dev/null >> /tmp/si-2-cap.txt
     echo "end" >> /tmp/si-2-cap.txt
   ' </dev/null >/dev/null 2>&1
 

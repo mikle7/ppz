@@ -17,7 +17,7 @@ TERM_PID=$!
 # whatever it actually takes (typically <200ms).
 wait_for 20 "ppz_a ls 2>/dev/null | ls_normalize | grep -q '^echo-pipe.stdin'" >/dev/null
 
-ppz_a send echo-pipe.stdin $'hello-from-send\n' >/dev/null
+ppz_a send --from pubsub echo-pipe.stdin $'hello-from-send\n' >/dev/null
 wait_for 20 "ppz_a reread echo-pipe.stdout | grep -q hello-from-send" >/dev/null
 
 kill "$TERM_PID" 2>/dev/null || true

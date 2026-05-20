@@ -48,7 +48,7 @@ SHARE_PID=$!
 
 wait_for 50 "ppz_s ls 2>/dev/null | grep -q '^share-relogin.stdout'"
 
-ppz_b send share-relogin.stdin $'ONE\n' >/dev/null
+ppz_b send --from pubsub share-relogin.stdin $'ONE\n' >/dev/null
 wait_for 50 "ppz_s reread share-relogin.stdout 2>/dev/null | grep -q 'got:ONE'"
 echo "first_msg_received: $(ppz_s reread share-relogin.stdout 2>/dev/null | grep -c 'got:ONE')"
 
@@ -60,9 +60,9 @@ ppz_s daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 PID_AFTER=$(cat "$HOME_S/daemon.pid")
 [[ "$PID_BEFORE" = "$PID_AFTER" ]] && echo "daemon_same_pid: yes" || echo "daemon_same_pid: no"
 
-ppz_b send share-relogin.stdin $'TWO\n' >/dev/null
+ppz_b send --from pubsub share-relogin.stdin $'TWO\n' >/dev/null
 wait_for 50 "ppz_s reread share-relogin.stdout 2>/dev/null | grep -q 'got:TWO'"
 echo "second_msg_received: $(ppz_s reread share-relogin.stdout 2>/dev/null | grep -c 'got:TWO')"
 
-ppz_b send share-relogin.stdin $'QUIT\n' >/dev/null
+ppz_b send --from pubsub share-relogin.stdin $'QUIT\n' >/dev/null
 wait_for 50 "! kill -0 $SHARE_PID 2>/dev/null"

@@ -46,7 +46,7 @@ wait_for 50 "ppz_s ls 2>/dev/null | grep -q '^share-logout.stdout'"
 
 # Bob sends ONE; payload includes a trailing newline so bash's `read`
 # returns it.
-ppz_b send share-logout.stdin $'ONE\n' >/dev/null
+ppz_b send --from pubsub share-logout.stdin $'ONE\n' >/dev/null
 wait_for 50 "ppz_s reread share-logout.stdout 2>/dev/null | grep -q 'got:ONE'"
 echo "first_msg_received: $(ppz_s reread share-logout.stdout 2>/dev/null | grep -c 'got:ONE')"
 
@@ -62,10 +62,10 @@ PID_AFTER=$(cat "$HOME_S/daemon.pid")
 # Bob sends TWO. Without the fix, the share's forwardStdin goroutine is
 # still blocked reading from a dead consumer — TWO never reaches the
 # PTY → never echoed → never on stdout.
-ppz_b send share-logout.stdin $'TWO\n' >/dev/null
+ppz_b send --from pubsub share-logout.stdin $'TWO\n' >/dev/null
 wait_for 50 "ppz_s reread share-logout.stdout 2>/dev/null | grep -q 'got:TWO'"
 echo "second_msg_received: $(ppz_s reread share-logout.stdout 2>/dev/null | grep -c 'got:TWO')"
 
 # Tell the wrapped bash to quit so the share exits cleanly.
-ppz_b send share-logout.stdin $'QUIT\n' >/dev/null
+ppz_b send --from pubsub share-logout.stdin $'QUIT\n' >/dev/null
 wait_for 50 "! kill -0 $SHARE_PID 2>/dev/null"

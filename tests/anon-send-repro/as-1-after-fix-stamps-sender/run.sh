@@ -30,7 +30,7 @@ ppz_a unset handle >/dev/null
 # inherited normally.
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
   ppz terminal share cindy -- sh -c '
-    env -u PPZ_SESSION ppz send david "hello-from-cindys-sub-shell" 2>&1 > /tmp/as-1-send.txt
+    env -u PPZ_SESSION ppz send david "hello-from-cindys-sub-shell" > /tmp/as-1-send.txt 2>&1
   ' </dev/null >/dev/null 2>&1
 
 # Show send outcome (success line OR error).

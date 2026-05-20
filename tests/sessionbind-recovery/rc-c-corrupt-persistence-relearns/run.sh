@@ -42,7 +42,7 @@ ppz_s daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 # cindy.stdout). That stdout publish is THE share's IPC; the daemon
 # detects no binding for cindy and replies E_BINDING_UNKNOWN; share
 # re-registers; binding restored.
-ppz_a send cindy.stdin "x" >/dev/null
+ppz_a send --from pubsub cindy.stdin "x" >/dev/null
 sleep 1
 
 # Verify the binding is back: in-pty status would do it but we can't
