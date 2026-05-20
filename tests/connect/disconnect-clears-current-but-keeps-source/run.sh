@@ -10,4 +10,4 @@ ppz_a unset handle
 echo "--- status ---"
 ppz_a status | grep '^current source:'
 echo "--- ls ---"
-ppz_a ls | grep '^chat\.inbox' | ls_normalize
+ppz_a ls | ls_normalize | grep '^chat\.inbox'

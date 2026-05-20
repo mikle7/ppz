@@ -14,7 +14,7 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 # `terminal share` provisions the pty source + auto-creates stdctrl.
 # `true` exits immediately; we'll publish to the pipes directly.
 ppz_a terminal share wide -- true >/dev/null
-wait_for 20 "ppz_a ls | grep -q '^wide.stdctrl'" >/dev/null
+wait_for 20 "ppz_a ls | ls_normalize | grep -q '^wide.stdctrl'" >/dev/null
 
 # Simulate a 220×50 source by writing a resize event to stdctrl.
 ppz_a send wide.stdctrl '{"type":"resize","cols":220,"rows":50}' >/dev/null

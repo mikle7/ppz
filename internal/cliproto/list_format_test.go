@@ -62,7 +62,7 @@ func TestPrintList_HumanColumnHeaderIsRightmost(t *testing.T) {
 
 	header := strings.SplitN(buf.String(), "\n", 2)[0]
 	fields := strings.Fields(header)
-	wantOrder := []string{"PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "CREATOR"}
+	wantOrder := []string{"NAMESPACE", "PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "CREATOR"}
 	if len(fields) != len(wantOrder) {
 		t.Fatalf("header field count = %d (%v), want %d (%v)", len(fields), fields, len(wantOrder), wantOrder)
 	}
@@ -80,15 +80,26 @@ func TestPrintList_AutoPipesInheritSourceCreator(t *testing.T) {
 	var buf bytes.Buffer
 	PrintList(&buf, []Source{sampleSourceFooChat(at)}, false)
 
+	seen := 0
 	for _, line := range strings.Split(buf.String(), "\n") {
-		if !strings.HasPrefix(line, "chat.") {
+		fields := strings.Fields(line)
+		// Data rows: NAMESPACE PIPE UNREAD BUFFERED LAST PAYLOAD CREATOR.
+		// Header has NAMESPACE in [0]; data has the namespace ("-" for
+		// root) in [0] and `chat.<pipe>` in [1].
+		if len(fields) < 2 || fields[0] == "NAMESPACE" {
 			continue
 		}
-		fields := strings.Fields(line)
+		if !strings.HasPrefix(fields[1], "chat.") {
+			continue
+		}
 		human := fields[len(fields)-1]
 		if human != "foo" {
 			t.Errorf("auto-pipe row %q must carry source creator 'foo' as CREATOR; got %q", line, human)
 		}
+		seen++
+	}
+	if seen == 0 {
+		t.Fatal("no chat.* rows found — the test would pass vacuously without this guard")
 	}
 }
 
@@ -115,12 +126,14 @@ func TestPrintList_PipeLevelCreatorOverridesSource(t *testing.T) {
 		"chat.broadcast": "foo",
 		"chat.inbox":     "foo",
 	}
+	seen := 0
 	for _, line := range strings.Split(buf.String(), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) == 0 || fields[0] == "PIPE" {
+		// Header row starts with NAMESPACE; data rows put PIPE at [1].
+		if len(fields) < 2 || fields[0] == "NAMESPACE" {
 			continue
 		}
-		want, ok := wantHumanByPipe[fields[0]]
+		want, ok := wantHumanByPipe[fields[1]]
 		if !ok {
 			continue
 		}
@@ -128,6 +141,10 @@ func TestPrintList_PipeLevelCreatorOverridesSource(t *testing.T) {
 		if got != want {
 			t.Errorf("row %q: CREATOR = %q, want %q", line, got, want)
 		}
+		seen++
+	}
+	if seen != len(wantHumanByPipe) {
+		t.Fatalf("expected to verify %d rows, only saw %d — pipe lookup is missing rows", len(wantHumanByPipe), seen)
 	}
 }
 
@@ -153,7 +170,7 @@ func TestPrintList_ColumnAlignmentWithVaryingUsernames(t *testing.T) {
 	// Each non-header line ends in either "foo" or "longer-username".
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 		fields := strings.Fields(line)
-		if fields[0] == "PIPE" {
+		if len(fields) == 0 || fields[0] == "NAMESPACE" {
 			continue
 		}
 		last := fields[len(fields)-1]
@@ -178,14 +195,20 @@ func TestPrintList_PayloadColumnNoLongerSwallowsHuman(t *testing.T) {
 	var buf bytes.Buffer
 	PrintList(&buf, []Source{src}, false)
 
+	seen := 0
 	for _, line := range strings.Split(buf.String(), "\n") {
-		if !strings.HasPrefix(line, "s.broadcast") {
+		fields := strings.Fields(line)
+		// PIPE column lives at index 1 once NAMESPACE owns index 0.
+		if len(fields) < 2 || fields[0] == "NAMESPACE" || fields[1] != "s.broadcast" {
 			continue
 		}
-		fields := strings.Fields(line)
 		if got := fields[len(fields)-1]; got != "foo" {
 			t.Errorf("CREATOR must be the last token on the row; got %q (line=%q)", got, line)
 		}
+		seen++
+	}
+	if seen == 0 {
+		t.Fatal("no s.broadcast row found — guard against the previous HasPrefix(line, ...) form passing vacuously")
 	}
 }
 

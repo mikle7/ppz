@@ -12,7 +12,7 @@ wait_for 20 "ppz_a ls 2>/dev/null | grep -q only-msg" >/dev/null
 PPZ_SESSION=agent-a ppz_a read chat.inbox >/dev/null
 
 echo "--- agent-a ls ---"
-PPZ_SESSION=agent-a ppz_a ls | grep '^chat\.inbox' | ls_normalize
+PPZ_SESSION=agent-a ppz_a ls | ls_normalize | grep '^chat\.inbox'
 
 echo "--- agent-b ls ---"
-PPZ_SESSION=agent-b ppz_a ls | grep '^chat\.inbox' | ls_normalize
+PPZ_SESSION=agent-b ppz_a ls | ls_normalize | grep '^chat\.inbox'

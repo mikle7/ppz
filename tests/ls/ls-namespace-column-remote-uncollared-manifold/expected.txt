@@ -1,0 +1,2 @@
+namespace=xyz pipe=plaza
+exit=0

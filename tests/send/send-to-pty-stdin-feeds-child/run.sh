@@ -15,7 +15,7 @@ TERM_PID=$!
 # blanket `sleep 1` was a guess at how long `terminal share` needs to
 # allocate the pty + register the source; polling `ls` cuts that to
 # whatever it actually takes (typically <200ms).
-wait_for 20 "ppz_a ls 2>/dev/null | grep -q '^echo-pipe.stdin'" >/dev/null
+wait_for 20 "ppz_a ls 2>/dev/null | ls_normalize | grep -q '^echo-pipe.stdin'" >/dev/null
 
 ppz_a send echo-pipe.stdin $'hello-from-send\n' >/dev/null
 wait_for 20 "ppz_a reread echo-pipe.stdout | grep -q hello-from-send" >/dev/null

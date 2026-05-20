@@ -13,7 +13,7 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" ppz terminal share agent -- \
   sh -c 'stty -echo 2>/dev/null; exec cat' >/dev/null 2>&1 &
 TERM_PID=$!
-wait_for 20 "ppz_a ls 2>/dev/null | grep -q '^agent.stdin'" >/dev/null
+wait_for 20 "ppz_a ls 2>/dev/null | ls_normalize | grep -q '^agent.stdin'" >/dev/null
 
 # Shift session current to a different handle so sender ≠ destination.
 # (Source create on a non-pty handle sets current; agent stays kind=pty

@@ -51,7 +51,7 @@ done
 
 # Wait until daemon-a's view of the stream shows all N messages
 # buffered (BUFFERED column on `ls` lines like `alpha-side.inbox 50 50 ...`).
-wait_for 60 "ppz_a ls 2>/dev/null | awk '/^alpha-side.inbox/ { exit (\$2 == $N) ? 0 : 1 }'"
+wait_for 60 "ppz_a ls 2>/dev/null | ls_normalize | awk '/^alpha-side.inbox/ { exit (\$2 == $N) ? 0 : 1 }'"
 
 OUT=/tmp/wan-acked-read-output.txt
 
@@ -71,8 +71,8 @@ read_msg_count=$(wc -l <"$OUT" | tr -d ' ')
 # Publish + Flush, so under N=50 with concurrent goroutines the NATS
 # connection pipelines them into a small handful of round-trips. We
 # allow a generous timeout so the test isn't flaky on slow CI.
-wait_for 120 "ppz_b ls 2>/dev/null | awk '/^beta-side.inbox/ { exit (\$2 == $N) ? 0 : 1 }'"
-ack_count=$(ppz_b ls 2>/dev/null | awk '/^beta-side.inbox/ { print $2 }')
+wait_for 120 "ppz_b ls 2>/dev/null | ls_normalize | awk '/^beta-side.inbox/ { exit (\$2 == $N) ? 0 : 1 }'"
+ack_count=$(ppz_b ls 2>/dev/null | ls_normalize | awk '/^beta-side.inbox/ { print $2 }')
 
 echo "read_msg_count: $read_msg_count"
 [[ $elapsed_s -lt 5 ]] && echo "read_under_5s: yes" || echo "read_under_5s: no (${elapsed_s}s)"

@@ -25,6 +25,6 @@ grep -oE '^sent id=[a-f0-9]{8} to=[^ ]+ bytes=[0-9]+$' "$err" | head -1 \
 # be 1 after the send lands. Locks in that the message physically
 # arrived at the manifolded subject, not just that the CLI printed the
 # right destination.
-wait_for 20 "ppz_a ls | grep -q '^pixel\.boris\.inbox 1 1'" >/dev/null
-ppz_a ls 2>/dev/null | awk '$1 == "pixel.boris.inbox" {print $1, $2, $3}'
+wait_for 20 "ppz_a ls | ls_normalize | grep -q '^pixel\.boris\.inbox 1 1'" >/dev/null
+ppz_a ls 2>/dev/null | ls_normalize | awk '$1 == "pixel.boris.inbox" {print $1, $2, $3}'
 rm -f "$err"

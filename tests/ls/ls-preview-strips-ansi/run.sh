@@ -20,4 +20,4 @@ wait_for 20 "ppz_a ls 2>/dev/null | ls_normalize | grep -E '^term\.stdout 1 ' >/
 
 # Print just the stdout row. cat -v makes any leaking control bytes
 # visible as ^[, M-, etc. — clean preview round-trips unchanged.
-ppz_a ls | grep '^term\.stdout' | ls_normalize | cat -v
+ppz_a ls | ls_normalize | grep '^term\.stdout' | cat -v

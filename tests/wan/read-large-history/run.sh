@@ -34,7 +34,7 @@ done
 # Wait until all 200 messages are visible to daemon-b's view of the
 # stream. Using ls's BUFFERED column — when it hits 200 we know the
 # server has retained them.
-wait_for 100 "ppz_b ls 2>/dev/null | awk '/^wantest.inbox/ { exit (\$3 == 200) ? 0 : 1 }'"
+wait_for 100 "ppz_b ls 2>/dev/null | ls_normalize | awk '/^wantest.inbox/ { exit (\$3 == 200) ? 0 : 1 }'"
 
 OUT=/tmp/wan-read-output.txt
 

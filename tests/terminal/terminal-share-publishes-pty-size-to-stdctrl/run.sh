@@ -16,8 +16,8 @@ ppz_a terminal share term1 -- true >/dev/null
 
 # stdctrl must be auto-provisioned on pty sources alongside stdin/stdout.
 echo "--- ppz ls includes term1.stdctrl with at least one message ---"
-wait_for 20 "ppz_a ls | awk '\$1 == \"term1.stdctrl\" && \$2+0 > 0'" >/dev/null
-ppz_a ls | awk '$1 == "term1.stdctrl" {print $1, ($2+0 > 0 ? "has-msgs" : "empty")}'
+wait_for 20 "ppz_a ls | ls_normalize | awk '\$1 == \"term1.stdctrl\" && \$2+0 > 0'" >/dev/null
+ppz_a ls | ls_normalize | awk '$1 == "term1.stdctrl" {print $1, ($2+0 > 0 ? "has-msgs" : "empty")}'
 
 echo "--- latest stdctrl message is a JSON resize event with non-zero dims ---"
 ppz_a read term1.stdctrl --json \

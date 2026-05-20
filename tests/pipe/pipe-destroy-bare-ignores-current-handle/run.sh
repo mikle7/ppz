@@ -15,4 +15,4 @@ ppz_a pipe create room >/dev/null
 ppz_a source create foo2 >/dev/null
 # foo2 is now current handle. Bare destroy must target uncollared, not foo2.room.
 ppz_a pipe destroy room
-ppz_a ls | grep -E '^(room|foo\.room) ' | sed -E 's/[[:space:]]+/ /g' | cut -d' ' -f1 | sort
+ppz_a ls | ls_normalize | grep -E '^(room|foo\.room) ' | cut -d' ' -f1 | sort

@@ -9,4 +9,4 @@ ppz_a source create apple >/dev/null
 ppz_a source destroy ghost
 
 echo "--- apple still exists ---"
-ppz_a ls | grep '^apple\.' | ls_normalize
+ppz_a ls | ls_normalize | grep '^apple\.'

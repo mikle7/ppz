@@ -10,4 +10,4 @@ ppz_a source create foo >/dev/null
 ppz_a unset handle >/dev/null
 ppz_a set namespace team-a >/dev/null
 ppz_a pipe create foo
-ppz_a ls | grep -E '^(foo\.inbox|team-a\.foo) ' | sed -E 's/[[:space:]]+/ /g' | cut -d' ' -f1 | sort
+ppz_a ls | ls_normalize | grep -E '^(foo\.inbox|team-a\.foo) ' | cut -d' ' -f1 | sort

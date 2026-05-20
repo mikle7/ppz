@@ -21,10 +21,10 @@ ppz_a pipe create chat.archive >/dev/null
 ppz_a pipe create room >/dev/null
 
 echo "--- before destroy ---"
-ppz_a ls | awk '{print $1}' | grep -v '^PIPE$' | sort
+ppz_a ls | ls_normalize | awk '{print $1}' | sort
 
 # Glob destroy. Quoted so the host shell doesn't expand against cwd.
 ppz_a pipe destroy '*' 2>&1 | sort
 
 echo "--- after destroy ---"
-ppz_a ls | awk '{print $1}' | grep -v '^PIPE$' | sort
+ppz_a ls | ls_normalize | awk '{print $1}' | sort

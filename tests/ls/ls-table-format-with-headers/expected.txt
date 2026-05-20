@@ -1,12 +1,12 @@
-PIPE UNREAD BUFFERED LAST PAYLOAD CREATOR
-chat.heartbeat 0 0 - - foo
-chat.inbox 1 1 RELATIVE hello world foo
-chat.stdctrl 0 0 - - foo
-chat.stdin 0 0 - - foo
-chat.stdout 0 0 - - foo
-verbose.heartbeat 0 0 - - foo
-verbose.inbox 1 1 RELATIVE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… foo
-verbose.stdctrl 0 0 - - foo
-verbose.stdin 0 0 - - foo
-verbose.stdout 0 0 - - foo
+NAMESPACE PIPE UNREAD BUFFERED LAST PAYLOAD CREATOR
+- chat.heartbeat 0 0 - - foo
+- chat.inbox 1 1 RELATIVE hello world foo
+- chat.stdctrl 0 0 - - foo
+- chat.stdin 0 0 - - foo
+- chat.stdout 0 0 - - foo
+- verbose.heartbeat 0 0 - - foo
+- verbose.inbox 1 1 RELATIVE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… foo
+- verbose.stdctrl 0 0 - - foo
+- verbose.stdin 0 0 - - foo
+- verbose.stdout 0 0 - - foo
 exit=0

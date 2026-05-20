@@ -23,7 +23,7 @@ ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_beta)" >/dev/null
 
 ppz_b source create canary >/dev/null
 ppz_b send canary.inbox "beta-data" >/dev/null
-wait_for 20 "ppz_b ls | grep -q '^canary.inbox'" >/dev/null
+wait_for 20 "ppz_b ls | ls_normalize | grep -q '^canary.inbox'" >/dev/null
 BETA_ORG=$(jq -r '.org_id' "${PPZ_DAEMON_B_HOME:-/tmp/b}/credentials")
 BETA_STREAM="source_${BETA_ORG}_canary_inbox"
 echo "beta_stream_set_up: $([[ -n "$BETA_STREAM" ]] && echo true || echo false)"
@@ -49,7 +49,7 @@ nats --server="nats://ppz-server:4222" --creds="$CREDS" \
 
 echo ""
 echo "--- beta's data is still intact ---"
-if ppz_b ls | grep -qE 'canary.inbox +1 +1 .*beta-data'; then
+if ppz_b ls | ls_normalize | grep -qE 'canary.inbox +1 +1 .*beta-data'; then
   echo "beta_data_still_intact: true"
 else
   echo "beta_data_still_intact: false"

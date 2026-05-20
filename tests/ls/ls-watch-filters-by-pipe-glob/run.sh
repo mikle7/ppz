@@ -16,8 +16,8 @@ ppz_a terminal share apple  -- printf "stdout-from-apple"  >/dev/null
 ppz_a terminal share banana -- printf "stdout-from-banana" >/dev/null
 # Wait for both stdout pipes to land in ls (BUFFERED > 0 means the
 # pty bytes have been published).
-wait_for 20 "ppz_a ls | awk '\$1 == \"banana.stdout\" && \$3+0 > 0'" >/dev/null
-wait_for 20 "ppz_a ls | awk '\$1 == \"apple.stdout\"  && \$3+0 > 0'" >/dev/null
+wait_for 20 "ppz_a ls | ls_normalize | awk '\$1 == \"banana.stdout\" && \$3+0 > 0'" >/dev/null
+wait_for 20 "ppz_a ls | ls_normalize | awk '\$1 == \"apple.stdout\"  && \$3+0 > 0'" >/dev/null
 
 echo "--- watch '*.stdout' (quoted glob) — returns immediately, only stdout rows ---"
 ppz_a ls --watch '*.stdout' | ls_normalize | sort
