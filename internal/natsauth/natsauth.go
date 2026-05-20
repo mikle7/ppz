@@ -157,12 +157,9 @@ type EmbeddedConfig struct {
 	SystemAccountJWT string // optional — required for JetStream
 	JetStream        bool   // false → JS disabled (auth-only mode, used by tests)
 
-	// StoreDir is the on-disk path for JetStream FileStorage. Required
-	// to be stable across process restarts in production — otherwise
-	// each start orphans the previous on-disk store and clients see
-	// "pipe present in ls, send fails E_SOURCE_NOT_FOUND" after every
-	// deploy. Leave empty to fall back to a per-process os.MkdirTemp
-	// (only appropriate for unit tests that genuinely want isolation).
+	// StoreDir is the persistent on-disk path for JetStream FileStorage.
+	// Empty falls back to a per-process os.MkdirTemp — fine for tests,
+	// loses every stream on restart in any long-lived deployment.
 	StoreDir string
 }
 

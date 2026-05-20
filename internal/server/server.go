@@ -54,16 +54,9 @@ type Config struct {
 	// Account JWTs as orgs are provisioned). Operator JWT is
 	// public — declares the operator's existence to the embedded
 	// NATS server. System Account JWT lives in /sys for JetStream.
-	NATSOperatorSeed     string
-	NATSOperatorJWT      string
-	NATSSystemAccountJWT string
-
-	// NATSJetStreamStoreDir is the on-disk path the embedded NATS uses
-	// for JetStream FileStorage. MUST be a stable path mounted on
-	// persistent storage in production — empty falls back to a fresh
-	// os.MkdirTemp per process, which orphans every stream on restart
-	// (the 2026-05-20 prod symptom). Read from PPZ_JETSTREAM_STORE_DIR
-	// at boot in cmd/ppz-server.
+	NATSOperatorSeed      string
+	NATSOperatorJWT       string
+	NATSSystemAccountJWT  string
 	NATSJetStreamStoreDir string
 }
 

@@ -65,11 +65,6 @@ services:
       PPZ_GITHUB_USER_URL: "http://mock-github:9000/user"
       PPZ_SESSION_KEY: "compose-test-session-key-32-bytes-x"
       PPZ_DEV_LOGIN: "true"
-      # Stable JetStream store dir so streams survive a `docker stop`/
-      # `docker start` (exercised by reliability/uncollared-pipe-
-      # survives-ppz-server-restart). Without this the embedded NATS
-      # rolls a fresh os.MkdirTemp per process and orphans the prior
-      # on-disk store. Mounted on the named volume below.
       PPZ_JETSTREAM_STORE_DIR: /var/lib/ppz/jetstream
     depends_on:
       postgres:
