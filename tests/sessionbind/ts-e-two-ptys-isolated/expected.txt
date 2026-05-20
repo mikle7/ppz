@@ -1,0 +1,3 @@
+cindy_pty: current: cindy
+bob_pty:   current: bob
+exit=0

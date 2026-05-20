@@ -1,0 +1,2 @@
+namespace: team-a
+exit=0

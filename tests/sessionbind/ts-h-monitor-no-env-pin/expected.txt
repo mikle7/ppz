@@ -1,0 +1,2 @@
+monitor-without-env-pin: ok
+exit=0

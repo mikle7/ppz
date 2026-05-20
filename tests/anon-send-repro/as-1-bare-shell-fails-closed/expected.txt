@@ -1,0 +1,4 @@
+rejected: E_NO_CURRENT_SOURCE
+exit_code: 1
+david_inbox_count: 0
+exit=0

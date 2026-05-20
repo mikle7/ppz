@@ -1,0 +1,2 @@
+result: clean fallback (not cindy)
+exit=0

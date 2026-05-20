@@ -1,0 +1,4 @@
+pre_restart_file: yes
+post_restart_file: yes
+post_restart_delivery: ok
+exit=0

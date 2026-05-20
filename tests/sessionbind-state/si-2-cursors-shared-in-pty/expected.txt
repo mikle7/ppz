@@ -1,0 +1,5 @@
+sub1:
+msg-for-cursor-test
+sub2:
+end
+exit=0

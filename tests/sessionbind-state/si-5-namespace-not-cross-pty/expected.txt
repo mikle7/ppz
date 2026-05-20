@@ -1,0 +1,3 @@
+cindy_pty: namespace: team-a
+bob_pty:   namespace: (none)
+exit=0

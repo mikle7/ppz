@@ -1,0 +1,3 @@
+cindy_pty: msg-for-isolation
+bob_pty: msg-for-isolation
+exit=0

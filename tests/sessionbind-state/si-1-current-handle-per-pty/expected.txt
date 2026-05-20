@@ -1,0 +1,3 @@
+cindy_pty: cindy
+bob_pty:   bob
+exit=0
