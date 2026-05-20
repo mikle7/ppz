@@ -112,6 +112,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if err := d.State.LoadFromDisk(); err != nil {
 		return fmt.Errorf("load state: %w", err)
 	}
+	// Load persisted agent bindings (docs/specs/session-binding.md).
+	// Best-effort: corruption / missing file is non-fatal (the share
+	// process re-registers on its next IPC).
+	_ = d.State.LoadAgentBindings()
 
 	// State reload: file-mtime poller + SIGHUP. The poller is what makes
 	// out-of-band resets reliable — the test harness runs in a different

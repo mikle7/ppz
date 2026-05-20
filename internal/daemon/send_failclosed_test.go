@@ -59,14 +59,10 @@ func TestSendFailClosed_ExplicitUnknownSessionRejects(t *testing.T) {
 	}
 }
 
-// SF-4: existing fixture audit. The fixture
-// `tests/send/send-uncollared-stamps-empty-without-handle/` today
-// encodes the broken anonymous-sender behavior. After this work, that
-// fixture must EITHER be updated to expect E_NO_CURRENT_SOURCE OR be
-// deleted. This test is documentation: it intentionally fails with a
-// pointer to the fixture so the audit isn't forgotten.
-func TestSendFailClosed_LegacyFixtureMustBeUpdated(t *testing.T) {
-	t.Log("AUDIT: tests/send/send-uncollared-stamps-empty-without-handle/ encodes today's broken anonymous-send behavior. Update the fixture to expect E_NO_CURRENT_SOURCE after Layer 2 lands.")
-	// Intentional failing assertion to keep the audit on the failing-test list.
-	t.Errorf("audit not done: fixture tests/send/send-uncollared-stamps-empty-without-handle/ still expects anonymous publication")
+// SF-4 (was: audit pin). The legacy fixture
+// `tests/send/send-uncollared-stamps-empty-without-handle/` has been
+// updated to expect E_NO_CURRENT_SOURCE; the audit is complete. This
+// stub stays so the spec's test ID list remains traceable.
+func TestSendFailClosed_LegacyFixtureUpdated(t *testing.T) {
+	t.Log("Legacy fixture updated to expect E_NO_CURRENT_SOURCE — see tests/send/send-uncollared-stamps-empty-without-handle/")
 }

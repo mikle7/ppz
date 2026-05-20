@@ -620,6 +620,10 @@ func (d *Daemon) handleSourceDestroy(ctx context.Context, conn net.Conn, params 
 	}
 	d.State.ForgetPipe(req.Handle)
 	_ = d.State.ClearCurrentForHandle(req.Handle)
+	// Session binding cascade: drop any agent bindings owned by the
+	// destroyed source so subsequent IPCs don't resolve to a stale
+	// handle. See docs/specs/session-binding.md.
+	d.State.SweepAgentBindingsForHandle(req.Handle)
 	writeIPC(conn, cliproto.SourceDestroyReply{Handle: req.Handle, Manifold: manifold})
 }
 
@@ -791,9 +795,18 @@ func (d *Daemon) handleSend(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.EInvalidSubject))
 		return
 	}
-	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
+	session := d.resolveCallerSession(req.Session, req.AncestorPIDs)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, session)
 	if e != nil {
 		writeIPCErr(conn, e)
+		return
+	}
+	// Layer 2 (docs/specs/session-binding.md): fail-closed when the
+	// resolved sender is empty. resolveSendTarget already returns
+	// ENoCurrentSource for the collared path (current == ""), but the
+	// uncollared path stamps empty sender silently — close that gap.
+	if target.sender == "" {
+		writeIPCErr(conn, cliproto.New(cliproto.ENoCurrentSource))
 		return
 	}
 	env := buildBroadcastEnvelope(req, target.sender, clock.Now())
@@ -840,9 +853,14 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 		writeIPC(conn, cliproto.SendBatchReply{})
 		return
 	}
-	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
+	session := d.resolveCallerSession(req.Session, nil) // SendBatch shares Session field
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, session)
 	if e != nil {
 		writeIPCErr(conn, e)
+		return
+	}
+	if target.sender == "" {
+		writeIPCErr(conn, cliproto.New(cliproto.ENoCurrentSource))
 		return
 	}
 	ids := make([]string, 0, len(req.Payloads))

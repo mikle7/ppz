@@ -24,7 +24,7 @@ func useColor() bool {
 func cmdStatus(args []string) error {
 	var st cliproto.StatusReply
 	err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
-		cliproto.StatusRequest{Session: sessionID()}, &st)
+		cliproto.StatusRequest{Session: sessionFromEnv(), AncestorPIDs: ancestorPIDs()}, &st)
 	if err != nil {
 		// Daemon unreachable → "daemon: not running" on stdout, exit 11.
 		var pErr *cliproto.Error

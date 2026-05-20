@@ -68,6 +68,10 @@ type State struct {
 	// Surfaced by `ppz status` so an already-known auth failure shows
 	// up immediately, without status needing its own probe.
 	loginCheck string
+	// Session binding (docs/specs/session-binding.md). Keyed by the
+	// `ppz terminal share` process's pid, which is the stable
+	// identity anchor for agent subprocesses' ancestor walks.
+	agentBindings map[int]*AgentBinding
 }
 
 // normSession matches cursors.session — empty session id means "default".
@@ -85,6 +89,7 @@ func NewState(home string) *State {
 		currentNamespace: map[string]string{},
 		knownPipes:       map[string]struct{}{},
 		handleManifold:   map[string]string{},
+		agentBindings:    map[int]*AgentBinding{},
 	}
 }
 
@@ -317,6 +322,7 @@ func (s *State) LoadFromDisk() error {
 	s.currentNamespace = map[string]string{}
 	s.knownPipes = map[string]struct{}{}
 	s.handleManifold = map[string]string{}
+	s.agentBindings = map[int]*AgentBinding{}
 	s.pipesLoaded = false
 	// Reload zeros the cache: a daemon that just woke up hasn't talked to
 	// the server yet under the new credentials, so status should probe.

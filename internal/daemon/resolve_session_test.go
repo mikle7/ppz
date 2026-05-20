@@ -28,6 +28,7 @@ func TestResolveSession_ExplicitDeclaredWins(t *testing.T) {
 // RS-2: explicit declared overrides ancestor match.
 func TestResolveSession_ExplicitDeclaredOverridesAncestorMatch(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -42,6 +43,7 @@ func TestResolveSession_ExplicitDeclaredOverridesAncestorMatch(t *testing.T) {
 // share, e.g. `ppz terminal share` calling its own daemon).
 func TestResolveSession_AncestorMatchDepth0(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -59,6 +61,7 @@ func TestResolveSession_AncestorMatchDepth0(t *testing.T) {
 // share). The most common case.
 func TestResolveSession_AncestorMatchDepth1(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -73,6 +76,7 @@ func TestResolveSession_AncestorMatchDepth1(t *testing.T) {
 // RS-B: match at the maximum allowed depth.
 func TestResolveSession_AncestorMatchAtMaxDepth(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 99); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -95,6 +99,7 @@ func TestResolveSession_AncestorMatchAtMaxDepth(t *testing.T) {
 // past the cap are invisible. Falls through to fallback.
 func TestResolveSession_BindingPastMaxDepthFallsThrough(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 99); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -156,6 +161,7 @@ func TestResolveSession_ChainTerminatesCleanly(t *testing.T) {
 // caller (e.g. send handler) is expected to prefer State.Current.
 func TestResolveSession_StateCurrentOverridesBoundHandle(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -180,6 +186,7 @@ func TestResolveSession_StateCurrentOverridesBoundHandle(t *testing.T) {
 // to the fallback path.
 func TestResolveSession_DestroyedSourceFallsThrough(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -194,6 +201,7 @@ func TestResolveSession_DestroyedSourceFallsThrough(t *testing.T) {
 // RS-13: two agents' bindings don't cross-contaminate.
 func TestResolveSession_TwoAgentsNoCrossContamination(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register cindy: %v", err)
 	}

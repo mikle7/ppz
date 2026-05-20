@@ -109,11 +109,12 @@ func cmdSend(args []string) error {
 			MsgSubject:   *subject,
 			InReplyTo:    *inReplyTo,
 			AckRequested: *requestAck,
-			// Forward the calling shell's session id so the daemon's
-			// envelope.sender = d.State.Current(req.Session) resolves
-			// against the per-tty current source — not the "default"
-			// session, which is rarely what the user actually has set.
-			Session: sessionID(),
+			// Session is populated ONLY when PPZ_SESSION env is set
+			// (explicit override). AncestorPIDs lets the daemon's
+			// session resolver bind via the process ancestor chain
+			// when env isn't set — see docs/specs/session-binding.md.
+			Session:      sessionFromEnv(),
+			AncestorPIDs: ancestorPIDs(),
 		},
 		&reply); err != nil {
 		return err

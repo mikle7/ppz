@@ -19,6 +19,7 @@ import (
 // AC-1: resolver returns BoundHandle, State.Current unset → auto-write.
 func TestAutoWriteCurrent_PopulatesOnFirstResolve(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -36,6 +37,7 @@ func TestAutoWriteCurrent_PopulatesOnFirstResolve(t *testing.T) {
 func TestAutoWriteCurrent_PersistsToDisk(t *testing.T) {
 	home := t.TempDir()
 	s := NewState(home)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -56,6 +58,7 @@ func TestAutoWriteCurrent_PersistsToDisk(t *testing.T) {
 func TestAutoWriteCurrent_NoChurnOnRepeatedResolve(t *testing.T) {
 	home := t.TempDir()
 	s := NewState(home)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -83,6 +86,7 @@ func TestAutoWriteCurrent_NoChurnOnRepeatedResolve(t *testing.T) {
 // AC-4: existing current is preserved — auto-write doesn't overwrite.
 func TestAutoWriteCurrent_DoesNotOverwriteExisting(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -100,6 +104,7 @@ func TestAutoWriteCurrent_DoesNotOverwriteExisting(t *testing.T) {
 // AC-5: `ppz set handle bob` overrides cleanly. Binding unchanged.
 func TestAutoWriteCurrent_SetHandleOverridesAfter(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -125,6 +130,7 @@ func TestAutoWriteCurrent_SetHandleOverridesAfter(t *testing.T) {
 // AC-6: `ppz unset handle` clears current; next resolve re-fires auto-write.
 func TestAutoWriteCurrent_UnsetHandleAllowsReAutoWrite(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -164,6 +170,7 @@ func TestBackwardsCompat_OldCLISessionFormat(t *testing.T) {
 // BC-2: new CLI sends empty Session + populated AncestorPIDs → engages resolver.
 func TestBackwardsCompat_NewCLIEmptyEngagesResolver(t *testing.T) {
 	s := newTestStateForBindings(t)
+	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
 		t.Fatalf("register: %v", err)
 	}

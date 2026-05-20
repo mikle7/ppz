@@ -76,6 +76,9 @@ type ReadRequest struct {
 	// uncollared pipe at the session's current_namespace. Handle and
 	// Channel are empty in this case.
 	BareTarget string `json:"bare_target,omitempty"`
+	// AncestorPIDs is the caller's process ancestor chain (Layer 1
+	// session binding). See SendRequest for semantics.
+	AncestorPIDs []int `json:"ancestor_pids,omitempty"`
 }
 
 // ReadEvent is the wire format of one streamed line in a Read response.
@@ -124,7 +127,8 @@ type ReadMessage struct {
 // StatusRequest carries the caller's session id so the daemon can return
 // the per-session current source. Empty Session normalises to "default".
 type StatusRequest struct {
-	Session string `json:"session,omitempty"`
+	Session      string `json:"session,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 type StatusReply struct {
@@ -270,6 +274,10 @@ type SendRequest struct {
 	// Session keys the per-session current-source fallback when neither
 	// Handle nor PPZ_CURRENT_HANDLE is set.
 	Session string `json:"session,omitempty"`
+	// AncestorPIDs is the caller's process ancestor chain (Layer 1
+	// session binding — docs/specs/session-binding.md). When non-empty
+	// AND Session is empty, the daemon resolves via the binding table.
+	AncestorPIDs []int `json:"ancestor_pids,omitempty"`
 
 	// Phase 1.5: BareTarget carries the raw target string when the user
 	// typed `ppz send LEAF` without a dot. The CLI mangles the bare form
@@ -354,7 +362,8 @@ type Source struct {
 }
 
 type ListRequest struct {
-	Session string `json:"session,omitempty"` // cursor key
+	Session      string `json:"session,omitempty"` // cursor key
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 // ListWatchRequest is `ppz ls --watch`. The daemon returns the same shape
@@ -369,8 +378,9 @@ type ListRequest struct {
 // Patterns are filepath.Match-style globs (`*`, `?`, `[abc]`) matched
 // against the handle (not handle.pipe). Multiple patterns OR-combine.
 type ListWatchRequest struct {
-	Session  string   `json:"session,omitempty"`
-	Patterns []string `json:"patterns,omitempty"`
+	Session      string   `json:"session,omitempty"`
+	Patterns     []string `json:"patterns,omitempty"`
+	AncestorPIDs []int    `json:"ancestor_pids,omitempty"`
 }
 
 type ListReply struct {

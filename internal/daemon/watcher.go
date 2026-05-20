@@ -34,6 +34,7 @@ func (d *Daemon) watchState(ctx context.Context, hupCh <-chan os.Signal) {
 			lastCred, lastCur = c, u
 		}
 		_ = d.State.LoadFromDisk()
+		_ = d.State.LoadAgentBindings()
 		if _, ok := d.State.Credentials(); !ok && d.NC != nil {
 			// Logout / creds-deleted-out-of-band: drop NC and evict
 			// every live follow conn so the CLI sees EOF on its IPC

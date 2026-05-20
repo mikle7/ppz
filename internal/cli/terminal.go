@@ -264,6 +264,26 @@ func cmdTerminalShare(args []string) error {
 		}
 	}
 
+	// Register this share process as the identity anchor for the
+	// handle so the daemon's session resolver can bind in-pty
+	// subprocesses' ancestor chains to this handle. See
+	// docs/specs/session-binding.md. Best-effort: a failure here
+	// only loses the binding (the agent's subprocesses fall back to
+	// the legacy resolution path), it doesn't break the share itself.
+	{
+		var rep cliproto.RegisterAgentBindingReply
+		_ = daemon.Call(ipcSocket(), cliproto.IPCRegisterAgentBinding,
+			cliproto.RegisterAgentBindingRequest{Handle: handle, SharePID: os.Getpid()},
+			&rep)
+	}
+	defer func() {
+		// Best-effort unregister at clean teardown.
+		var rep cliproto.UnregisterAgentBindingReply
+		_ = daemon.Call(ipcSocket(), cliproto.IPCUnregisterAgentBinding,
+			cliproto.UnregisterAgentBindingRequest{SharePID: os.Getpid()},
+			&rep)
+	}()
+
 	// Allocate PTY ourselves (instead of pty.Start) so we can configure
 	// termios on the *slave* before the child inherits it. macOS doesn't
 	// honour termios ioctls on the master fd; setting them on the slave

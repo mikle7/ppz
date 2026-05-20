@@ -99,6 +99,10 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handleDiag(ctx, conn, req.Params)
 	case cliproto.IPCWho:
 		d.handleWho(ctx, conn, req.Params)
+	case cliproto.IPCRegisterAgentBinding:
+		d.handleRegisterAgentBinding(ctx, conn, req.Params)
+	case cliproto.IPCUnregisterAgentBinding:
+		d.handleUnregisterAgentBinding(ctx, conn, req.Params)
 	default:
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: "unknown method " + req.Method})
 	}
@@ -153,8 +157,9 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		}
 		reply.LoginCheck = check
 	}
-	reply.Current = d.State.Current(req.Session)
-	reply.CurrentNamespace = d.State.CurrentNamespace(req.Session)
+	session := d.resolveCallerSession(req.Session, req.AncestorPIDs)
+	reply.Current = d.State.Current(session)
+	reply.CurrentNamespace = d.State.CurrentNamespace(session)
 	reply.CurrentPath = filepath.Join(d.State.Home(), fileCurrent)
 	writeIPC(conn, reply)
 }

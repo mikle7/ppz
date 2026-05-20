@@ -231,6 +231,7 @@ func TestAgentBindingPersist_FreshRegisterAfterStaleDrop(t *testing.T) {
 func TestAgentBindingPersist_ConcurrentWritesRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	s := NewState(home)
+	allPIDsAlive(t) // synthetic pids; this test is about concurrency, not liveness
 	myPID := os.Getpid()
 
 	const n = 30

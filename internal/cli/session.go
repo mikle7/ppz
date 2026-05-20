@@ -40,6 +40,16 @@ func sessionID() string {
 	return deriveSessionID(currentTty(), sid)
 }
 
+// sessionFromEnv returns the PPZ_SESSION env value, or empty if unset.
+// Used by callers that want to let the new daemon-side resolver
+// (Layer 1, docs/specs/session-binding.md) bind via the process
+// ancestor chain rather than committing to a locally-computed
+// session id. Old daemons see the empty Session field, fall back to
+// "default" — acceptable degradation for the rollout window.
+func sessionFromEnv() string {
+	return os.Getenv("PPZ_SESSION")
+}
+
 // currentTty returns the path of the calling tty (with `/dev/` stripped
 // and `/` replaced with `-`), or "" if stdin isn't connected to a tty.
 //
