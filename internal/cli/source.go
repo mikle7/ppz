@@ -58,7 +58,7 @@ func cmdSourceCreate(args []string) error {
 	}
 	var reply cliproto.CreateReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCCreate,
-		cliproto.CreateRequest{Handle: args[0], Session: sessionID()}, &reply); err != nil {
+		cliproto.CreateRequest{Handle: args[0], Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return err
 	}
 	cliproto.PrintCreate(os.Stdout, reply)
@@ -86,7 +86,7 @@ func cmdSourceDestroy(args []string) error {
 
 	var listReply cliproto.ListReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCList,
-		cliproto.ListRequest{Session: sessionID()}, &listReply); err != nil {
+		cliproto.ListRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &listReply); err != nil {
 		return err
 	}
 

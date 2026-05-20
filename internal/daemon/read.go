@@ -37,6 +37,11 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		return
 	}
 
+	// Layer 1 session binding: resolve effective session before using
+	// req.Session for cursor / namespace / ack-sender lookups. See
+	// docs/specs/session-binding.md.
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
+
 	// Phase 1.5: branch on uncollared vs collared. BareTarget != "" =
 	// the CLI saw a bare name with no dot; resolve as uncollared at
 	// current_namespace. Otherwise: today's collared (handle.pipe) flow.

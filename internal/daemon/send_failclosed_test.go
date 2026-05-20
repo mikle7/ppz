@@ -59,10 +59,6 @@ func TestSendFailClosed_ExplicitUnknownSessionRejects(t *testing.T) {
 	}
 }
 
-// SF-4 (was: audit pin). The legacy fixture
-// `tests/send/send-uncollared-stamps-empty-without-handle/` has been
-// updated to expect E_NO_CURRENT_SOURCE; the audit is complete. This
-// stub stays so the spec's test ID list remains traceable.
-func TestSendFailClosed_LegacyFixtureUpdated(t *testing.T) {
-	t.Log("Legacy fixture updated to expect E_NO_CURRENT_SOURCE — see tests/send/send-uncollared-stamps-empty-without-handle/")
-}
+// SF-4 lives in tests/send/send-uncollared-stamps-empty-without-handle/
+// (the legacy fixture updated to expect E_NO_CURRENT_SOURCE). No
+// unit-level stub here — would add zero coverage.

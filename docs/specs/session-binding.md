@@ -64,14 +64,31 @@ Each session-using IPC request gains an optional `ancestor_pids []int` field. CL
 ### Resolver
 
 ```
-1. declaredSession != ""            → ("declaredSession", "")    // explicit env / legacy CLI
-2. ancestor_pids ∩ bindings ≠ ∅     → (binding.SessionKey, binding.Handle)
-3. fallback                          → ("default" or similar, "")
+1. ancestor_pids ∩ bindings ≠ ∅     → (binding.SessionKey, binding.Handle)
+2. declaredSession != ""             → ("declaredSession", "")    // explicit env / legacy CLI
+3. fallback                          → ("default", "")
 ```
+
+**Precedence inversion (revised from original draft after PR #75 review):**
+binding match wins over declared session. The CLI always sends
+`Session: sessionID()` (legacy back-compat — old daemons still get a
+usable session key) AND `AncestorPIDs`. If we let declared win, the
+new daemon would never engage the resolver. By putting the binding
+first, in-pty subprocesses resolve to their agent regardless of what
+their inherited session id happens to be.
+
+Cost: explicit `PPZ_SESSION=foo ppz …` from inside an agent's pty is
+ignored — the binding wins. To operate under a synthetic session,
+run from outside the binding's process tree. Acceptable tradeoff
+given the goal is "agent's identity follows from being in their pty."
 
 ### Auto-write current
 
 When the resolver returns `(sessionKey="agent:cindy", boundHandle="cindy")` and `State.Current("agent:cindy") == ""`, the daemon writes `current["agent:cindy"] = "cindy"`. Idempotent. Explicit `ppz set handle bob` later overrides; `ppz unset handle` clears, and the next IPC re-fires the auto-write — agents can't lock themselves out.
+
+### Back-compat seed for legacy env pins
+
+`RegisterAgentBinding` also writes `current["<handle>"] = "<handle>"` (gated on the key being currently empty) when a binding is created. This makes the long-standing `PPZ_SESSION=<handle> ppz …` recipe pattern continue to resolve — without it, the daemon would receive `declaredSession="<handle>"`, find nothing under that key, and fail closed on send. The seed is small, idempotent, and self-cleaning when the source is destroyed (via `ClearCurrentForHandle`). Visible side effect: `current.json` will carry one extra entry per agent handle.
 
 ### Layer 2 — fail-closed send
 

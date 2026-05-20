@@ -1,7 +1,5 @@
 package daemon
 
-import "fmt"
-
 // MaxPPIDWalkDepth caps how far the CLI walks the parent process tree
 // when collecting its ancestor pid chain. Eight hops covers realistic
 // agent → bash → harness → Monitor → bash chains without unbounded
@@ -32,13 +30,22 @@ type ResolvedSession struct {
 //
 // Resolution precedence (docs/specs/session-binding.md):
 //
-//  1. declaredSession != ""        → ("declaredSession", "")
-//  2. ancestor hits a binding      → (binding.SessionKey, binding.Handle)
-//  3. fallback                     → (synthetic session key, "")
+//  1. ancestor hits a binding   → (binding.SessionKey, binding.Handle)
+//  2. declaredSession != ""     → ("declaredSession", "")
+//  3. fallback                  → ("default", "")
+//
+// Inversion rationale: the CLI sends both `Session` (the legacy
+// sessionID() output — sid-N or PPZ_SESSION env) AND `AncestorPIDs`
+// in every request. If we let declared win, the resolver would never
+// engage for any call from a shell that hasn't explicitly unset
+// PPZ_SESSION. By putting the binding first, in-pty subprocesses
+// always resolve to their agent regardless of what their inherited
+// session id happens to be — which is the entire point of Layer 1.
+//
+// Cost: explicit `PPZ_SESSION=foo ppz …` from inside an agent's pty
+// is ignored; the binding wins. To operate under a synthetic
+// session, run from outside the binding's process tree.
 func (s *State) ResolveSession(declaredSession string, ancestorPIDs []int) ResolvedSession {
-	if declaredSession != "" {
-		return ResolvedSession{SessionKey: declaredSession}
-	}
 	for _, pid := range ancestorPIDs {
 		if pid <= 1 {
 			continue
@@ -47,12 +54,8 @@ func (s *State) ResolveSession(declaredSession string, ancestorPIDs []int) Resol
 			return ResolvedSession{SessionKey: b.SessionKey, BoundHandle: b.Handle}
 		}
 	}
-	// Fallback: synthesize a session key from the caller's pid (first
-	// entry of ancestorPIDs). Mirrors the legacy `sid-N` shape so
-	// callers that already have state keyed by such a label continue
-	// to land on it.
-	if len(ancestorPIDs) > 0 && ancestorPIDs[0] > 0 {
-		return ResolvedSession{SessionKey: fmt.Sprintf("pid-%d", ancestorPIDs[0])}
+	if declaredSession != "" {
+		return ResolvedSession{SessionKey: declaredSession}
 	}
 	return ResolvedSession{SessionKey: "default"}
 }

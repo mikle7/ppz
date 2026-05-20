@@ -125,7 +125,7 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 		SinceMS: sinceMS,
 		JSON:    asJSON,
 		Follow:  follow,
-		Session: sessionID(),
+		Session: sessionID(), AncestorPIDs: ancestorPIDs(),
 		All:     all,
 	}
 

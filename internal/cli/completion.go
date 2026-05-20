@@ -191,7 +191,7 @@ func emitMatching(candidates []string, cur string) {
 func listSourcesForCompletion() []cliproto.Source {
 	var reply cliproto.ListReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCList,
-		cliproto.ListRequest{Session: sessionID()}, &reply); err != nil {
+		cliproto.ListRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return nil
 	}
 	return reply.Sources

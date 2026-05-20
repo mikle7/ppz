@@ -77,7 +77,7 @@ func cmdCommand(args []string) error {
 				Payload: payload,
 				// Forward session id so daemon.envelope.sender resolves
 				// against this tty's current source — same fix as send.go.
-				Session: sessionID(),
+				Session: sessionID(), AncestorPIDs: ancestorPIDs(),
 			},
 			&reply); err != nil {
 			return err

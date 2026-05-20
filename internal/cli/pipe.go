@@ -64,7 +64,7 @@ func cmdPipeCreate(args []string) error {
 	// that's a sender-identity concept used only by sends. To create
 	// a collared pipe, user types the explicit dotted form HANDLE.LEAF.
 
-	req := cliproto.PipeCreateRequest{Handle: handle, Name: name, Session: sessionID()}
+	req := cliproto.PipeCreateRequest{Handle: handle, Name: name, Session: sessionID(), AncestorPIDs: ancestorPIDs()}
 	if *ttl > 0 {
 		secs := int(*ttl / time.Second)
 		req.TTLSeconds = &secs
@@ -150,7 +150,7 @@ func cmdPipeDestroy(args []string) error {
 
 	var reply cliproto.PipeDestroyReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCPipeDestroy,
-		cliproto.PipeDestroyRequest{Handle: handle, Name: name, BareTarget: bareTarget, Session: sessionID()}, &reply); err != nil {
+		cliproto.PipeDestroyRequest{Handle: handle, Name: name, BareTarget: bareTarget, Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return err
 	}
 	cliproto.PrintPipeDestroy(os.Stdout, reply)
@@ -179,7 +179,7 @@ func cmdPipeDestroy(args []string) error {
 func pipeDestroyGlob(pattern string) error {
 	var listReply cliproto.ListReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCList,
-		cliproto.ListRequest{Session: sessionID()}, &listReply); err != nil {
+		cliproto.ListRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &listReply); err != nil {
 		return err
 	}
 
@@ -281,7 +281,7 @@ func resolvePipeGlob(pattern string, sources []cliproto.Source, uncollared []cli
 				uncollaredOut = append(uncollaredOut, cliproto.PipeDestroyRequest{
 					BareTarget: p.Name,
 					Manifold:   p.Manifold,
-					Session:    sessionID(),
+					Session: sessionID(), AncestorPIDs: ancestorPIDs(),
 				})
 			}
 		}

@@ -81,7 +81,7 @@ func cmdTerminalCreate(args []string) error {
 		cliproto.CreateRequest{
 			Handle:  handle,
 			Kind:    string(cliproto.KindPTY),
-			Session: sessionID(),
+			Session: sessionID(), AncestorPIDs: ancestorPIDs(),
 		}, &reply); err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func cmdTerminalCreate(args []string) error {
 	// handle BE the current — issue an explicit switch.
 	var sw cliproto.SwitchReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCSwitch,
-		cliproto.SwitchRequest{Handle: reply.Handle, Session: sessionID()}, &sw); err != nil {
+		cliproto.SwitchRequest{Handle: reply.Handle, Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &sw); err != nil {
 		return err
 	}
 	cliproto.PrintCreate(os.Stdout, reply)
@@ -242,7 +242,7 @@ func cmdTerminalShare(args []string) error {
 		for _, name := range []string{"stdin", "stdout", "stdctrl"} {
 			var reply cliproto.PipeCreateReply
 			err := daemon.Call(ipcSocket(), cliproto.IPCPipeCreate,
-				cliproto.PipeCreateRequest{Handle: handle, Name: name, Session: sessionID()}, &reply)
+				cliproto.PipeCreateRequest{Handle: handle, Name: name, Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply)
 			if err != nil {
 				if e, ok := err.(*cliproto.Error); ok && e.Code == cliproto.EPipeTaken {
 					continue
@@ -258,7 +258,7 @@ func cmdTerminalShare(args []string) error {
 		// source lands at root even when `ppz set namespace X` is active.
 		var createReply cliproto.CreateReply
 		if err := daemon.Call(ipcSocket(), cliproto.IPCCreate,
-			cliproto.CreateRequest{Handle: handle, Kind: string(cliproto.KindPTY), Session: sessionID()},
+			cliproto.CreateRequest{Handle: handle, Kind: string(cliproto.KindPTY), Session: sessionID(), AncestorPIDs: ancestorPIDs()},
 			&createReply); err != nil {
 			return err
 		}
@@ -582,7 +582,7 @@ func sendStreamLine(handle, channel, payload string) error {
 			Payload: payload,
 			// Forward session id so daemon.envelope.sender resolves
 			// against this tty's current source — same fix as send.go.
-			Session: sessionID(),
+			Session: sessionID(), AncestorPIDs: ancestorPIDs(),
 		},
 		&reply)
 }
@@ -606,7 +606,7 @@ func sendStreamBatch(handle, channel string, payloads []string) error {
 			// stream lands sender="" and the receiver can't tell who
 			// spoke. Pinned by tests/terminal/terminal-share-uses-
 			// current-source.
-			Session: sessionID(),
+			Session: sessionID(), AncestorPIDs: ancestorPIDs(),
 		},
 		&reply)
 }
@@ -877,7 +877,7 @@ func cmdTerminalView(args []string) error {
 		Handle:    handle,
 		Channel:   "stdout",
 		Follow:    true,
-		Session:   sessionID(),
+		Session: sessionID(), AncestorPIDs: ancestorPIDs(),
 		NoAdvance: true,
 	})
 	if err := json.NewEncoder(conn).Encode(map[string]any{

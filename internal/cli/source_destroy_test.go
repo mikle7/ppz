@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"reflect"
 	"sort"
 	"testing"
 
@@ -217,7 +218,7 @@ func pipeRequestsEqual(a, b []cliproto.PipeDestroyRequest) bool {
 		return false
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		if !reflect.DeepEqual(a[i], b[i]) {
 			return false
 		}
 	}

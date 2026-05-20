@@ -13,7 +13,7 @@ func effectiveCurrentHandle() (string, error) {
 	}
 	var st cliproto.StatusReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
-		cliproto.StatusRequest{Session: sessionID()}, &st); err != nil {
+		cliproto.StatusRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &st); err != nil {
 		return "", err
 	}
 	if st.Current == "" {

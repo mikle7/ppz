@@ -187,10 +187,11 @@ type LoginReply struct {
 }
 
 type CreateRequest struct {
-	Handle   string `json:"handle"`
-	Kind     string `json:"kind,omitempty"`     // "message" (default) or "pty"
-	Manifold string `json:"manifold,omitempty"` // Phase 1.5.1: namespace-aware source create
-	Session  string `json:"session,omitempty"`  // sets per-session current after create
+	Handle       string `json:"handle"`
+	Kind         string `json:"kind,omitempty"`     // "message" (default) or "pty"
+	Manifold     string `json:"manifold,omitempty"` // Phase 1.5.1: namespace-aware source create
+	Session      string `json:"session,omitempty"`  // sets per-session current after create
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 type CreateReply struct {
@@ -201,8 +202,9 @@ type CreateReply struct {
 }
 
 type SwitchRequest struct {
-	Handle  string `json:"handle"`
-	Session string `json:"session,omitempty"`
+	Handle       string `json:"handle"`
+	Session      string `json:"session,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 type SwitchReply struct {
@@ -212,8 +214,9 @@ type SwitchReply struct {
 // Phase 1.5: namespace (manifold) per-session state.
 
 type SetNamespaceRequest struct {
-	Namespace string `json:"namespace"` // dot-separated path; '' = root (clear)
-	Session   string `json:"session,omitempty"`
+	Namespace    string `json:"namespace"` // dot-separated path; '' = root (clear)
+	Session      string `json:"session,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 type SetNamespaceReply struct {
@@ -221,7 +224,8 @@ type SetNamespaceReply struct {
 }
 
 type UnsetNamespaceRequest struct {
-	Session string `json:"session,omitempty"`
+	Session      string `json:"session,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 type UnsetNamespaceReply struct{}
@@ -230,8 +234,9 @@ type UnsetNamespaceReply struct{}
 // the source exists (idempotent — pre-existing source is fine), then sets
 // it as `current`.
 type ConnectRequest struct {
-	Handle  string `json:"handle"`
-	Session string `json:"session,omitempty"`
+	Handle       string `json:"handle"`
+	Session      string `json:"session,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 type ConnectReply struct {
@@ -241,7 +246,8 @@ type ConnectReply struct {
 // DisconnectRequest carries the session id whose current source should be
 // cleared. Empty Session normalises to "default".
 type DisconnectRequest struct {
-	Session string `json:"session,omitempty"`
+	Session      string `json:"session,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 // DisconnectReply is empty — the only outcome of disconnect is "current"
@@ -304,11 +310,12 @@ type SendReply struct {
 // the same "bytes confirmed at server" contract as the single
 // IPCSend call, just amortised across the batch.
 type SendBatchRequest struct {
-	Handle     string   `json:"handle,omitempty"`
-	Channel    string   `json:"channel,omitempty"`
-	BareTarget string   `json:"bare_target,omitempty"` // Phase 1.5: see SendRequest.BareTarget
-	Payloads   []string `json:"payloads"`
-	Session    string   `json:"session,omitempty"`
+	Handle       string   `json:"handle,omitempty"`
+	Channel      string   `json:"channel,omitempty"`
+	BareTarget   string   `json:"bare_target,omitempty"` // Phase 1.5: see SendRequest.BareTarget
+	Payloads     []string `json:"payloads"`
+	Session      string   `json:"session,omitempty"`
+	AncestorPIDs []int    `json:"ancestor_pids,omitempty"`
 }
 
 // SendBatchReply mirrors SendReply but as parallel arrays,
@@ -510,7 +517,8 @@ type PipeCreateRequest struct {
 
 	// Session is set by the CLI for daemon-side manifold lookup; the IPC
 	// transport drops it before forwarding to the server. Phase 1.5.
-	Session string `json:"session,omitempty"`
+	Session      string `json:"session,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 // PipeCreateReply mirrors the server's resolved retention (after defaults
@@ -537,7 +545,8 @@ type PipeDestroyRequest struct {
 	// manifold (e.g. the glob path needs to destroy uncollared pipes
 	// across manifolds, not just the session's). When empty, the
 	// daemon falls back to the session's current_namespace.
-	Manifold string `json:"manifold,omitempty"`
+	Manifold     string `json:"manifold,omitempty"`
+	AncestorPIDs []int  `json:"ancestor_pids,omitempty"`
 }
 
 type PipeDestroyReply struct {

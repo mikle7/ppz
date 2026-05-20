@@ -35,6 +35,9 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+	// Layer 1 session binding: resolve effective session for cursor /
+	// pattern matching.
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	accountID, err := uuid.Parse(d.State.AccountID())
 	if err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})

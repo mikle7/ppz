@@ -25,8 +25,16 @@ func TestResolveSession_ExplicitDeclaredWins(t *testing.T) {
 	}
 }
 
-// RS-2: explicit declared overrides ancestor match.
-func TestResolveSession_ExplicitDeclaredOverridesAncestorMatch(t *testing.T) {
+// RS-2: ancestor match wins over declared session. Inverted from
+// the original draft after PR #75 review — the CLI sends sessionID()
+// (legacy sid-N) in every request for back-compat, so letting declared
+// win would mean the resolver never engages. Putting the binding
+// first means in-pty subprocesses always resolve to their agent
+// regardless of what their inherited session id happens to be.
+//
+// Cost: explicit `PPZ_SESSION=foo ppz …` from inside an agent's pty
+// is ignored. Documented in the spec.
+func TestResolveSession_AncestorMatchWinsOverDeclared(t *testing.T) {
 	s := newTestStateForBindings(t)
 	allPIDsAlive(t)
 	if _, err := s.RegisterAgentBinding("cindy", 41203); err != nil {
@@ -34,8 +42,11 @@ func TestResolveSession_ExplicitDeclaredOverridesAncestorMatch(t *testing.T) {
 	}
 
 	got := s.ResolveSession("script-session-XYZ", []int{50000, 41203})
-	if got.SessionKey != "script-session-XYZ" {
-		t.Errorf("SessionKey = %q, want explicit override to win", got.SessionKey)
+	if got.SessionKey != "agent:cindy" {
+		t.Errorf("SessionKey = %q, want agent:cindy (binding wins over declared)", got.SessionKey)
+	}
+	if got.BoundHandle != "cindy" {
+		t.Errorf("BoundHandle = %q, want cindy", got.BoundHandle)
 	}
 }
 

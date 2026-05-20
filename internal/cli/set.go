@@ -94,7 +94,7 @@ func cmdGet(args []string) error {
 func setHandle(handle string) error {
 	var reply cliproto.SwitchReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCSwitch,
-		cliproto.SwitchRequest{Handle: handle, Session: sessionID()}, &reply); err != nil {
+		cliproto.SwitchRequest{Handle: handle, Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "handle=%s\n", reply.Handle)
@@ -108,7 +108,7 @@ func setHandle(handle string) error {
 func unsetHandle() error {
 	var reply cliproto.DisconnectReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCDisconnect,
-		cliproto.DisconnectRequest{Session: sessionID()}, &reply); err != nil {
+		cliproto.DisconnectRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stdout, "unset")
@@ -123,7 +123,7 @@ func unsetHandle() error {
 func getHandle() error {
 	var reply cliproto.StatusReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
-		cliproto.StatusRequest{Session: sessionID()}, &reply); err != nil {
+		cliproto.StatusRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return err
 	}
 	if reply.Current == "" {
@@ -139,7 +139,7 @@ func getHandle() error {
 func setNamespace(path string) error {
 	var reply cliproto.SetNamespaceReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCSetNamespace,
-		cliproto.SetNamespaceRequest{Namespace: path, Session: sessionID()}, &reply); err != nil {
+		cliproto.SetNamespaceRequest{Namespace: path, Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "namespace=%s\n", reply.Namespace)
@@ -150,7 +150,7 @@ func setNamespace(path string) error {
 func unsetNamespace() error {
 	var reply cliproto.UnsetNamespaceReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCUnsetNamespace,
-		cliproto.UnsetNamespaceRequest{Session: sessionID()}, &reply); err != nil {
+		cliproto.UnsetNamespaceRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}, &reply); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stdout, "unset")

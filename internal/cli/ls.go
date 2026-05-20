@@ -47,7 +47,7 @@ func cmdLs(args []string) error {
 
 	var reply cliproto.ListReply
 	if *watch {
-		req := cliproto.ListWatchRequest{Session: sessionID(), Patterns: patterns}
+		req := cliproto.ListWatchRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs(), Patterns: patterns}
 		if err := daemon.Call(ipcSocket(), cliproto.IPCListWatch, req, &reply); err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func cmdLs(args []string) error {
 			os.Stderr.WriteString("ppz ls: positional patterns are only valid with --watch\n")
 			os.Exit(2)
 		}
-		req := cliproto.ListRequest{Session: sessionID()}
+		req := cliproto.ListRequest{Session: sessionID(), AncestorPIDs: ancestorPIDs()}
 		if err := daemon.Call(ipcSocket(), cliproto.IPCList, req, &reply); err != nil {
 			return err
 		}

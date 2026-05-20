@@ -455,6 +455,9 @@ func (d *Daemon) handleCreate(ctx context.Context, conn net.Conn, params json.Ra
 		writeIPCErr(conn, cliproto.NewInvalidHandle(req.Handle))
 		return
 	}
+	// Layer 1 session binding: resolve effective session before using
+	// it for the namespace lookup. See docs/specs/session-binding.md.
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	// Phase 1.5.1: source create is namespace-aware. If the request
 	// didn't pin a manifold explicitly (CLI doesn't), pull from the
 	// session's current namespace. Sources at non-root manifold are
@@ -517,6 +520,7 @@ func (d *Daemon) handleConnect(ctx context.Context, conn net.Conn, params json.R
 		}
 	}
 	d.State.RememberPipe(req.Handle)
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	if err := d.State.SetCurrent(req.Session, req.Handle); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -553,6 +557,8 @@ func (d *Daemon) handlePipeCreate(ctx context.Context, conn net.Conn, params jso
 	// Decide collared vs uncollared from the request shape.
 	collared := req.Handle != "" || (req.SourceHandle != nil && *req.SourceHandle != "")
 
+	// Layer 1 session binding: resolve effective session.
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	// Phase 1.5: stamp Manifold from the daemon's per-session namespace if
 	// the request didn't carry one explicitly. CLI users set namespace via
 	// `ppz set namespace`; the daemon-side stamping keeps that
@@ -642,6 +648,8 @@ func (d *Daemon) handlePipeDestroy(ctx context.Context, conn net.Conn, params js
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+	// Layer 1 session binding.
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 
 	if req.Handle == "" && req.BareTarget != "" {
 		// Uncollared destroy.
@@ -690,6 +698,7 @@ func (d *Daemon) handleDisconnect(_ context.Context, conn net.Conn, params json.
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	if err := d.State.ClearCurrent(req.Session); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -724,6 +733,7 @@ func (d *Daemon) handleSwitch(ctx context.Context, conn net.Conn, params json.Ra
 		writeIPCErr(conn, cliproto.NewSourceNotFound(req.Handle))
 		return
 	}
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	if err := d.State.SetCurrent(req.Session, req.Handle); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -754,6 +764,7 @@ func (d *Daemon) handleSetNamespace(ctx context.Context, conn net.Conn, params j
 			}
 		}
 	}
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	if err := d.State.SetNamespace(req.Session, req.Namespace); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -772,6 +783,7 @@ func (d *Daemon) handleUnsetNamespace(ctx context.Context, conn net.Conn, params
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	if err := d.State.ClearNamespace(req.Session); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
@@ -853,7 +865,7 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 		writeIPC(conn, cliproto.SendBatchReply{})
 		return
 	}
-	session := d.resolveCallerSession(req.Session, nil) // SendBatch shares Session field
+	session := d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, session)
 	if e != nil {
 		writeIPCErr(conn, e)
@@ -1094,6 +1106,9 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+	// Layer 1 session binding: resolve effective session for cursor /
+	// uncollared pipe info lookups.
+	req.Session = d.resolveCallerSession(req.Session, req.AncestorPIDs)
 	var lr cliproto.ListSourcesReply
 	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
 		writeIPCErr(conn, e)
