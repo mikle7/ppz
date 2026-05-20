@@ -1,0 +1,3 @@
+UUID:TIMESTAMP:msg-1
+UUID:TIMESTAMP:msg-2
+exit=0
