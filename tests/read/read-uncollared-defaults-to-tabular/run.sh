@@ -13,7 +13,7 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a unset handle >/dev/null
 ppz_a pipe create room >/dev/null
-ppz_a send room "hello" >/dev/null
+ppz_a send --from pubsub room "hello" >/dev/null
 wait_for 20 "ppz_a reread room --json | jq -r '.payload' | grep -q hello" >/dev/null
 
 # Bare read. Should render the tabular row, not just the payload.

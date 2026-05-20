@@ -14,7 +14,7 @@ ppz_a unset namespace >/dev/null
 
 # Source for the message.
 ppz_a source create cindy >/dev/null
-ppz_a send cindy "msg-for-isolation" >/dev/null
+ppz_a send --from pubsub cindy "msg-for-isolation" >/dev/null
 ppz_a unset handle >/dev/null
 
 # Cindy's pty drains her inbox first.

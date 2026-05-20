@@ -7,7 +7,7 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a unset handle >/dev/null
 ppz_a pipe create room >/dev/null
-ppz_a send room "uncollared payload" >/dev/null 2>&1
+ppz_a send --from pubsub room "uncollared payload" >/dev/null 2>&1
 # Set a different handle to confirm read still goes to uncollared.
 ppz_a source create alice >/dev/null
 ppz_a reread room -l 1 --bare

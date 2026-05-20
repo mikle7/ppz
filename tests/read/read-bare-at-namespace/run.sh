@@ -11,7 +11,7 @@ ppz_a set namespace pixel >/dev/null
 
 # Create + send to an uncollared pipe at pixel.
 ppz_a pipe create room >/dev/null
-ppz_a send room "from-namespace" >/dev/null
+ppz_a send --from pubsub room "from-namespace" >/dev/null
 wait_for 20 "ppz_a reread room --json | jq -r '.payload' | grep -q from-namespace" >/dev/null
 
 # Bare read; daemon should resolve to pixel.room (the uncollared pipe

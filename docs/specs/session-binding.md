@@ -92,9 +92,25 @@ When the resolver returns `(sessionKey="agent:cindy", boundHandle="cindy")` and 
 
 ### Layer 2 — fail-closed send
 
-In `resolveSendTarget` (`internal/daemon/handlers.go:924`), if the resolved sender is empty, return `E_NO_CURRENT_SOURCE` and don't publish. CLI extends the existing `--request-ack` preflight (`internal/cli/send.go:91-100`) to all sends. No `--anonymous` opt-in.
+In `resolveSendTarget` (`internal/daemon/handlers.go`), if the resolved sender is empty, return `E_NO_CURRENT_SOURCE` and don't publish. Applies to both `handleSend` and `handleSendBatch`. No `--anonymous` opt-in.
 
 The existing fixture `tests/send/send-uncollared-stamps-empty-without-handle/` encodes today's broken behavior and gets updated to expect the new error.
+
+### Per-call sender override: `--from`
+
+Persistent identity via `ppz set handle <H>` is the right primitive for humans and long-lived shells. Scripts and one-off invocations want a per-call override — analogous to `git commit --author "..."`. `ppz send` and `ppz command` gain `--from <handle>`:
+
+- `ppz send --from cindy david "msg"` → publishes to `david.inbox` with `sender=cindy`.
+- `ppz command --from cindy bob "ls"` → forwards to `bob.stdin` with `sender=cindy`.
+
+Semantics:
+- `--from` is per-call. No state mutation. Subsequent `ppz` calls in the same session see whatever current handle is set.
+- The daemon validates `--from` value's shape via `natsubj.ValidateHandle` (regex check; the handle does not have to exist as a registered source).
+- **No auth gate.** A local user can already publish to any handle via the IPC socket; `--from` doesn't widen the trust surface. Recipients should treat envelope.sender as informational at the same level they always have.
+- `--from` overrides the auto-resolved sender from `State.Current`. If both an explicit `--from` and a current handle are set, `--from` wins for that call.
+- Compatible with `--request-ack`: the ack auto-emits to `<--from-handle>.inbox`, which is correct — wherever you claim to be is where the ack goes.
+
+After `--from` lands, the user-facing remediation set for `E_NO_CURRENT_SOURCE` collapses to two items: `ppz set handle <H>` (persistent) or `--from <H>` (per-call). The error message reflects this.
 
 ### IPC delta
 

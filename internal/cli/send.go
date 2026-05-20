@@ -57,16 +57,17 @@ func cmdSend(args []string) error {
 	subject := fs.String("subject", "", "envelope-level subject; renders as `[subject] payload` in tabular read")
 	inReplyTo := fs.String("in-reply-to", "", "uuid of the message this one replies to (sets envelope.in_reply_to)")
 	requestAck := fs.Bool("request-ack", false, "ask the recipient's daemon to auto-emit ack:read on cursor advance (best-effort, non-blocking)")
+	from := fs.String("from", "", "stamp envelope.sender as <handle> for this call only; overrides the session's current handle (no state mutation)")
 	target, payload, flagArgs, err := splitSendArgs(args)
 	if err != nil {
-		fmt.Fprintln(sendErr, "usage: ppz send <handle>[.<pipe>] <payload> [--subject S] [--in-reply-to ID] [--request-ack]")
+		fmt.Fprintln(sendErr, "usage: ppz send <handle>[.<pipe>] <payload> [--from H] [--subject S] [--in-reply-to ID] [--request-ack]")
 		os.Exit(2)
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		os.Exit(2)
 	}
 	if target == "" || payload == "" {
-		fmt.Fprintln(sendErr, "usage: ppz send <handle>[.<pipe>] <payload> [--subject S] [--in-reply-to ID] [--request-ack]")
+		fmt.Fprintln(sendErr, "usage: ppz send <handle>[.<pipe>] <payload> [--from H] [--subject S] [--in-reply-to ID] [--request-ack]")
 		os.Exit(2)
 	}
 
@@ -116,6 +117,7 @@ func cmdSend(args []string) error {
 			// match over declared session. See docs/specs/session-binding.md.
 			Session:      sessionID(),
 			AncestorPIDs: ancestorPIDs(),
+			Sender:       *from,
 		},
 		&reply); err != nil {
 		return err
@@ -181,6 +183,8 @@ func splitSendArgs(args []string) (target, payload string, flagArgs []string, er
 		"--subject":     true,
 		"-in-reply-to":  true,
 		"--in-reply-to": true,
+		"-from":         true,
+		"--from":        true,
 	}
 	positionals := 0
 	for i := 0; i < len(args); i++ {

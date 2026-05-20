@@ -10,8 +10,8 @@ ppz_a unset handle >/dev/null 2>&1
 ppz_a pipe create lobby-1 >/dev/null
 ppz_a pipe create lobby-2 >/dev/null
 ppz_a pipe create plaza >/dev/null
-ppz_a send lobby-1 "lobby 1 msg" >/dev/null
-ppz_a send plaza   "plaza msg"   >/dev/null
+ppz_a send --from pubsub lobby-1 "lobby 1 msg" >/dev/null
+ppz_a send --from pubsub plaza   "plaza msg"   >/dev/null
 wait_for 20 "ppz_a ls 2>/dev/null | grep -q 'lobby 1 msg'" >/dev/null
 
 # Pattern 'lobby-*' should match lobby-1 (unread) and lobby-2 (no

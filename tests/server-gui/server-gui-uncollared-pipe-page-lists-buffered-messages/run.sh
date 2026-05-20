@@ -18,9 +18,9 @@ ppz_a unset handle >/dev/null 2>&1
 ppz_a unset namespace >/dev/null 2>&1
 
 ppz_a pipe create testroom >/dev/null
-ppz_a send testroom "msg-1" >/dev/null
-ppz_a send testroom "msg-2" >/dev/null
-ppz_a send testroom "msg-3" >/dev/null
+ppz_a send --from pubsub testroom "msg-1" >/dev/null
+ppz_a send --from pubsub testroom "msg-2" >/dev/null
+ppz_a send --from pubsub testroom "msg-3" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-3" >/dev/null
 
 curl_server "/orgs/alpha/pipes/testroom" \

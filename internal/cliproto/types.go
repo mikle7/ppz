@@ -284,6 +284,13 @@ type SendRequest struct {
 	// session binding — docs/specs/session-binding.md). When non-empty
 	// AND Session is empty, the daemon resolves via the binding table.
 	AncestorPIDs []int `json:"ancestor_pids,omitempty"`
+	// Sender is the `--from <handle>` per-call override. When non-empty,
+	// the daemon stamps envelope.sender = Sender instead of resolving
+	// from the session's current handle. No auth gate — the local trust
+	// boundary mirrors $PPZ_HOME (anyone with daemon access can already
+	// publish to any handle). See docs/specs/session-binding.md
+	// §Per-call sender override.
+	Sender string `json:"sender,omitempty"`
 
 	// Phase 1.5: BareTarget carries the raw target string when the user
 	// typed `ppz send LEAF` without a dot. The CLI mangles the bare form
@@ -316,6 +323,8 @@ type SendBatchRequest struct {
 	Payloads     []string `json:"payloads"`
 	Session      string   `json:"session,omitempty"`
 	AncestorPIDs []int    `json:"ancestor_pids,omitempty"`
+	// Sender mirrors SendRequest.Sender — `--from <H>` override.
+	Sender string `json:"sender,omitempty"`
 }
 
 // SendBatchReply mirrors SendReply but as parallel arrays,

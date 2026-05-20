@@ -50,7 +50,7 @@ entity name available) keep the static message.
 | `E_SOURCE_TAKEN` | `source '<handle>' already exists in this org` |
 | `E_SOURCE_NOT_FOUND` | `source '<handle>' not found` |
 | `E_INVALID_HANDLE` | `invalid handle '<handle>': must match [a-z0-9-] (max 32, no leading/trailing -, not reserved)` |
-| `E_NO_CURRENT_SOURCE` | `no current source for this shell session; run 'ppz source create <handle>' (or 'ppz source switch <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state` |
+| `E_NO_CURRENT_SOURCE` | `no current source for this session; run 'ppz set handle <handle>' (create one first with 'ppz source create <handle>' if needed)` |
 | `E_PAYLOAD_TOO_LARGE` | `payload too large; max 64KiB encoded` |
 | `E_SERVER_UNREACHABLE` | `server unreachable` |
 | `E_NATS_UNREACHABLE` | `nats unreachable; common causes: expired credentials (try 'ppz daemon logout' then re-login), or on non-docker setups missing PPZ_NATS_URL=nats://localhost:4222` |

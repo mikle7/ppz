@@ -22,7 +22,7 @@ ppz_a pipe create room >/dev/null
 # bug surfaces as a non-zero exit + an error to stderr. Normalising
 # the success line follows the send-success-line-on-stderr fixture.
 err=$(mktemp)
-ppz_a send room "uncollared payload" 2>"$err"
+ppz_a send --from pubsub room "uncollared payload" 2>"$err"
 echo "send-exit=$?"
 grep -oE '^sent id=[a-f0-9]{8} to=[^ ]+ bytes=[0-9]+$' "$err" | head -1 \
   | sed -E 's/id=[a-f0-9]{8}/id=ID8/; s/bytes=[0-9]+/bytes=N/'

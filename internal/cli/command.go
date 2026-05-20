@@ -31,14 +31,24 @@ func cmdCommand(args []string) error {
 	useCRLF    := fs.Bool("crlf", false, "trailing sequence: carriage-return + newline \\r\\n")
 	useNewline := fs.Bool("newline", false, "trailing sequence: newline \\n (same as default)")
 	useNone    := fs.Bool("none", false, "no trailing sequence — send instruction only")
+	from       := fs.String("from", "", "stamp envelope.sender as <handle> for this call only; overrides the session's current handle")
 
+	// Pre-separate flags from positionals so order doesn't matter. --from
+	// carries a value, so step over the next token when we encounter it
+	// in space-separated form.
+	valueFlags := map[string]bool{"-from": true, "--from": true}
 	var flagArgs, rest []string
-	for _, a := range args {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		if strings.HasPrefix(a, "-") {
 			flagArgs = append(flagArgs, a)
-		} else {
-			rest = append(rest, a)
+			if valueFlags[a] && !strings.Contains(a, "=") && i+1 < len(args) {
+				flagArgs = append(flagArgs, args[i+1])
+				i++
+			}
+			continue
 		}
+		rest = append(rest, a)
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
@@ -78,6 +88,7 @@ func cmdCommand(args []string) error {
 				// Forward session id so daemon.envelope.sender resolves
 				// against this tty's current source — same fix as send.go.
 				Session: sessionID(), AncestorPIDs: ancestorPIDs(),
+				Sender: *from,
 			},
 			&reply); err != nil {
 			return err

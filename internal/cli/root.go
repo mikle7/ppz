@@ -205,12 +205,19 @@ Messaging (the verbs you use most):
                                    (script-stable opt-out).
                                    --tail keeps streaming live until SIGINT.
                                    --tty / --raw / --json: shared with reread.
-  ppz send TGT PAYLOAD [--subject S] [--in-reply-to ID] [--request-ack]
+  ppz send TGT PAYLOAD [--from H] [--subject S] [--in-reply-to ID] [--request-ack]
                                    publish PAYLOAD to <handle>.<pipe>;
                                    bare handle → <handle>.inbox.
                                    Success line goes to STDERR (since v0.25 —
                                    was stdout; scripts redirecting stdout
                                    no longer swallow it).
+                                   --from H           stamp envelope.sender = H
+                                                      for this call only.
+                                                      Overrides current handle
+                                                      without mutating state.
+                                                      No auth gate — handle
+                                                      shape is validated; trust
+                                                      mirrors $PPZ_HOME.
                                    --subject S        envelope-level header;
                                                       'ack:' prefix reserved.
                                    --in-reply-to ID   thread / reply linkage.
@@ -222,9 +229,11 @@ Messaging (the verbs you use most):
   ppz reread TGT [-l N --skip N --since DUR --json --tty --raw --bare]
                                    forensic / replay: every retained message;
                                    ignores and never advances the cursor.
-  ppz command H [INSTR]            send INSTR to H.stdin (100 ms delay),
+  ppz command H [INSTR] [--from H] send INSTR to H.stdin (100 ms delay),
                                    then send a trailing control sequence
-                                   (--claude (\\x1b[13u) / --cr / --crlf / --newline / --none)
+                                   (--claude (\\x1b[13u) / --cr / --crlf / --newline / --none).
+                                   --from H optionally stamps sender — same
+                                   semantics as 'ppz send --from'.
 
 Acks (read receipts, v0.25):
   Use 'ppz send … --request-ack' when you need to know the recipient saw

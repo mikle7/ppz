@@ -31,7 +31,7 @@ ppz_a unset handle    >/dev/null 2>&1
 ppz_a unset namespace >/dev/null 2>&1
 
 ppz_a pipe create "$HANDLE" >/dev/null
-ppz_a send "$HANDLE" "before-restart" >/dev/null 2>&1
+ppz_a send --from pubsub "$HANDLE" "before-restart" >/dev/null 2>&1
 
 # Restart ppz-server (which embeds NATS + JetStream). Same container,
 # same /tmp — proves the bug is the per-process StoreDir
@@ -46,7 +46,7 @@ wait_for 600 'ppz_a ls >/dev/null 2>&1'
 # Capture exit + the first verdict token (sent / error code) so the
 # assertion is stable across version, id, byte-count changes.
 err=$(mktemp)
-ppz_a send "$HANDLE" "after-restart" 2>"$err"
+ppz_a send --from pubsub "$HANDLE" "after-restart" 2>"$err"
 echo "send-exit=$?"
 grep -oE '^sent\b|^error: E_[A-Z_]+' "$err" | head -1
 rm -f "$err"

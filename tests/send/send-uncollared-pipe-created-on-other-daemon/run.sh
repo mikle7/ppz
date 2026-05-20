@@ -28,7 +28,7 @@ ppz_b unset namespace >/dev/null 2>&1
 ppz_a pipe create room >/dev/null
 
 err=$(mktemp)
-ppz_b send room "remote payload" 2>"$err"
+ppz_b send --from pubsub room "remote payload" 2>"$err"
 echo "send-exit=$?"
 grep -oE '^sent id=[a-f0-9]{8} to=[^ ]+ bytes=[0-9]+$' "$err" | head -1 \
   | sed -E 's/id=[a-f0-9]{8}/id=ID8/; s/bytes=[0-9]+/bytes=N/'

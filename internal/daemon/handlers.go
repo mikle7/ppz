@@ -813,6 +813,17 @@ func (d *Daemon) handleSend(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, e)
 		return
 	}
+	// Per-call sender override: `ppz send --from <H>` sets req.Sender
+	// to a handle name the caller is publishing AS. Validate the
+	// shape, then stamp it directly. No auth gate — see spec
+	// §Non-goals. Falls back to the resolved sender when unset.
+	if req.Sender != "" {
+		if err := natsubj.ValidateHandle(req.Sender); err != nil {
+			writeIPCErr(conn, cliproto.NewInvalidHandle(req.Sender))
+			return
+		}
+		target.sender = req.Sender
+	}
 	// Layer 2 (docs/specs/session-binding.md): fail-closed when the
 	// resolved sender is empty. resolveSendTarget already returns
 	// ENoCurrentSource for the collared path (current == ""), but the
@@ -870,6 +881,14 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
+	}
+	// --from override (parity with handleSend).
+	if req.Sender != "" {
+		if err := natsubj.ValidateHandle(req.Sender); err != nil {
+			writeIPCErr(conn, cliproto.NewInvalidHandle(req.Sender))
+			return
+		}
+		target.sender = req.Sender
 	}
 	if target.sender == "" {
 		writeIPCErr(conn, cliproto.New(cliproto.ENoCurrentSource))

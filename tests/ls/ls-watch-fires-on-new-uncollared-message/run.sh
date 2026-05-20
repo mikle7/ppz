@@ -15,7 +15,7 @@ ppz_a ls --watch > "$WATCH_OUT" 2>&1 &
 WPID=$!
 sleep 0.4  # let the NATS subscription set up before publishing the trigger
 
-ppz_a send plaza "new uncollared" >/dev/null
+ppz_a send --from pubsub plaza "new uncollared" >/dev/null
 
 # Watch should fire and exit. 10s budget.
 for _ in $(seq 1 20); do

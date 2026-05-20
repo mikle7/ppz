@@ -12,7 +12,7 @@ ppz_a unset namespace >/dev/null
 
 # Pre-send a message so cindy.inbox has unread.
 ppz_a source create cindy >/dev/null  # ensure source exists; share will use it
-ppz_a send cindy "msg-for-cursor-test" >/dev/null
+ppz_a send --from pubsub cindy "msg-for-cursor-test" >/dev/null
 ppz_a unset handle >/dev/null
 
 PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \

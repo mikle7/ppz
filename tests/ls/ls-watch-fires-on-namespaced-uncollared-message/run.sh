@@ -19,7 +19,7 @@ WPID=$!
 sleep 0.4
 
 ppz_a set namespace team-a >/dev/null
-ppz_a send chat "namespaced hello" >/dev/null
+ppz_a send --from pubsub chat "namespaced hello" >/dev/null
 ppz_a unset namespace >/dev/null
 
 for _ in $(seq 1 20); do

@@ -11,7 +11,7 @@ ppz_a set namespace pixel >/dev/null
 ppz_a source create boris >/dev/null
 
 err=$(mktemp)
-ppz_a send boris "shorthand-at-ns" 2>"$err"
+ppz_a send --from pubsub boris "shorthand-at-ns" 2>"$err"
 echo "send-exit=$?"
 
 # Normalised send line: id collapsed, byte-count collapsed. The

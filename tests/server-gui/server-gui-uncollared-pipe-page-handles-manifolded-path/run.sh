@@ -18,8 +18,8 @@ ppz_a unset handle >/dev/null 2>&1
 # routes them to the manifolded subject.
 ppz_a set namespace pixel >/dev/null
 ppz_a pipe create testroom >/dev/null
-ppz_a send testroom "msg-1" >/dev/null
-ppz_a send testroom "msg-2" >/dev/null
+ppz_a send --from pubsub testroom "msg-1" >/dev/null
+ppz_a send --from pubsub testroom "msg-2" >/dev/null
 wait_for 20 "ppz_a ls | grep -q msg-2" >/dev/null
 
 # URL segment is the full dotted "<manifold>.<leaf>" path the org
