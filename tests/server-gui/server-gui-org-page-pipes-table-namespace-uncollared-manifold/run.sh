@@ -19,7 +19,8 @@ PAGE="$(curl_server "/orgs/alpha")"
 
 # 1) Namespace attribute on the testroom row.
 echo "$PAGE" \
-  | tr '>' '\n' \
+  | tr '\n' ' ' \
+  | sed -E 's/<tr /\n<tr /g' \
   | grep -E 'data-source-row=":testroom:' \
   | grep -oE 'data-source-namespace="[^"]*"' \
   | sed -E 's/data-source-namespace="([^"]*)"/namespace=\1/'

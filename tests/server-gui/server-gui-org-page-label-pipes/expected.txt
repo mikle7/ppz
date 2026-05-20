@@ -1,5 +1,5 @@
 --- tab nav marks pipes as active ---
 data-active-tab="pipes"
---- column header (first th) ---
+--- source column header is present ---
 <th>source</th>
 exit=0

@@ -15,10 +15,13 @@ ppz_a pipe create alice.notes >/dev/null
 PAGE="$(curl_server "/orgs/alpha")"
 
 # Project the namespace attribute on the alice.notes row only. The
-# tr/grep combo isolates the single <tr ...> opening tag so the
-# assertion doesn't span the row body.
+# <tr> opening tag wraps over multiple physical lines in the
+# rendered HTML (Go template preserves source whitespace), so we
+# flatten the page to one line and split per row before grepping
+# for the row marker.
 echo "$PAGE" \
-  | tr '>' '\n' \
+  | tr '\n' ' ' \
+  | sed -E 's/<tr /\n<tr /g' \
   | grep -E 'data-source-row="alice:notes:' \
   | grep -oE 'data-source-namespace="[^"]*"' \
   | sed -E 's/data-source-namespace="([^"]*)"/namespace=\1/'
