@@ -14,12 +14,13 @@ ppz_a unset handle >/dev/null 2>&1
 
 # Create an uncollared pipe at manifold "pixel" — bare LEAF with the
 # namespace set is the Phase 1.5.1 path for uncollared-at-manifold
-# creation.
+# creation. Sends use the same bare-leaf shape; namespace state
+# routes them to the manifolded subject.
 ppz_a set namespace pixel >/dev/null
 ppz_a pipe create testroom >/dev/null
-ppz_a send pixel.testroom "msg-1" >/dev/null
-ppz_a send pixel.testroom "msg-2" >/dev/null
-wait_for 20 "ppz_a ls | grep -q '^pixel\.testroom .*msg-2'" >/dev/null
+ppz_a send testroom "msg-1" >/dev/null
+ppz_a send testroom "msg-2" >/dev/null
+wait_for 20 "ppz_a ls | grep -q msg-2" >/dev/null
 
 # URL segment is the full dotted "<manifold>.<leaf>" path the org
 # pipes table surfaces — splitting that back into (pixel, testroom)
