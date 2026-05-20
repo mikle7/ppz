@@ -156,6 +156,11 @@ type EmbeddedConfig struct {
 	AccountJWT       string
 	SystemAccountJWT string // optional — required for JetStream
 	JetStream        bool   // false → JS disabled (auth-only mode, used by tests)
+
+	// StoreDir is the persistent on-disk path for JetStream FileStorage.
+	// Empty falls back to a per-process os.MkdirTemp — fine for tests,
+	// loses every stream on restart in any long-lived deployment.
+	StoreDir string
 }
 
 // StartEmbeddedNATSWithAuth boots an embedded nats-server with
@@ -213,9 +218,14 @@ func StartEmbeddedNATSWithAuth(cfg EmbeddedConfig) (*natsserver.Server, error) {
 		if sysAccClaims == nil {
 			return nil, errors.New("StartEmbeddedNATSWithAuth: JetStream requires SystemAccountJWT")
 		}
-		storeDir, err := os.MkdirTemp("", "ppz-jetstream-")
-		if err != nil {
-			return nil, fmt.Errorf("mkdir jetstream store: %w", err)
+		storeDir := cfg.StoreDir
+		if storeDir == "" {
+			storeDir, err = os.MkdirTemp("", "ppz-jetstream-")
+			if err != nil {
+				return nil, fmt.Errorf("mkdir jetstream store: %w", err)
+			}
+		} else if err := os.MkdirAll(storeDir, 0o755); err != nil {
+			return nil, fmt.Errorf("mkdir jetstream store %s: %w", storeDir, err)
 		}
 		opts.JetStream = true
 		opts.StoreDir = storeDir

@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"time"
@@ -29,12 +30,17 @@ func startEmbeddedNATS(cfg Config) (*natsserver.Server, func(), error) {
 	}
 	port, _ := strconv.Atoi(portStr)
 
+	if cfg.NATSJetStreamStoreDir == "" {
+		log.Printf("WARNING: PPZ_JETSTREAM_STORE_DIR not set; embedded JetStream will use an ephemeral /tmp/ppz-jetstream-* directory. Streams (and all retained pipe data) will be lost on the next ppz-server restart. Set PPZ_JETSTREAM_STORE_DIR to a persistent path in any deployment.")
+	}
+
 	ns, err := natsauth.StartEmbeddedNATSWithAuth(natsauth.EmbeddedConfig{
 		Host:             host,
 		Port:             port,
 		OperatorJWT:      cfg.NATSOperatorJWT,
 		SystemAccountJWT: cfg.NATSSystemAccountJWT,
 		JetStream:        true,
+		StoreDir:         cfg.NATSJetStreamStoreDir,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("start embedded nats: %w", err)

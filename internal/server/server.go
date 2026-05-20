@@ -54,9 +54,10 @@ type Config struct {
 	// Account JWTs as orgs are provisioned). Operator JWT is
 	// public — declares the operator's existence to the embedded
 	// NATS server. System Account JWT lives in /sys for JetStream.
-	NATSOperatorSeed     string
-	NATSOperatorJWT      string
-	NATSSystemAccountJWT string
+	NATSOperatorSeed      string
+	NATSOperatorJWT       string
+	NATSSystemAccountJWT  string
+	NATSJetStreamStoreDir string
 }
 
 // Server holds the shared dependencies threaded through HTTP handlers.

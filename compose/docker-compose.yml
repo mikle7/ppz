@@ -65,6 +65,7 @@ services:
       PPZ_GITHUB_USER_URL: "http://mock-github:9000/user"
       PPZ_SESSION_KEY: "compose-test-session-key-32-bytes-x"
       PPZ_DEV_LOGIN: "true"
+      PPZ_JETSTREAM_STORE_DIR: /var/lib/ppz/jetstream
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,6 +78,7 @@ services:
       retries: 60
     volumes:
       - seed:/seed
+      - ppz-jetstream:/var/lib/ppz/jetstream
     ports:
       - "8080:8080"   # GUI + HTTP API on http://localhost:8080
       - "4222:4222"   # NATS — needed by host CLI; set PPZ_NATS_URL=nats://localhost:4222
@@ -172,3 +174,4 @@ volumes:
   seed: {}
   daemon-a-home: {}
   daemon-b-home: {}
+  ppz-jetstream: {}
