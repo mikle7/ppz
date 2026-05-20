@@ -87,9 +87,6 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// siteURL reconstructs the browser-facing origin (scheme://host) from
-// the current request. Honours the X-Forwarded-Proto header so reverse-
-// proxied https deployments render correctly.
 // namespaceDisplay renders a manifold for the org pipes table's
 // NAMESPACE column: empty (root) → "-", otherwise the manifold path
 // verbatim. Mirrors the convention `ppz ls` uses in cliproto so the
@@ -101,6 +98,9 @@ func namespaceDisplay(manifold string) string {
 	return manifold
 }
 
+// siteURL reconstructs the browser-facing origin (scheme://host) from
+// the current request. Honours the X-Forwarded-Proto header so reverse-
+// proxied https deployments render correctly.
 func siteURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
