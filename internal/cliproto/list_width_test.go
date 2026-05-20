@@ -75,11 +75,13 @@ func TestPrintList_RespectsCOLUMNSWidth(t *testing.T) {
 }
 
 // TestPrintList_RespectsCOLUMNSWidthNarrow (RED): same contract,
-// tighter budget. A 60-column window (e.g. half of a 13" macbook
-// screen) must still render valid rows — the payload column shrinks
-// further or drops to a single "…" placeholder rather than overflowing.
+// tighter budget. The NAMESPACE column added in v0.34 widens the
+// minimum-viable table by ~11 chars (header "NAMESPACE" (9) + 2 for
+// the trailing separator), so the narrow threshold here is 72 rather
+// than the pre-v0.34 60. At 72 cols the payload column still shrinks
+// rather than overflowing.
 func TestPrintList_RespectsCOLUMNSWidthNarrow(t *testing.T) {
-	withCOLUMNS(t, "60")
+	withCOLUMNS(t, "72")
 	withFrozenNow(t, fixedNow())
 	at := fixedNow().Add(-1 * time.Hour)
 
@@ -88,8 +90,8 @@ func TestPrintList_RespectsCOLUMNSWidthNarrow(t *testing.T) {
 
 	for i, line := range strings.Split(strings.TrimRight(buf.String(), "\n"), "\n") {
 		runeLen := len([]rune(strings.TrimRight(line, " ")))
-		if runeLen > 60 {
-			t.Errorf("line %d exceeds COLUMNS=60 budget: %d runes\n%s", i, runeLen, line)
+		if runeLen > 72 {
+			t.Errorf("line %d exceeds COLUMNS=72 budget: %d runes\n%s", i, runeLen, line)
 		}
 	}
 }

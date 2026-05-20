@@ -320,7 +320,12 @@ func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {
 // PrintList prints `ppz ls` output: one line per (source, pipe), sorted
 // by handle then pipe name. Format:
 //
-//	<handle>.<pipe>  <unread>  <buffered>  <last_at|->  <preview60|->  <creator>
+//	<namespace|->  <handle>.<pipe>  <unread>  <buffered>  <last_at|->  <preview60|->  <creator>
+//
+// NAMESPACE is the leftmost column — the manifold the pipe lives in,
+// rendered as "-" for root or as the dot-separated manifold path
+// otherwise. PIPE carries only `<handle>.<pipe>` (or `<pipe>` for
+// uncollared) — the manifold prefix moves out of PIPE into NAMESPACE.
 //
 // UNREAD comes before BUFFERED — agents typically only need the unread
 // count to decide whether to call `ppz read`; BUFFERED (the total
@@ -334,13 +339,30 @@ func PrintSourceDestroy(w io.Writer, r SourceDestroyReply) {
 // align on. iso=true switches the LAST column from relative time to
 // RFC3339; the last column otherwise displays "just now" / "5 minutes
 // ago". CREATOR is the rightmost column — see PrintList docstring.
+//
+// namespace carries the row's manifold ('-' for root) and renders as
+// the leftmost NAMESPACE column. pipeColumn carries `<handle>.<pipe>`
+// for collared rows or `<pipe>` for uncollared rows — the manifold
+// prefix lives in namespace, not in pipeColumn, so callers can grep
+// the two facts independently.
 type listRow struct {
-	pipeColumn string // "<handle>.<pipe>"
+	namespace  string // manifold path, or "-" for root
+	pipeColumn string // "<handle>.<pipe>" (collared) or "<pipe>" (uncollared)
 	unread     uint64
 	buffered   uint64 // total retained messages currently in the stream
 	last       string // either RFC3339, relative duration, or "-"
 	payload    string // truncated preview (already includes "…" if cut)
 	creator    string // username; PipeInfo.CreatedBy ?? Source.CreatedBy
+}
+
+// namespaceColumn renders a manifold for the NAMESPACE column: empty
+// (root) → "-", otherwise the manifold verbatim. Matches the
+// missing-value convention used by LAST and PAYLOAD.
+func namespaceColumn(manifold string) string {
+	if manifold == "" {
+		return "-"
+	}
+	return manifold
 }
 
 // PrintList renders sources as an aligned table with a header row. Default
@@ -356,13 +378,18 @@ func PrintList(w io.Writer, sources []Source, iso bool) {
 
 // PrintListWithUncollared renders the same table as PrintList but also
 // includes uncollared (sourceless) pipes. Phase 1.5.
+//
+// NAMESPACE owns the manifold for both row shapes; PIPE carries only
+// `<handle>.<pipe>` (collared) or `<pipe>` (uncollared) — the manifold
+// prefix never appears in PIPE.
 func PrintListWithUncollared(w io.Writer, sources []Source, uncollared []UncollaredPipe, iso bool) {
 	now := timeNow()
 	rows := make([]listRow, 0)
 	for _, s := range sources {
 		for _, p := range s.PipeInfos {
 			rows = append(rows, listRow{
-				pipeColumn: FormatPipePath(s.Manifold, s.Handle, p.Pipe),
+				namespace:  namespaceColumn(s.Manifold),
+				pipeColumn: FormatPipePath("", s.Handle, p.Pipe),
 				unread:     p.Unread,
 				buffered:   p.Total,
 				last:       lastColumn(p.LastAt, now, iso),
@@ -373,7 +400,8 @@ func PrintListWithUncollared(w io.Writer, sources []Source, uncollared []Uncolla
 	}
 	for _, p := range uncollared {
 		rows = append(rows, listRow{
-			pipeColumn: FormatPipePath(p.Manifold, "", p.Name),
+			namespace:  namespaceColumn(p.Manifold),
+			pipeColumn: FormatPipePath("", "", p.Name),
 			unread:     p.Info.Unread,
 			buffered:   p.Info.Total,
 			last:       lastColumn(p.Info.LastAt, now, iso),
@@ -396,17 +424,21 @@ func PrintListJSON(w io.Writer, sources []Source) {
 }
 
 // PrintListJSONWithUncollared is the JSON variant including uncollared
-// pipes. Phase 1.5.
+// pipes. Phase 1.5. The `namespace` key carries the row's manifold
+// (empty string for root) and mirrors the NAMESPACE table column —
+// present on every row shape so JSON consumers don't have to special-
+// case collared vs uncollared.
 func PrintListJSONWithUncollared(w io.Writer, sources []Source, uncollared []UncollaredPipe) {
 	for _, s := range sources {
 		for _, p := range s.PipeInfos {
 			obj := map[string]any{
-				"handle":  s.Handle,
-				"pipe":    p.Pipe,
-				"total":   p.Total,
-				"unread":  p.Unread,
-				"payload": p.Payload,
-				"creator": humanColumn(p.CreatedBy, s.CreatedBy),
+				"namespace": s.Manifold,
+				"handle":    s.Handle,
+				"pipe":      p.Pipe,
+				"total":     p.Total,
+				"unread":    p.Unread,
+				"payload":   p.Payload,
+				"creator":   humanColumn(p.CreatedBy, s.CreatedBy),
 			}
 			if p.LastAt != nil {
 				obj["last_at"] = p.LastAt.UTC().Format(time.RFC3339)
@@ -419,13 +451,13 @@ func PrintListJSONWithUncollared(w io.Writer, sources []Source, uncollared []Unc
 	}
 	for _, p := range uncollared {
 		obj := map[string]any{
-			"handle":   "",
-			"manifold": p.Manifold,
-			"pipe":     p.Name,
-			"total":    p.Info.Total,
-			"unread":   p.Info.Unread,
-			"payload":  p.Info.Payload,
-			"creator":  p.Info.CreatedBy,
+			"namespace": p.Manifold,
+			"handle":    "",
+			"pipe":      p.Name,
+			"total":     p.Info.Total,
+			"unread":    p.Info.Unread,
+			"payload":   p.Info.Payload,
+			"creator":   p.Info.CreatedBy,
 		}
 		if p.Info.LastAt != nil {
 			obj["last_at"] = p.Info.LastAt.UTC().Format(time.RFC3339)
@@ -487,7 +519,8 @@ func truncateForColumn(s string, maxRunes int) string {
 // writeListTable computes max widths for every column (including PAYLOAD,
 // which used to be the trailing un-padded column) and prints header +
 // rows aligned. CREATOR is the rightmost column — it goes un-padded since
-// nothing follows it.
+// nothing follows it. NAMESPACE is the leftmost column; its width grows
+// to the widest manifold path among the rows.
 //
 // Empty input → empty output (no orphan header). Matches the convention
 // where `ls` for an empty namespace just prints nothing.
@@ -495,28 +528,34 @@ func writeListTable(w io.Writer, rows []listRow) {
 	if len(rows) == 0 {
 		return
 	}
-	headers := []string{"PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "CREATOR"}
-	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3]), len(headers[4])}
+	headers := []string{"NAMESPACE", "PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "CREATOR"}
+	// widths covers the 6 padded columns: NAMESPACE, PIPE, UNREAD,
+	// BUFFERED, LAST, PAYLOAD. CREATOR is the rightmost (un-padded)
+	// column and gets sized separately for the width-budget math.
+	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3]), len(headers[4]), len(headers[5])}
 	unreads := make([]string, len(rows))
 	buffereds := make([]string, len(rows))
-	creatorMax := len(headers[5])
+	creatorMax := len(headers[6])
 	for i, r := range rows {
 		unreads[i] = fmt.Sprintf("%d", r.unread)
 		buffereds[i] = fmt.Sprintf("%d", r.buffered)
-		if w := len(r.pipeColumn); w > widths[0] {
+		if w := len(r.namespace); w > widths[0] {
 			widths[0] = w
 		}
-		if w := len(unreads[i]); w > widths[1] {
+		if w := len(r.pipeColumn); w > widths[1] {
 			widths[1] = w
 		}
-		if w := len(buffereds[i]); w > widths[2] {
+		if w := len(unreads[i]); w > widths[2] {
 			widths[2] = w
 		}
-		if w := len(r.last); w > widths[3] {
+		if w := len(buffereds[i]); w > widths[3] {
 			widths[3] = w
 		}
-		if w := len(r.payload); w > widths[4] {
+		if w := len(r.last); w > widths[4] {
 			widths[4] = w
+		}
+		if w := len(r.payload); w > widths[5] {
+			widths[5] = w
 		}
 		if w := len(r.creator); w > creatorMax {
 			creatorMax = w
@@ -533,42 +572,47 @@ func writeListTable(w io.Writer, rows []listRow) {
 	// width — anti-drift is a "nice to have" that shouldn't push rows
 	// off-screen on small windows.
 	const lastMinWidth = 14
-	if widths[3] < lastMinWidth {
-		proposed := widths[0] + widths[1] + widths[2] + lastMinWidth + widths[4] + creatorMax + 10
+	// fixed overhead: sum of all padded column widths + 6 two-char
+	// separators between the 7 columns = +12.
+	const sep = 2
+	separators := sep * (len(headers) - 1)
+	if widths[4] < lastMinWidth {
+		proposed := widths[0] + widths[1] + widths[2] + widths[3] + lastMinWidth + widths[5] + creatorMax + separators
 		if proposed <= TerminalWidth() {
-			widths[3] = lastMinWidth
+			widths[4] = lastMinWidth
 		}
 	}
 	// Cap the PAYLOAD column to fit the caller's terminal width. The
 	// other columns are sized to their data — payload is the elastic
-	// one. With 5 two-char separators between 6 columns the fixed
-	// overhead is: pipe + unread + buffered + last + creator + 10.
-	// Anything left over becomes the payload budget. If the budget is
-	// negative (very narrow terminal vs wide handles), leave payload at
-	// its natural width — the row will overflow rather than corrupting
-	// alignment of the inner columns.
-	fixedOverhead := widths[0] + widths[1] + widths[2] + widths[3] + creatorMax + 10
-	if budget := TerminalWidth() - fixedOverhead; budget > 0 && budget < widths[4] {
-		widths[4] = budget
+	// one. Anything left over after the fixed-width columns + separators
+	// becomes the payload budget. If the budget is negative (very narrow
+	// terminal vs wide handles), leave payload at its natural width —
+	// the row will overflow rather than corrupting alignment of the
+	// inner columns.
+	fixedOverhead := widths[0] + widths[1] + widths[2] + widths[3] + widths[4] + creatorMax + separators
+	if budget := TerminalWidth() - fixedOverhead; budget > 0 && budget < widths[5] {
+		widths[5] = budget
 		for i := range rows {
 			rows[i].payload = truncateForColumn(rows[i].payload, budget)
 		}
 	}
-	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
+	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
 		widths[0], headers[0],
 		widths[1], headers[1],
 		widths[2], headers[2],
 		widths[3], headers[3],
 		widths[4], headers[4],
-		headers[5],
+		widths[5], headers[5],
+		headers[6],
 	)
 	for i, r := range rows {
-		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
-			widths[0], r.pipeColumn,
-			widths[1], unreads[i],
-			widths[2], buffereds[i],
-			widths[3], r.last,
-			widths[4], r.payload,
+		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
+			widths[0], r.namespace,
+			widths[1], r.pipeColumn,
+			widths[2], unreads[i],
+			widths[3], buffereds[i],
+			widths[4], r.last,
+			widths[5], r.payload,
 			r.creator,
 		)
 	}
