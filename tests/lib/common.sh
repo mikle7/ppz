@@ -103,9 +103,16 @@ last_payload_a() {
 # grep — the fused field is what downstream `grep '^<pipe>'` patterns
 # expect.
 ls_normalize() {
-  grep -v '^NAMESPACE ' \
-    | sed -E 's/^[[:space:]]*-[[:space:]]+//' \
-    | sed -E 's/^[[:space:]]*([^[:space:]-][^[:space:]]*)[[:space:]]+/\1./' \
+  awk '
+    $1 == "NAMESPACE" { next }
+    {
+      ns = $1
+      $1 = ""
+      sub(/^[ \t]+/, "")
+      if (ns == "-") print $0
+      else           print ns "." $0
+    }
+  ' \
     | sed -E 's/[[:space:]]+/ /g' \
     | sed -E 's/(just now|[0-9]+ (seconds?|minutes?|hours?|days?) ago)/RELATIVE/'
 }
