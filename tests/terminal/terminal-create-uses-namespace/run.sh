@@ -11,4 +11,4 @@ ppz_a set namespace pixel >/dev/null
 ppz_a terminal create cindy >/dev/null
 
 # All four auto-pipes should land at pixel.cindy.{inbox,stdctrl,stdin,stdout}.
-ppz_a ls | awk '$1 ~ /cindy\./ {print $1}' | sort
+ppz_a ls | ls_normalize | awk '$1 ~ /cindy\./ {print $1}' | sort

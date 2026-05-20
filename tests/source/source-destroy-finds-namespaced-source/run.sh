@@ -12,11 +12,11 @@ ppz_a source create boris >/dev/null
 ppz_a unset namespace >/dev/null
 
 echo "--- before destroy ---"
-ppz_a ls | awk '$1 ~ /boris/ {print $1}' | sort
+ppz_a ls | ls_normalize | awk '$1 ~ /boris/ {print $1}' | sort
 
 # Plain destroy without re-setting the namespace. Resolver must find
 # the source at its actual manifold (pixel.boris), not root.
 ppz_a source destroy boris 2>&1 | head -1
 
 echo "--- after destroy ---"
-ppz_a ls | awk '$1 ~ /boris/ {print $1}' | sort | grep -q . || echo "no boris rows"
+ppz_a ls | ls_normalize | awk '$1 ~ /boris/ {print $1}' | sort | grep -q . || echo "no boris rows"

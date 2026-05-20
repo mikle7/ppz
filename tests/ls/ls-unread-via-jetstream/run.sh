@@ -12,7 +12,7 @@ ppz_a send chat.inbox "msg-3" >/dev/null
 wait_for 20 "ppz_a ls 2>/dev/null | grep -q msg-3" >/dev/null
 
 echo "--- before read ---"
-ppz_a ls | grep '^chat\.inbox' | ls_normalize
+ppz_a ls | ls_normalize | grep '^chat\.inbox'
 ppz_a read chat.inbox >/dev/null
 echo "--- after read ---"
-ppz_a ls | grep '^chat\.inbox' | ls_normalize
+ppz_a ls | ls_normalize | grep '^chat\.inbox'

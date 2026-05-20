@@ -24,4 +24,4 @@ wait "$PID" 2>/dev/null || true
 rm -f "$WATCH_OUT"
 
 # Cursor should still be 0 → unread = total = 1.
-ppz_a ls | grep '^term\.stdout' | ls_normalize
+ppz_a ls | ls_normalize | grep '^term\.stdout'

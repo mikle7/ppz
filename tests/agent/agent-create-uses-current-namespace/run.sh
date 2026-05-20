@@ -18,7 +18,7 @@ ppz_a set namespace pixel >/dev/null
 # Auto-provision a new pty-kind source via the same path cmdAgentCreate
 # uses. Should land at pixel.cindy, not root cindy.
 ppz_a terminal share cindy -- printf "hi" >/dev/null
-wait_for 20 "ppz_a ls | grep -q '^pixel\.cindy\.'" >/dev/null
+wait_for 20 "ppz_a ls | ls_normalize | grep -q '^pixel\.cindy\.'" >/dev/null
 
 # Look at the pipe rows; expect all to be pixel-namespaced.
-ppz_a ls | awk '$1 ~ /cindy\./ {print $1}' | sort
+ppz_a ls | ls_normalize | awk '$1 ~ /cindy\./ {print $1}' | sort

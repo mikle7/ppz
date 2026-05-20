@@ -28,4 +28,4 @@ ppz_a source create alice >/dev/null
 ppz_a pipe create alice.notes >/dev/null
 ppz_a unset handle >/dev/null 2>&1
 
-ppz_a ls | grep -E '^(plaza|team-a\.chat|alice\.notes) ' | ls_normalize | sort
+ppz_a ls | ls_normalize | grep -E '^(plaza|team-a\.chat|alice\.notes) ' | sort

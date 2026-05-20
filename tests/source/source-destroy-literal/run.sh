@@ -7,9 +7,9 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a source create apple >/dev/null
 
 echo "--- before destroy ---"
-ppz_a ls | grep '^apple\.' | ls_normalize
+ppz_a ls | ls_normalize | grep '^apple\.'
 
 ppz_a source destroy apple
 
 echo "--- after destroy ---"
-ppz_a ls | grep '^apple\.' || echo "no apple rows"
+ppz_a ls | ls_normalize | grep '^apple\.' || echo "no apple rows"

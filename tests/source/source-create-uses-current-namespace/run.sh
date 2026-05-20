@@ -9,4 +9,4 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_a unset handle >/dev/null
 ppz_a set namespace team-a >/dev/null
 ppz_a source create alice >/dev/null
-ppz_a ls | grep -E '^(team-a\.)?alice\.' | sed -E 's/[[:space:]]+/ /g' | cut -d' ' -f1 | sort
+ppz_a ls | ls_normalize | grep -E '^(team-a\.)?alice\.' | cut -d' ' -f1 | sort

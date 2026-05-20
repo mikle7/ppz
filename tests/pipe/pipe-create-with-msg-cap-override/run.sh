@@ -17,4 +17,4 @@ wait_for 20 "ppz_a reread chat.ring --json | jq -r '.payload' | grep -q msg-8" >
 
 # Layout: PIPE UNREAD BUFFERED LAST PAYLOAD. BUFFERED (col $3) is the
 # retained-message count. Should be 5, not 8.
-ppz_a ls | awk '$1 == "chat.ring" {print "buffered="$3}'
+ppz_a ls | ls_normalize | awk '$1 == "chat.ring" {print "buffered="$3}'

@@ -84,20 +84,35 @@ wait_for() {
 }
 
 # Print only the last broadcast payload visible to daemon A for handle $1.
-# `awk '$1 == h'` skips the PIPE header line because the header's first
-# field is "PIPE", which won't match the handle.
+# Post-v0.34: NAMESPACE column owns field index 1; PIPE moved to $2.
+# The header's PIPE field is the literal "PIPE", which won't match a
+# real handle, so the awk guard skips it without an explicit header check.
 last_payload_a() {
-  ppz_a ls | awk -v h="$1" '$1 == h { for (i=4; i<=NF; i++) printf "%s%s", $i, (i==NF?"":" ") }'
+  ppz_a ls | awk -v h="$1" '$2 == h { for (i=5; i<=NF; i++) printf "%s%s", $i, (i==NF?"":" ") }'
 }
 
-# Normalise `ppz ls` output for diff-based assertions. Strips the PIPE
-# header row, collapses runs of whitespace (the table renderer pads
-# columns to varying widths), and replaces "just now" / "N seconds ago"
-# / "5 minutes ago" / etc. with the literal token RELATIVE so tests
-# don't drift with wall-clock time. Compose with `grep` to filter rows
-# before normalising.
+# Normalise `ppz ls` output for diff-based assertions. Strips the
+# NAMESPACE header row, FUSES the leading NAMESPACE cell into the PIPE
+# cell so downstream filters see the pre-v0.34 `<manifold>.<pipe>`
+# combined form (root → just `<pipe>`, manifold → `<manifold>.<pipe>`);
+# callers that need to assert NAMESPACE as its own field use raw
+# `ppz ls` instead. Collapses runs of whitespace (the table renderer
+# pads columns to varying widths), and replaces "just now" / "N
+# seconds ago" / "5 minutes ago" / etc. with the literal token
+# RELATIVE so tests don't drift with wall-clock time. Apply BEFORE
+# grep — the fused field is what downstream `grep '^<pipe>'` patterns
+# expect.
 ls_normalize() {
-  grep -v '^PIPE ' \
+  awk '
+    $1 == "NAMESPACE" { next }
+    {
+      ns = $1
+      $1 = ""
+      sub(/^[ \t]+/, "")
+      if (ns == "-") print $0
+      else           print ns "." $0
+    }
+  ' \
     | sed -E 's/[[:space:]]+/ /g' \
     | sed -E 's/(just now|[0-9]+ (seconds?|minutes?|hours?|days?) ago)/RELATIVE/'
 }
