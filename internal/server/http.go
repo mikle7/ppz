@@ -95,6 +95,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /invites/{id}/accept", s.requireSession(s.handleGUIAcceptInvite))
 	mux.HandleFunc("POST /invites/{id}/decline", s.requireSession(s.handleGUIDeclineInvite))
 	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/pipes/{pipe}", s.requireSession(s.handleGUIPipePage))
+	// Sourceless (uncollared) pipe view. {pipe} is the dotted
+	// "<manifold>.<name>" path the org pipes table surfaces; the
+	// handler splits on the last dot to recover manifold + leaf.
+	mux.HandleFunc("GET /orgs/{id}/pipes/{pipe}", s.requireSession(s.handleGUIUncollaredPipePage))
 	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/terminal", s.requireSession(s.handleGUITerminalPage))
 	// WebSocket for terminal stream — leaving un-auth'd for now (RED phase
 	// surfaced this; tighten to session-or-key auth in a follow-up).
