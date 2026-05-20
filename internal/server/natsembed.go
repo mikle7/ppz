@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"time"
@@ -28,6 +29,15 @@ func startEmbeddedNATS(cfg Config) (*natsserver.Server, func(), error) {
 		return nil, nil, err
 	}
 	port, _ := strconv.Atoi(portStr)
+
+	// Loud warning when JetStream runs without a configured StoreDir —
+	// natsauth falls back to a per-process os.MkdirTemp in that case,
+	// which orphans every stream on the next process restart (the
+	// 2026-05-20 production symptom). Acceptable for unit tests and
+	// ad-hoc local runs; never acceptable for a deployment.
+	if cfg.NATSJetStreamStoreDir == "" {
+		log.Printf("WARNING: PPZ_JETSTREAM_STORE_DIR not set; embedded JetStream will use an ephemeral /tmp/ppz-jetstream-* directory. Streams (and all retained pipe data) will be lost on the next ppz-server restart. Set PPZ_JETSTREAM_STORE_DIR to a persistent path in any deployment.")
+	}
 
 	ns, err := natsauth.StartEmbeddedNATSWithAuth(natsauth.EmbeddedConfig{
 		Host:             host,
