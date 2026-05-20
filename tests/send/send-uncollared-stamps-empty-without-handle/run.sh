@@ -27,7 +27,7 @@ fi
 echo "exit_code: $rc"
 
 # Verify no message landed in room.
-count=$(ppz_a reread room 2>/dev/null | grep -c 'anonymous shout' || echo 0)
-echo "room_count: $count"
+count=$(ppz_a reread room 2>/dev/null | grep -c 'anonymous shout' || true)
+echo "room_count: ${count:-0}"
 
 rm -f "$err"

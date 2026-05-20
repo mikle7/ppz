@@ -32,7 +32,7 @@ fi
 echo "exit_code: $rc"
 
 # Verify no message landed in david's inbox.
-count=$(ppz_a reread david.inbox 2>/dev/null | grep -c "should-be-rejected" || echo 0)
-echo "david_inbox_count: $count"
+count=$(ppz_a reread david.inbox 2>/dev/null | grep -c "should-be-rejected" || true)
+echo "david_inbox_count: ${count:-0}"
 
 rm -f "$err"
