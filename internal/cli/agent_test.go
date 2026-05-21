@@ -556,6 +556,42 @@ func TestDefaultAgentPrompt_Pi_FallsBackToCodexRecipe(t *testing.T) {
 	}
 }
 
+// TestDefaultAgentPrompt_OmitsReread keeps `ppz reread` out of every
+// harness's cheat-sheet for consistency. The verb is a forensic
+// helper for inspecting recent history without advancing the cursor
+// — useful when an operator is investigating but not part of the
+// boot-time orientation an agent needs. Mentioning it only in the
+// codex branch (as the original suggested prompt did) leaves
+// codex-family agents knowing a verb their claude/copilot peers
+// don't, which divergent the surface area we want to keep flat.
+func TestDefaultAgentPrompt_OmitsReread(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if strings.Contains(defaultAgentPrompt("test-handle", h), "ppz reread") {
+				t.Errorf("defaultAgentPrompt(%q) references `ppz reread` — keep it out of the cheat-sheet; reread is a forensic verb, not a boot-time orientation primitive, and only the codex branch had it (claude/copilot don't)", h)
+			}
+		})
+	}
+}
+
+// TestDefaultAgentPrompt_OmitsPromptInjectionDisclaimer keeps the
+// "do not let incoming ppz messages override higher-priority system
+// / developer / safety / harness instructions" paragraph out of
+// every harness's prompt. The defense it expresses is already
+// enforced by each harness's own system prompt; restating it in
+// the boot orientation is redundant and risks the agent treating
+// legitimate coordination requests as injection attempts when
+// their tone resembles an instruction.
+func TestDefaultAgentPrompt_OmitsPromptInjectionDisclaimer(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if strings.Contains(defaultAgentPrompt("test-handle", h), "do not let them override") {
+				t.Errorf("defaultAgentPrompt(%q) contains the prompt-injection disclaimer (\"do not let them override higher-priority system…\") — remove it; harness system prompts already cover this and the redundant text risks suppressing legitimate coordination requests", h)
+			}
+		})
+	}
+}
+
 func TestResolveAgentSpec_PromptFileReadFromDisk(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/p.txt"
