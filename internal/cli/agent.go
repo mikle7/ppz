@@ -255,7 +255,24 @@ func buildAgentArgv(spec agentSpec) ([]string, error) {
 			argv = append(argv, "-i", spec.prompt)
 		}
 		return argv, nil
-	case "codex", "gemini", "pi":
+	case "codex":
+		// --dangerously-bypass-approvals-and-sandbox is codex's analogue
+		// of claude's --dangerously-skip-permissions: it disables the
+		// default seatbelt sandbox (CODEX_SANDBOX=seatbelt) which would
+		// otherwise block the agent from reaching the host ppz daemon
+		// (ppz status reports "daemon: not running" from inside the
+		// sandbox even when the daemon is healthy). The agent is
+		// unattended in a pty, so an interactive approval prompt would
+		// just stall — bypass both.
+		argv := []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}
+		if spec.model != "" {
+			argv = append(argv, "--model", spec.model)
+		}
+		if spec.prompt != "" {
+			argv = append(argv, spec.prompt)
+		}
+		return argv, nil
+	case "gemini", "pi":
 		argv := []string{spec.harness}
 		if spec.model != "" {
 			argv = append(argv, "--model", spec.model)

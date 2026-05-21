@@ -61,14 +61,17 @@ func TestBuildAgentArgv_ClaudeNoPrompt(t *testing.T) {
 	}
 }
 
-// Codex with a model passthrough — no auto-prepended permissions flag,
-// no model default; whatever model the user gave is forwarded as-is.
+// Codex always gets --dangerously-bypass-approvals-and-sandbox baked
+// in (the codex analogue of claude's --dangerously-skip-permissions),
+// because codex's default seatbelt sandbox blocks the agent from
+// reaching the host ppz daemon. No model default; whatever model the
+// user gave is forwarded as-is.
 func TestBuildAgentArgv_CodexWithModel(t *testing.T) {
 	got, err := buildAgentArgv(agentSpec{harness: "codex", model: "gpt-5", prompt: "go"})
 	if err != nil {
 		t.Fatalf("buildAgentArgv: %v", err)
 	}
-	want := []string{"codex", "--model", "gpt-5", "go"}
+	want := []string{"codex", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5", "go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("argv mismatch:\n got=%q\nwant=%q", got, want)
 	}
@@ -76,9 +79,41 @@ func TestBuildAgentArgv_CodexWithModel(t *testing.T) {
 
 func TestBuildAgentArgv_CodexNoModel(t *testing.T) {
 	got, _ := buildAgentArgv(agentSpec{harness: "codex", prompt: "go"})
-	want := []string{"codex", "go"}
+	want := []string{"codex", "--dangerously-bypass-approvals-and-sandbox", "go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("argv mismatch:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+// TestBuildAgentArgv_CodexBypassesSandboxByDefault locks in the
+// behaviour against accidental removal. The agent runs unattended
+// inside a pty — codex's default seatbelt sandbox (CODEX_SANDBOX=
+// seatbelt) blinds it to the running ppz daemon (`ppz status`
+// returns "daemon: not running" from inside the sandbox), and there
+// is no human at the terminal to approve a prompt-time escalation.
+// The flag must appear regardless of whether a model or prompt is
+// also supplied.
+func TestBuildAgentArgv_CodexBypassesSandboxByDefault(t *testing.T) {
+	for _, spec := range []agentSpec{
+		{harness: "codex"},
+		{harness: "codex", prompt: "hi"},
+		{harness: "codex", model: "gpt-5"},
+		{harness: "codex", model: "gpt-5", prompt: "hi"},
+	} {
+		got, err := buildAgentArgv(spec)
+		if err != nil {
+			t.Fatalf("buildAgentArgv(%+v): %v", spec, err)
+		}
+		found := false
+		for _, a := range got {
+			if a == "--dangerously-bypass-approvals-and-sandbox" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("spec=%+v: codex argv must include --dangerously-bypass-approvals-and-sandbox (sandbox blocks ppz daemon access); got %q", spec, got)
+		}
 	}
 }
 
@@ -1156,7 +1191,7 @@ func TestBuildHarnessSpawnArgv_CodexPromptAlsoQuoted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildHarnessSpawnArgv: %v", err)
 	}
-	want := []string{"codex", "--model", "gpt-5", "'hello'"}
+	want := []string{"codex", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5", "'hello'"}
 	if !reflect.DeepEqual(argv, want) {
 		t.Errorf("argv = %q, want %q", argv, want)
 	}
