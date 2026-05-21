@@ -1,3 +1,0 @@
-share_pid_pre: yes
-stale_binding: dropped
-exit=0

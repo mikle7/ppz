@@ -31,10 +31,12 @@ PPZ_IPC_SOCKET="$PPZ_DAEMON_A_SOCK" \
     # Recipe under test: ls --watch with env stripped to PROVE the
     # binding-via-ancestor-walk path. Without env, sessionID() falls
     # back to getsid-based; daemon resolver matches binding via ppid.
-    timeout 5 env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz ls --watch 2>&1 | awk "/^cindy/" | head -1 > /tmp/ts-h-cap.txt
+    # PR #73 added a NAMESPACE column to `ls` output, so handle.pipe is
+    # no longer at column 0. Match anywhere in the line.
+    timeout 5 env -u PPZ_CURRENT_HANDLE -u PPZ_SESSION ppz ls --watch 2>&1 | awk "/cindy\.inbox/" | head -1 > /tmp/ts-h-cap.txt
   ' </dev/null >/dev/null 2>&1
 
-if grep -qE "^cindy" /tmp/ts-h-cap.txt 2>/dev/null; then
+if grep -q 'cindy\.inbox' /tmp/ts-h-cap.txt 2>/dev/null; then
   echo "monitor-without-env-pin: ok"
 else
   echo "monitor-without-env-pin: FAILED (no cindy row in watch output)"

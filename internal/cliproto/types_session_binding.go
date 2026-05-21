@@ -45,9 +45,4 @@ const (
 	// EBindingConflict — RegisterAgentBinding called with the same
 	// SharePID against a different handle. Caller must unregister first.
 	EBindingConflict = "E_BINDING_CONFLICT"
-
-	// EBindingUnknown — the daemon lost the binding (e.g. after a
-	// persistence corruption restart) and the share process is
-	// expected to re-issue RegisterAgentBinding lazily.
-	EBindingUnknown = "E_BINDING_UNKNOWN"
 )

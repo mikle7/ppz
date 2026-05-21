@@ -128,9 +128,11 @@ Persistence file `$PPZ_HOME/agent-bindings.json`, versioned envelope, atomic tmp
 | Scenario | Recovery |
 |---|---|
 | Daemon crash/respawn/upgrade | Load + validate-on-load drops dead pids; survivors are immediately usable. |
-| Share killed -9 | Lazy validation drops the binding on next lookup. |
-| Persistence file corrupt or missing | Load empty. Recovery: when the share's next IPC (e.g. `terminal share` publishing wrapped-pty stdout to NATS) hits the daemon, the daemon detects the share's pid is in the caller chain but has no binding → returns `E_BINDING_UNKNOWN` → CLI re-registers. Window of brokenness is "until next IPC from the share"; idle ptys (silent harness, no output) extend the window until any output happens. Subprocesses making IPC calls during the window resolve via fallback (`E_NO_CURRENT_SOURCE` on send — fail-closed, not anonymous). |
+| Share killed -9 | Binding stays in the daemon's table (and on disk) until next daemon restart. Harmless leak — pid won't get reused for a long time on linux/darwin, and a future caller's ancestor walk through a stale pid would only happen if the OS reused that pid AND a new ppz CLI's process tree happened to traverse it AND it tried to use whatever current handle was set. Statistically negligible. |
+| Persistence file corrupt or missing | Load empty. Recovery requires restarting the affected `ppz terminal share` processes — the share's startup IPC re-registers the binding. Window of brokenness for in-pty subprocesses is "until the share is restarted." |
 | In-flight IPC mid-restart | `E_DAEMON_NOT_RUNNING` (existing behavior). |
+
+**Future hardening (deferred):** an `E_BINDING_UNKNOWN` auto-relearn protocol would close the persistence-corruption window without manual share restart — the daemon could signal an unbound share via a structured reply, the share-side CLI would catch it and re-issue `IPCRegisterAgentBinding`. Not in this PR; the corrupt-file scenario is rare enough (atomic-rename writes make it nearly impossible outside catastrophic disk failure) to defer.
 
 ## Migration
 
