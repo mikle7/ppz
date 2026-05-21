@@ -43,9 +43,9 @@ ppz_s daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 
 # Wrapped command: switch the PTY slave to raw line discipline (no
 # ICANON, no ECHO) so individual bytes flow through `cat` without
-# waiting for a newline. The alert pump's message (claudeSubmitInput
-# shape: text + \x1b[13u, no trailing newline) only round-trips to
-# .stdout under raw mode.
+# waiting for a newline. The alert pump's message (submitInputForHarness
+# shape: text + harness-specific submit terminator, no trailing
+# newline) only round-trips to .stdout under raw mode.
 ppz_s terminal share share-inbox -- bash -c 'stty -icanon -echo 2>/dev/null; cat' </dev/null >/dev/null 2>&1 &
 SHARE_PID=$!
 

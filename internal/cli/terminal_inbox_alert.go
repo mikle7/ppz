@@ -149,13 +149,19 @@ func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
 // the wrapped PTY's input. Claude Code reads `\x1b[13u` (kitty
 // keyboard protocol Enter) and treats it as a clean user-submit;
 // every other harness's REPL takes that escape as literal bytes
-// (visible junk on screen) and submits on plain `\r` instead. The
-// GREEN follow-up commit implements the branch; today's stub
-// always returns the claude shape so the existing claude pump test
-// continues to pass.
+// (visible junk on screen) and submits on plain `\r` instead.
+//
+// Empty/unknown harness — non-agent `ppz terminal share` calls
+// where PPZ_AGENT_HARNESS is unset, or a harness we haven't yet
+// confirmed — falls into the `\r` arm: a plain carriage return is
+// the lowest-risk default since most line-discipline REPLs accept
+// it as Enter, whereas the kitty escape only works on Claude Code.
 func submitInputForHarness(harness, message string) string {
-	_ = harness // GREEN: per-harness branching lands in the follow-up commit
-	return strings.TrimRight(message, "\r\n") + "\x1b[13u"
+	trimmed := strings.TrimRight(message, "\r\n")
+	if harness == "claude" {
+		return trimmed + "\x1b[13u"
+	}
+	return trimmed + "\r"
 }
 
 func (p *terminalInboxAlertPump) BeginAlertMode(now time.Time) {
