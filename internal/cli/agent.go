@@ -179,7 +179,7 @@ type agentSpec struct {
 // handle so the inbox-watch recipe can pin PPZ_SESSION=<handle> inline,
 // and dispatched on harness so each harness gets a prompt that names its
 // own primitives (claude → Monitor + PushNotification; copilot → bash
-// detach: true; codex/gemini/pi → foreground `ppz ls --watch` loop).
+// detach: true; codex/agy/pi → foreground `ppz ls --watch` loop).
 //
 // Inheriting PPZ_SESSION from the parent shell is unreliable: some
 // harness/Monitor combinations don't propagate env to subprocesses
@@ -195,9 +195,9 @@ func defaultAgentPrompt(handle, harness string) string {
 	case "copilot":
 		return copilotAgentPrompt(handle)
 	}
-	// codex / gemini / pi (and any future harness) share a generic
+	// codex / agy / pi (and any future harness) share a generic
 	// foreground "ls --watch is a wake signal" loop that names no
-	// harness-specific tools. Gemini and pi piggyback on this until
+	// harness-specific tools. agy and pi piggyback on this until
 	// their own background/notification primitives are confirmed.
 	return codexAgentPrompt(handle)
 }
@@ -258,7 +258,7 @@ This should fire a PushNotification on each new message arrival. PPZ_SESSION is 
 }
 
 // codexAgentPrompt is the foreground-watch variant used by codex
-// itself and shared, for now, by gemini and pi. None of these
+// itself and shared, for now, by agy and pi. None of these
 // harnesses have a confirmed push primitive, so instead of running
 // `ppz ls --watch` in a detached loop we tell the agent to *itself*
 // block on it when idle and treat the return as a wake signal that
@@ -383,8 +383,23 @@ func buildAgentArgv(spec agentSpec) ([]string, error) {
 			argv = append(argv, spec.prompt)
 		}
 		return argv, nil
-	case "gemini", "pi":
-		argv := []string{spec.harness}
+	case "agy":
+		// Google Antigravity (the replacement for the deprecated
+		// gemini CLI). agy has no `--model` flag — that's enforced
+		// upstream in resolveAgentSpec, so spec.model is guaranteed
+		// empty by the time we get here. The initial prompt arrives
+		// via `-i <prompt>` (interactive mode that continues the
+		// session after the prompt completes — same pattern as
+		// copilot's `-i`), and `--dangerously-skip-permissions`
+		// auto-approves tool prompts so the unattended agent can act
+		// without a human at the terminal.
+		argv := []string{"agy", "--dangerously-skip-permissions"}
+		if spec.prompt != "" {
+			argv = append(argv, "-i", spec.prompt)
+		}
+		return argv, nil
+	case "pi":
+		argv := []string{"pi"}
 		if spec.model != "" {
 			argv = append(argv, "--model", spec.model)
 		}
@@ -400,10 +415,12 @@ func buildAgentArgv(spec agentSpec) ([]string, error) {
 // produces (spec, handle, error). It handles:
 //
 //   - harness selection: --claude (default) | --copilot | --codex |
-//     --gemini | --pi (mutually exclusive)
+//     --agy | --pi (mutually exclusive)
 //   - model selection: claude shortcuts --opus / --sonnet / --haiku
-//     (mutually exclusive, claude-only) OR --model X (any harness).
-//     Combining a shortcut with --model errors.
+//     (mutually exclusive, claude-only) OR --model X (claude/copilot/
+//     codex/pi). agy has no --model flag, so combining --agy with
+//     --model errors.
+//     Combining a claude shortcut with --model also errors.
 //   - prompt selection: positional <prompt> argument OR --prompt-file
 //     <path>. If neither is given, defaultAgentPrompt is used.
 //
@@ -414,15 +431,15 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 	fs.SetOutput(devNull{})
 
 	var (
-		fClaude, fCopilot, fCodex, fGemini, fPi bool
-		fOpus, fSonnet, fHaiku                  bool
-		fNewWindow                              bool
-		fModel, fPromptFile                     string
+		fClaude, fCopilot, fCodex, fAgy, fPi bool
+		fOpus, fSonnet, fHaiku               bool
+		fNewWindow                           bool
+		fModel, fPromptFile                  string
 	)
 	fs.BoolVar(&fClaude, "claude", false, "use the claude harness (default)")
 	fs.BoolVar(&fCopilot, "copilot", false, "use the copilot harness")
 	fs.BoolVar(&fCodex, "codex", false, "use the codex harness")
-	fs.BoolVar(&fGemini, "gemini", false, "use the gemini harness")
+	fs.BoolVar(&fAgy, "agy", false, "use the agy (Google Antigravity) harness")
 	fs.BoolVar(&fPi, "pi", false, "use the pi harness")
 	fs.BoolVar(&fOpus, "opus", false, "claude shortcut: --model opus")
 	fs.BoolVar(&fSonnet, "sonnet", false, "claude shortcut: --model sonnet")
@@ -458,7 +475,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 		name string
 	}{
 		{fClaude, "claude"}, {fCopilot, "copilot"}, {fCodex, "codex"},
-		{fGemini, "gemini"}, {fPi, "pi"},
+		{fAgy, "agy"}, {fPi, "pi"},
 	}
 	var picked []string
 	for _, h := range harnessFlags {
@@ -473,7 +490,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 	case 1:
 		harness = picked[0]
 	default:
-		return agentSpec{}, "", fmt.Errorf("only one of --claude/--copilot/--codex/--gemini/--pi may be set; got %v", picked)
+		return agentSpec{}, "", fmt.Errorf("only one of --claude/--copilot/--codex/--agy/--pi may be set; got %v", picked)
 	}
 
 	// Claude model-shortcut mutual exclusion.
@@ -496,6 +513,13 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 	}
 	if shortcutCount == 1 && harness != "claude" {
 		return agentSpec{}, "", fmt.Errorf("--%s is claude-only; use --model with --%s", shortcutModel, harness)
+	}
+
+	// agy has no model-selection flag (verified against `agy --help`),
+	// so silently dropping a --model the user supplied would surprise
+	// them. Reject the combination explicitly.
+	if harness == "agy" && fModel != "" {
+		return agentSpec{}, "", fmt.Errorf("--agy does not accept --model: agy has no model-selection flag")
 	}
 
 	// Resolve final model string.

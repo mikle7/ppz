@@ -38,7 +38,7 @@ func sampleWhoEntries(now time.Time) []cliproto.WhoEntry {
 	return []cliproto.WhoEntry{
 		beat("alice", "claude", "opus", "alice-owner", 10*time.Second, 5),    // online
 		beat("bob", "codex", "", "bob-owner", 120*time.Second, 2),            // stale
-		beat("carol", "gemini", "pro", "", 10*time.Minute, 99),               // offline, no owner
+		beat("carol", "agy", "", "", 10*time.Minute, 99),                     // offline, no owner
 		beat("dave", "claude", "sonnet", "alice-owner", 5*time.Second, 1),    // online, same owner as alice
 	}
 }
@@ -54,7 +54,7 @@ func TestRenderWho_TablePlainText(t *testing.T) {
 	for _, want := range []string{"HANDLE", "STATUS", "HARNESS", "MODEL", "HOST", "OS/ARCH", "CREATED", "OWNER",
 		"alice", "online", "claude", "opus", "alice-owner",
 		"bob", "stale", "codex", "bob-owner",
-		"carol", "offline", "gemini", "pro",
+		"carol", "offline", "agy",
 		"dave", "sonnet"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered table missing %q; got:\n%s", want, out)

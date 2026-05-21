@@ -36,7 +36,7 @@ func cmdWho(args []string) error {
 	onlyOnline := fs.Bool("online", false, "show only online agents")
 	onlyStale := fs.Bool("stale", false, "show only stale agents")
 	onlyOffline := fs.Bool("offline", false, "show only offline agents")
-	harness := fs.String("harness", "", "show only agents with this harness (claude/codex/copilot/gemini/...)")
+	harness := fs.String("harness", "", "show only agents with this harness (claude/codex/copilot/agy/...)")
 	owner := fs.String("owner", "", "show only agents whose source owner matches this username")
 	if err := fs.Parse(args); err != nil {
 		return err
