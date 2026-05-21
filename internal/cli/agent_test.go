@@ -117,11 +117,43 @@ func TestBuildAgentArgv_CodexBypassesSandboxByDefault(t *testing.T) {
 	}
 }
 
-func TestBuildAgentArgv_GeminiWithModel(t *testing.T) {
-	got, _ := buildAgentArgv(agentSpec{harness: "gemini", model: "2.5-pro", prompt: "go"})
-	want := []string{"gemini", "--model", "2.5-pro", "go"}
+// TestBuildAgentArgv_Agy pins the argv shape for Google Antigravity
+// (`agy`), which replaces the deprecated gemini CLI. agy accepts the
+// initial prompt via `-i <prompt>` (interactive mode that continues
+// the session after the prompt completes) and skips per-tool approval
+// prompts via `--dangerously-skip-permissions` — the unattended-agent
+// pattern shared with claude. agy has no `--model` flag (verified
+// against `agy --help`), so any --model the user supplies must be
+// rejected upstream in resolveAgentSpec rather than silently dropped.
+func TestBuildAgentArgv_Agy(t *testing.T) {
+	got, err := buildAgentArgv(agentSpec{harness: "agy", prompt: "go"})
+	if err != nil {
+		t.Fatalf("buildAgentArgv: %v", err)
+	}
+	want := []string{"agy", "--dangerously-skip-permissions", "-i", "go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("argv mismatch:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+// TestBuildAgentArgv_AgyNoPrompt: with no prompt, agy boots into its
+// REPL with permissions skipped but no -i flag (which requires a
+// prompt argument). Matches copilot's no-prompt shape.
+func TestBuildAgentArgv_AgyNoPrompt(t *testing.T) {
+	got, _ := buildAgentArgv(agentSpec{harness: "agy"})
+	want := []string{"agy", "--dangerously-skip-permissions"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("argv mismatch:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+// TestBuildAgentArgv_GeminiRemoved pins the removal of the gemini
+// branch. Google deprecated the gemini CLI in favour of antigravity
+// (`agy`); leaving a `gemini` case behind would silently spawn a
+// missing binary on PATH.
+func TestBuildAgentArgv_GeminiRemoved(t *testing.T) {
+	if _, err := buildAgentArgv(agentSpec{harness: "gemini", prompt: "go"}); err == nil {
+		t.Errorf("buildAgentArgv accepted harness=\"gemini\"; the gemini CLI was deprecated by Google in favour of agy and the case should be gone")
 	}
 }
 
@@ -248,6 +280,44 @@ func TestResolveAgentSpec_ClaudeShortcutAndModelFlagConflict(t *testing.T) {
 	}
 }
 
+// TestResolveAgentSpec_AgyFlagSetsHarness wires `--agy` end-to-end:
+// the flag is registered, parsed, and resolves to harness "agy"
+// (matching the new buildAgentArgv branch).
+func TestResolveAgentSpec_AgyFlagSetsHarness(t *testing.T) {
+	spec, _, err := resolveAgentSpec([]string{"--agy", "alice"})
+	if err != nil {
+		t.Fatalf("resolveAgentSpec: %v", err)
+	}
+	if spec.harness != "agy" {
+		t.Errorf("--agy: harness=%q, want \"agy\"", spec.harness)
+	}
+}
+
+// TestResolveAgentSpec_GeminiFlagRemoved pins the removal of the
+// deprecated --gemini flag. Leaving it parseable would let users
+// continue to spawn agents under harness=gemini and run into the
+// "binary not found on PATH" surprise downstream when the gemini
+// CLI is no longer installed.
+func TestResolveAgentSpec_GeminiFlagRemoved(t *testing.T) {
+	if _, _, err := resolveAgentSpec([]string{"--gemini", "alice"}); err == nil {
+		t.Error("resolveAgentSpec accepted --gemini; the flag should be removed since Google deprecated gemini in favour of agy")
+	}
+}
+
+// TestResolveAgentSpec_AgyAndModelFlagConflict — agy has no `--model`
+// flag (verified against `agy --help`), so passing --model together
+// with --agy must error rather than silently drop the model. Same
+// shape as the existing claude-shortcut/--model conflict check.
+func TestResolveAgentSpec_AgyAndModelFlagConflict(t *testing.T) {
+	_, _, err := resolveAgentSpec([]string{"--agy", "--model", "gemini-pro", "alice"})
+	if err == nil {
+		t.Fatal("resolveAgentSpec accepted --agy with --model; agy has no model-selection flag and the combination should be rejected")
+	}
+	if !strings.Contains(err.Error(), "model") {
+		t.Errorf("resolveAgentSpec error for --agy + --model = %q; want it to mention `model` so the user sees why the combination was rejected (not a generic unknown-flag error)", err.Error())
+	}
+}
+
 func TestResolveAgentSpec_NoHandleErrors(t *testing.T) {
 	if _, _, err := resolveAgentSpec(nil); err == nil {
 		t.Fatal("expected error for missing handle")
@@ -269,11 +339,11 @@ func TestResolveAgentSpec_DefaultPromptUsedWhenNoneProvided(t *testing.T) {
 }
 
 // allHarnesses is the full set of values `--claude` / `--copilot` /
-// `--codex` / `--gemini` / `--pi` resolve to in resolveAgentSpec. Tests
+// `--codex` / `--agy` / `--pi` resolve to in resolveAgentSpec. Tests
 // that assert harness-agnostic invariants (no removed verbs, handle
 // substitution, cheat-sheet column alignment, …) range over this list
 // so a regression in any harness branch is caught.
-var allHarnesses = []string{"claude", "copilot", "codex", "gemini", "pi"}
+var allHarnesses = []string{"claude", "copilot", "codex", "agy", "pi"}
 
 // backgroundMonitorHarnesses are the harnesses whose prompts wrap the
 // `ppz ls --watch` loop in a detached/background process (claude's
@@ -533,20 +603,21 @@ func TestDefaultAgentPrompt_Codex_UsesForegroundWatchRecipe(t *testing.T) {
 	}
 }
 
-// TestDefaultAgentPrompt_Gemini_FallsBackToCodexRecipe pins gemini
-// onto the codex-family foreground-watch recipe. Until gemini's
-// own background/notification primitives are confirmed, sharing
+// TestDefaultAgentPrompt_Agy_FallsBackToCodexRecipe pins agy
+// (Google Antigravity, replacing the deprecated gemini CLI) onto
+// the codex-family foreground-watch recipe. Until agy's own
+// background/notification primitives are confirmed, sharing
 // codex's prompt is the safe default: it names no harness-specific
 // tools, only ppz verbs and a generic wake/read loop.
-func TestDefaultAgentPrompt_Gemini_FallsBackToCodexRecipe(t *testing.T) {
-	prompt := defaultAgentPrompt("alice", "gemini")
+func TestDefaultAgentPrompt_Agy_FallsBackToCodexRecipe(t *testing.T) {
+	prompt := defaultAgentPrompt("alice", "agy")
 	if !strings.Contains(prompt, "wake signal") {
-		t.Errorf("gemini prompt should reuse codex's foreground-watch recipe (`wake signal` language) — no harness-specific tools, just the generic ppz watch/read loop; got: %q", prompt)
+		t.Errorf("agy prompt should reuse codex's foreground-watch recipe (`wake signal` language) — no harness-specific tools, just the generic ppz watch/read loop; got: %q", prompt)
 	}
 }
 
 // TestDefaultAgentPrompt_Pi_FallsBackToCodexRecipe pins pi onto
-// the codex-family recipe for the same reason as gemini: until
+// the codex-family recipe for the same reason as agy: until
 // pi's own primitives are known, the harness-agnostic foreground
 // loop is the safe default.
 func TestDefaultAgentPrompt_Pi_FallsBackToCodexRecipe(t *testing.T) {
