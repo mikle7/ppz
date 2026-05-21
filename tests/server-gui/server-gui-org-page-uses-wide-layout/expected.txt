@@ -1,0 +1,2 @@
+main-class=wide
+exit=0

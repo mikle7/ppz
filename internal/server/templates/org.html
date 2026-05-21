@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
-  <main>
+  <main class="wide">
     <header class="brand">
       <div>
         <h1><a href="/dashboard">ppz</a> / {{.Org.Name}}</h1>
@@ -39,16 +39,16 @@
           <tr data-source="{{.Handle}}"
               data-source-namespace="{{.Namespace}}"
               data-source-row="{{.Handle}}:{{.Pipe}}:{{.LastMessageAt}}:{{.PayloadDisplay}}">
-            <td><code>{{.Namespace}}</code></td>
-            <td><code>{{.Handle}}</code></td>
-            <td>
+            <td data-cell="namespace" class="cell-nowrap"><code>{{.Namespace}}</code></td>
+            <td data-cell="source"><code>{{.Handle}}</code></td>
+            <td data-cell="pipe" class="cell-nowrap">
               <a href="{{.PipeLink}}" data-source-pipe-link="{{.PipeLink}}">{{.Pipe}}</a>
               {{if .TerminalLink}}
               · <a href="{{.TerminalLink}}" data-terminal-link="{{.TerminalLink}}">open terminal</a>
               {{end}}
             </td>
-            <td>{{if .HasLastMessage}}{{.LastMessageAt}}{{else}}<span class="empty">—</span>{{end}}</td>
-            <td>{{if .HasLastMessage}}{{.PayloadDisplay}}{{else}}<span class="empty">—</span>{{end}}</td>
+            <td data-cell="last-message" class="cell-nowrap">{{if .HasLastMessage}}{{.LastMessageAt}}{{else}}<span class="empty">—</span>{{end}}</td>
+            <td data-cell="payload" class="cell-truncate"{{if .HasLastMessage}} title="{{.PayloadDisplay}}"{{end}}>{{if .HasLastMessage}}{{.PayloadDisplay}}{{else}}<span class="empty">—</span>{{end}}</td>
           </tr>
           {{end}}
         </tbody>
