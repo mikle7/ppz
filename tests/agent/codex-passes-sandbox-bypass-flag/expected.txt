@@ -1,1 +1,2 @@
 OK: codex invoked with --dangerously-bypass-approvals-and-sandbox
+exit=0
