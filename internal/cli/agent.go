@@ -240,7 +240,22 @@ func buildAgentArgv(spec agentSpec) ([]string, error) {
 			argv = append(argv, spec.prompt)
 		}
 		return argv, nil
-	case "codex", "copilot", "gemini", "pi":
+	case "copilot":
+		// copilot rejects a positional prompt with "Invalid command
+		// format" — it tries to dispatch the first positional as a
+		// subcommand. The initial prompt must arrive via `-i <prompt>`
+		// (interactive mode with prompt). --yolo enables all
+		// permissions so the unattended agent can act without per-tool
+		// approval prompts.
+		argv := []string{"copilot", "--yolo"}
+		if spec.model != "" {
+			argv = append(argv, "--model", spec.model)
+		}
+		if spec.prompt != "" {
+			argv = append(argv, "-i", spec.prompt)
+		}
+		return argv, nil
+	case "codex", "gemini", "pi":
 		argv := []string{spec.harness}
 		if spec.model != "" {
 			argv = append(argv, "--model", spec.model)
