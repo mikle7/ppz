@@ -53,6 +53,16 @@ main {
   padding: 2rem 1.5rem 4rem;
 }
 
+/* Wide layout — opt-in container for pages that show data tables
+   (e.g. the org page's pipes table). The default 960px cap left
+   huge gutters on desktops and squeezed table cells onto multiple
+   lines; this lifts the cap so the page uses available horizontal
+   space. Falls back to 95vw on viewports narrower than 1440px so
+   we never overflow. */
+main.wide {
+  max-width: min(1440px, 95vw);
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
@@ -160,6 +170,26 @@ th {
   font-weight: 600;
 }
 tbody tr:hover { background: var(--row-hover); }
+
+/* Pipes table cell rules. The pipe / last-message / namespace /
+   source cells carry short content but were wrapping because column
+   widths were squeezed by the long payload preview. Cell-nowrap
+   keeps short cells on one line; cell-truncate ellipsises overflow
+   on the payload column (the elastic one — content can be
+   arbitrarily long up to TruncatePayload's 60-byte cap, but at
+   narrower viewports even 60 chars exceeds the column). Headers
+   nowrap too so "LAST MESSAGE" doesn't break onto two lines.
+   `max-width: 0` is the standard ellipsis-in-a-table-cell trick:
+   forces the cell to defer its width to the table layout while
+   still applying text-overflow. */
+#pipes th { white-space: nowrap; }
+#pipes td.cell-nowrap { white-space: nowrap; }
+#pipes td.cell-truncate {
+  max-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Forms */
 form { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
