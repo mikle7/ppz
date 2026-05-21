@@ -322,7 +322,15 @@ func (s *State) LoadFromDisk() error {
 	s.currentNamespace = map[string]string{}
 	s.knownPipes = map[string]struct{}{}
 	s.handleManifold = map[string]string{}
-	s.agentBindings = map[int]*AgentBinding{}
+	// NOTE: deliberately NOT resetting s.agentBindings here. Agent
+	// bindings are owned by the live IPC stream from `ppz terminal
+	// share` processes; they're never updated out-of-band, so the
+	// file-mtime watcher that triggers LoadFromDisk has no business
+	// touching them. Resetting here (combined with the watcher's
+	// periodic re-fire) would clobber live bindings every 200ms.
+	// LoadAgentBindings is called once at daemon startup
+	// (daemon.go:Run) and bindings are mutated only via the
+	// Register/Unregister IPC handlers thereafter.
 	s.pipesLoaded = false
 	// Reload zeros the cache: a daemon that just woke up hasn't talked to
 	// the server yet under the new credentials, so status should probe.

@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
-	"os"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
@@ -27,7 +25,6 @@ func (d *Daemon) handleRegisterAgentBinding(_ context.Context, conn net.Conn, pa
 	}
 	b, err := d.State.RegisterAgentBinding(req.Handle, req.SharePID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[debug] RegisterAgentBinding handle=%s pid=%d FAILED: %v\n", req.Handle, req.SharePID, err)
 		if errors.Is(err, ErrBindingConflict) {
 			writeIPCErr(conn, &cliproto.Error{Code: cliproto.EBindingConflict, Message: err.Error()})
 			return
@@ -35,7 +32,6 @@ func (d *Daemon) handleRegisterAgentBinding(_ context.Context, conn net.Conn, pa
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[debug] RegisterAgentBinding handle=%s pid=%d sessionKey=%s OK\n", b.Handle, b.SharePID, b.SessionKey)
 	writeIPC(conn, cliproto.RegisterAgentBindingReply{
 		Handle:       b.Handle,
 		SharePID:     b.SharePID,

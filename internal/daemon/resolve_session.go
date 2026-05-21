@@ -1,10 +1,5 @@
 package daemon
 
-import (
-	"fmt"
-	"os"
-)
-
 // MaxPPIDWalkDepth caps how far the CLI walks the parent process tree
 // when collecting its ancestor pid chain. Eight hops covers realistic
 // agent → bash → harness → Monitor → bash chains without unbounded
@@ -56,15 +51,12 @@ func (s *State) ResolveSession(declaredSession string, ancestorPIDs []int) Resol
 			continue
 		}
 		if b := s.lookupAgentBindingValidated(pid); b != nil {
-			fmt.Fprintf(os.Stderr, "[debug] ResolveSession declared=%q ancestors=%v → matched pid=%d handle=%s sessionKey=%s\n", declaredSession, ancestorPIDs, pid, b.Handle, b.SessionKey)
 			return ResolvedSession{SessionKey: b.SessionKey, BoundHandle: b.Handle}
 		}
 	}
 	if declaredSession != "" {
-		fmt.Fprintf(os.Stderr, "[debug] ResolveSession declared=%q ancestors=%v → declared fallback\n", declaredSession, ancestorPIDs)
 		return ResolvedSession{SessionKey: declaredSession}
 	}
-	fmt.Fprintf(os.Stderr, "[debug] ResolveSession declared=%q ancestors=%v → default fallback\n", declaredSession, ancestorPIDs)
 	return ResolvedSession{SessionKey: "default"}
 }
 

@@ -34,7 +34,18 @@ func (d *Daemon) watchState(ctx context.Context, hupCh <-chan os.Signal) {
 			lastCred, lastCur = c, u
 		}
 		_ = d.State.LoadFromDisk()
-		_ = d.State.LoadAgentBindings()
+		// Note: LoadAgentBindings is deliberately NOT called from the
+		// watcher. The watcher's purpose is to pick up out-of-band
+		// changes to credentials/current/namespace files. Agent
+		// bindings are NEVER updated out-of-band — they're owned by
+		// the live IPC stream from `ppz terminal share`. Reloading
+		// them here would re-run validate-on-load, which uses
+		// kill(pid, 0) and returns false for legitimate caller pids
+		// in cross-PID-namespace setups (docker compose, k8s) — so
+		// every poll cycle would clobber live bindings with an empty
+		// table. LoadAgentBindings is called once at startup
+		// (daemon.go) and bindings are mutated only via the
+		// Register/Unregister IPC handlers thereafter.
 		if _, ok := d.State.Credentials(); !ok && d.NC != nil {
 			// Logout / creds-deleted-out-of-band: drop NC and evict
 			// every live follow conn so the CLI sees EOF on its IPC
