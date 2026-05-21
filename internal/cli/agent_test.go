@@ -90,15 +90,45 @@ func TestBuildAgentArgv_GeminiWithModel(t *testing.T) {
 	}
 }
 
-func TestBuildAgentArgv_CopilotAndPi(t *testing.T) {
-	for _, h := range []string{"copilot", "pi"} {
-		got, err := buildAgentArgv(agentSpec{harness: h, prompt: "go"})
-		if err != nil {
-			t.Fatalf("%s: %v", h, err)
-		}
-		if got[0] != h {
-			t.Fatalf("%s: argv[0]=%q, want %q", h, got[0], h)
-		}
+// copilot rejects a positional prompt ("Invalid command format") — the
+// initial prompt must arrive via `-i <prompt>`. We also pass --yolo so
+// the unattended agent can act without per-tool approval prompts.
+func TestBuildAgentArgv_Copilot(t *testing.T) {
+	got, err := buildAgentArgv(agentSpec{harness: "copilot", prompt: "go"})
+	if err != nil {
+		t.Fatalf("buildAgentArgv: %v", err)
+	}
+	want := []string{"copilot", "--yolo", "-i", "go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("argv mismatch:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+func TestBuildAgentArgv_CopilotWithModel(t *testing.T) {
+	got, _ := buildAgentArgv(agentSpec{harness: "copilot", model: "gpt-5", prompt: "go"})
+	want := []string{"copilot", "--yolo", "--model", "gpt-5", "-i", "go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("argv mismatch:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+// No prompt → no -i flag (which requires a prompt argument); copilot
+// boots into its normal REPL but still with --yolo applied.
+func TestBuildAgentArgv_CopilotNoPrompt(t *testing.T) {
+	got, _ := buildAgentArgv(agentSpec{harness: "copilot"})
+	want := []string{"copilot", "--yolo"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("argv mismatch:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+func TestBuildAgentArgv_Pi(t *testing.T) {
+	got, err := buildAgentArgv(agentSpec{harness: "pi", prompt: "go"})
+	if err != nil {
+		t.Fatalf("buildAgentArgv: %v", err)
+	}
+	if got[0] != "pi" {
+		t.Fatalf("argv[0]=%q, want pi", got[0])
 	}
 }
 
