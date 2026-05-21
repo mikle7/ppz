@@ -233,28 +233,50 @@ func TestResolveAgentSpec_DefaultPromptUsedWhenNoneProvided(t *testing.T) {
 	}
 }
 
+// allHarnesses is the full set of values `--claude` / `--copilot` /
+// `--codex` / `--gemini` / `--pi` resolve to in resolveAgentSpec. Tests
+// that assert harness-agnostic invariants (no removed verbs, handle
+// substitution, cheat-sheet column alignment, …) range over this list
+// so a regression in any harness branch is caught.
+var allHarnesses = []string{"claude", "copilot", "codex", "gemini", "pi"}
+
+// backgroundMonitorHarnesses are the harnesses whose prompts wrap the
+// `ppz ls --watch` loop in a detached/background process (claude's
+// Monitor, copilot's bash detach:true). They share two invariants
+// (`sleep 60` throttle, no `ppz await` mention) that don't apply to
+// the codex-family foreground-watch pattern.
+var backgroundMonitorHarnesses = []string{"claude", "copilot"}
+
 // TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb keeps `ppz broadcast`
 // (removed in v0.30.0 — see tests/broadcast/broadcast-returns-unknown-command)
 // from creeping back into the spawn-time orientation. An agent reading
 // the prompt and trying the command would hit `unknown command, exit 2`
 // and either retry-loop or hallucinate a workaround.
 func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt("test-handle"), "ppz broadcast") {
-		t.Errorf("defaultAgentPrompt references the removed `ppz broadcast` verb; agents will hit `unknown command` if they try it")
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if strings.Contains(defaultAgentPrompt("test-handle", h), "ppz broadcast") {
+				t.Errorf("defaultAgentPrompt(%q) references the removed `ppz broadcast` verb; agents will hit `unknown command` if they try it", h)
+			}
+		})
 	}
 }
 
 // TestDefaultAgentPrompt_MentionsLsWatch pins `ppz ls --watch` as
-// the recommended inbox-awareness primitive for the Monitor pattern.
-// It blocks until any pipe has unread, prints a snapshot, and exits
-// without advancing any cursor — which is what a watch wants. The
-// previous recommendation (`ppz await`) drains as it follows, so a
-// Monitor wired to await races any later `ppz read inbox` and the
+// the recommended inbox-awareness primitive. It blocks until any
+// pipe has unread, prints a snapshot, and exits without advancing
+// any cursor — which is what a watch wants. The previous
+// recommendation (`ppz await`) drains as it follows, so wiring a
+// monitor to await races any later `ppz read inbox` and the
 // user-visible bug is "the agent claims it acted but my read shows
-// nothing".
+// nothing". Every harness branch must reference the watch verb.
 func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
-	if !strings.Contains(defaultAgentPrompt("test-handle"), "ppz ls --watch") {
-		t.Errorf("defaultAgentPrompt should reference `ppz ls --watch` — the non-destructive blocking-watch primitive used by the Monitor recipe")
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if !strings.Contains(defaultAgentPrompt("test-handle", h), "ppz ls --watch") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz ls --watch` — the non-destructive blocking-watch primitive", h)
+			}
+		})
 	}
 }
 
@@ -265,66 +287,92 @@ func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
 // observed inventing handles or asking the user, instead of running
 // the verb the daemon already exposes.
 func TestDefaultAgentPrompt_MentionsWho(t *testing.T) {
-	if !strings.Contains(defaultAgentPrompt("test-handle"), "ppz who") {
-		t.Errorf("defaultAgentPrompt should reference `ppz who` so agents can discover which peers are online before trying to `ppz send`")
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if !strings.Contains(defaultAgentPrompt("test-handle", h), "ppz who") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz who` so agents can discover which peers are online before trying to `ppz send`", h)
+			}
+		})
 	}
 }
 
 // TestDefaultAgentPrompt_OmitsAwait — keep `ppz await` out of the
-// boot prompt. It's still a valid verb when the agent actively wants
-// to drain, but mentioning it in the useful-commands cheat sheet led
-// agents to wire it into a persistent Monitor, where it silently ate
-// inbox messages the user then asked them to `ppz read`. The watch
-// vs. read concerns belong on different verbs.
+// boot prompt *for the background-Monitor harnesses*. It's still a
+// valid verb when the agent actively wants to drain, but mentioning
+// it in the useful-commands cheat sheet led agents to wire it into
+// a persistent Monitor, where it silently ate inbox messages the
+// user then asked them to `ppz read`. The codex-family prompt
+// references `ppz await --tail` only as an anti-pattern callout
+// ("do not use this for idle behavior"), which is the opposite
+// failure mode and is covered by a separate codex test.
 func TestDefaultAgentPrompt_OmitsAwait(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt("test-handle"), "ppz await") {
-		t.Errorf("defaultAgentPrompt must not mention `ppz await` — destructive read races `ppz read inbox`; use `ppz ls --watch` for awareness and `ppz read` for consumption")
+	for _, h := range backgroundMonitorHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if strings.Contains(defaultAgentPrompt("test-handle", h), "ppz await") {
+				t.Errorf("defaultAgentPrompt(%q) must not mention `ppz await` — destructive read races `ppz read inbox`; use `ppz ls --watch` for awareness and `ppz read` for consumption", h)
+			}
+		})
 	}
 }
 
 // TestDefaultAgentPrompt_SubstitutesHandle pins the handle template
-// substitution. The prompt is built per-spawn with the actual handle
-// so the Monitor recipe can hard-code PPZ_SESSION=<handle> inline.
-// A regression to a const prompt would leave `<handle>` as a literal
-// placeholder in the recipe — the agent would then run a Monitor
-// keyed by the string "<handle>" instead of e.g. "eve".
+// substitution across every harness branch. The prompt is built
+// per-spawn with the actual handle so each branch's watch recipe
+// can hard-code PPZ_SESSION=<handle> inline. A regression to a
+// const prompt would leave `<handle>` as a literal placeholder in
+// the recipe — the agent would then run a watch keyed by the
+// string "<handle>" instead of e.g. "alice".
 func TestDefaultAgentPrompt_SubstitutesHandle(t *testing.T) {
-	prompt := defaultAgentPrompt("alice")
-	if !strings.Contains(prompt, `"alice"`) {
-		t.Errorf("defaultAgentPrompt(\"alice\") should mention the handle literally; got: %q", prompt)
-	}
-	if strings.Contains(prompt, "<handle>.stdout") {
-		t.Errorf("defaultAgentPrompt should substitute the handle into `.stdout` / `.inbox` references, not leave the `<handle>` placeholder; got: %q", prompt)
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			prompt := defaultAgentPrompt("alice", h)
+			if !strings.Contains(prompt, `"alice"`) {
+				t.Errorf("defaultAgentPrompt(\"alice\", %q) should mention the handle literally; got: %q", h, prompt)
+			}
+			if strings.Contains(prompt, "<handle>.stdout") {
+				t.Errorf("defaultAgentPrompt(%q) should substitute the handle into `.stdout` / `.inbox` references, not leave the `<handle>` placeholder; got: %q", h, prompt)
+			}
+		})
 	}
 }
 
-// TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop — the Monitor
-// recipe must include a sleep on the success path. `ppz ls --watch`
-// is non-destructive: once a pipe has unread, every immediate re-arm
-// returns immediately with the same snapshot. Without the throttle
-// the loop spins as fast as the daemon can answer, flooding the
-// agent with duplicate events for the same unread state until it
-// runs `ppz read` to clear them. A trailing `sleep 60` between
-// iterations keeps the duplicate-event window bounded.
+// TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop — the background-
+// Monitor harnesses (claude, copilot) must include a sleep on the
+// success path. `ppz ls --watch` is non-destructive: once a pipe
+// has unread, every immediate re-arm returns immediately with the
+// same snapshot. Without the throttle the loop spins as fast as
+// the daemon can answer, flooding the agent with duplicate events
+// for the same unread state until it runs `ppz read` to clear
+// them. The codex-family prompt uses a foreground watch (no loop),
+// so the throttle does not apply there.
 func TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop(t *testing.T) {
-	prompt := defaultAgentPrompt("eve")
-	if !strings.Contains(prompt, "sleep 60") {
-		t.Errorf("defaultAgentPrompt Monitor recipe must throttle the loop with `sleep 60` so non-destructive ls --watch doesn't spin on persistent unread; got: %q", prompt)
+	for _, h := range backgroundMonitorHarnesses {
+		t.Run(h, func(t *testing.T) {
+			prompt := defaultAgentPrompt("eve", h)
+			if !strings.Contains(prompt, "sleep 60") {
+				t.Errorf("defaultAgentPrompt(%q) Monitor recipe must throttle the loop with `sleep 60` so non-destructive ls --watch doesn't spin on persistent unread; got: %q", h, prompt)
+			}
+		})
 	}
 }
 
-// TestDefaultAgentPrompt_MonitorRecipePinsSession — the Monitor
-// recipe must set PPZ_SESSION=<handle> inline. Inheriting the parent
-// shell's PPZ_SESSION is unreliable across Claude Code versions; we
-// observed v2.1.143 dropping it on Monitor's bash subprocess, which
-// then resolved a fresh tty-less session id the daemon had never
-// seen and failed every ppz call with E_NO_CURRENT_SOURCE. Setting
-// PPZ_SESSION inline in the recipe makes the watch robust to that
-// behaviour.
+// TestDefaultAgentPrompt_MonitorRecipePinsSession — every harness
+// branch that recommends `ppz ls --watch` must set
+// PPZ_SESSION=<handle> inline on that command. Inheriting the
+// parent shell's PPZ_SESSION is unreliable across harnesses; we
+// observed Claude Code v2.1.143 dropping it on Monitor's bash
+// subprocess, which then resolved a fresh tty-less session id the
+// daemon had never seen and failed every ppz call with
+// E_NO_CURRENT_SOURCE. Setting PPZ_SESSION inline in the recipe
+// makes the watch robust to that behaviour.
 func TestDefaultAgentPrompt_MonitorRecipePinsSession(t *testing.T) {
-	prompt := defaultAgentPrompt("eve")
-	if !strings.Contains(prompt, "PPZ_SESSION=eve ppz ls --watch") {
-		t.Errorf("defaultAgentPrompt Monitor recipe should set PPZ_SESSION=<handle> inline so it survives env-strip on Monitor subprocesses; got: %q", prompt)
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			prompt := defaultAgentPrompt("eve", h)
+			if !strings.Contains(prompt, "PPZ_SESSION=eve ppz ls --watch") {
+				t.Errorf("defaultAgentPrompt(%q) recipe should set PPZ_SESSION=<handle> inline so it survives env-strip on subprocesses; got: %q", h, prompt)
+			}
+		})
 	}
 }
 
@@ -334,8 +382,12 @@ func TestDefaultAgentPrompt_MonitorRecipePinsSession(t *testing.T) {
 // Mis-spelling it leaves an agent unable to grep / Ctrl-F into the
 // actual docs and tests.
 func TestDefaultAgentPrompt_UsesUncollaredTerminology(t *testing.T) {
-	if strings.Contains(defaultAgentPrompt("test-handle"), "uncoloured") {
-		t.Errorf("defaultAgentPrompt has the `uncoloured` typo; wire vocab is `uncollared` (WIRE.md §1)")
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if strings.Contains(defaultAgentPrompt("test-handle", h), "uncoloured") {
+				t.Errorf("defaultAgentPrompt(%q) has the `uncoloured` typo; wire vocab is `uncollared` (WIRE.md §1)", h)
+			}
+		})
 	}
 }
 
@@ -345,41 +397,127 @@ func TestDefaultAgentPrompt_UsesUncollaredTerminology(t *testing.T) {
 // bug, but the prompt is a man-page-style cheat sheet — a drifting
 // column makes it harder to scan and signals "nobody runs this through
 // a check". Allowing per-row variance lets a future edit silently
-// undo today's alignment work.
+// undo today's alignment work. Each harness has its own cheat sheet,
+// so the column is checked per-harness rather than across harnesses.
 func TestDefaultAgentPrompt_CommandColumnIsAligned(t *testing.T) {
-	descCol := -1
-	for i, line := range strings.Split(defaultAgentPrompt("test-handle"), "\n") {
-		if !strings.HasPrefix(line, "  ppz ") {
-			continue
-		}
-		// Description starts after the first run of 2+ spaces past the
-		// leading indent — same rule the CLI's usage-text wrapper uses
-		// (cli/root.go wrapUsageText).
-		idx := -1
-		for j := 2; j < len(line); j++ {
-			if line[j] == ' ' && j+1 < len(line) && line[j+1] == ' ' {
-				k := j
-				for k < len(line) && line[k] == ' ' {
-					k++
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			descCol := -1
+			for i, line := range strings.Split(defaultAgentPrompt("test-handle", h), "\n") {
+				if !strings.HasPrefix(line, "  ppz ") {
+					continue
 				}
-				idx = k
-				break
+				// Description starts after the first run of 2+ spaces past the
+				// leading indent — same rule the CLI's usage-text wrapper uses
+				// (cli/root.go wrapUsageText).
+				idx := -1
+				for j := 2; j < len(line); j++ {
+					if line[j] == ' ' && j+1 < len(line) && line[j+1] == ' ' {
+						k := j
+						for k < len(line) && line[k] == ' ' {
+							k++
+						}
+						idx = k
+						break
+					}
+				}
+				if idx < 0 {
+					t.Errorf("line %d (%q) has no description column", i, line)
+					continue
+				}
+				if descCol == -1 {
+					descCol = idx
+					continue
+				}
+				if idx != descCol {
+					t.Errorf("line %d (%q) starts description at col %d; expected col %d (matching the first command line)", i, line, idx, descCol)
+				}
 			}
-		}
-		if idx < 0 {
-			t.Errorf("line %d (%q) has no description column", i, line)
-			continue
-		}
-		if descCol == -1 {
-			descCol = idx
-			continue
-		}
-		if idx != descCol {
-			t.Errorf("line %d (%q) starts description at col %d; expected col %d (matching the first command line)", i, line, idx, descCol)
-		}
+			if descCol == -1 {
+				t.Fatalf("defaultAgentPrompt(%q) has no `  ppz …` lines to align", h)
+			}
+		})
 	}
-	if descCol == -1 {
-		t.Fatalf("defaultAgentPrompt has no `  ppz …` lines to align")
+}
+
+// TestDefaultAgentPrompt_Claude_KeepsMonitorPushNotificationRecipe pins
+// today's claude-specific wording. The Monitor + PushNotification
+// pattern is load-bearing for claude — both are first-class harness
+// tools that turn the agent push-driven rather than poll-driven — so
+// any harness-branched refactor must preserve them on the `--claude`
+// path verbatim. Other harnesses (no equivalent primitive) get
+// different bodies and are covered by their own tests.
+func TestDefaultAgentPrompt_Claude_KeepsMonitorPushNotificationRecipe(t *testing.T) {
+	prompt := defaultAgentPrompt("alice", "claude")
+	if !strings.Contains(prompt, "Create a persistent Monitor running") {
+		t.Errorf("claude prompt must keep the `Create a persistent Monitor running` recipe — Monitor is the claude-specific harness tool that turns ppz ls --watch push-driven; got: %q", prompt)
+	}
+	if !strings.Contains(prompt, "PushNotification") {
+		t.Errorf("claude prompt must reference PushNotification — without it the Monitor recipe has nowhere to fire on new arrivals; got: %q", prompt)
+	}
+}
+
+// TestDefaultAgentPrompt_Copilot_UsesBashDetachTrue pins copilot's
+// equivalent of claude's Monitor: copilot's bash tool with
+// `detach: true` runs the `ppz ls --watch` loop as a background
+// process. Without naming the option explicitly the agent is left
+// to guess (or worse, run the loop synchronously and block the
+// session). The "GitHub Copilot CLI" line up top primes copilot to
+// treat inbox messages as natural-language prompts rather than
+// raw shell commands — without it copilot was observed trying to
+// `exec` whatever arrived in inbox.
+func TestDefaultAgentPrompt_Copilot_UsesBashDetachTrue(t *testing.T) {
+	prompt := defaultAgentPrompt("alice", "copilot")
+	if !strings.Contains(prompt, "GitHub Copilot CLI") {
+		t.Errorf("copilot prompt should self-identify as `GitHub Copilot CLI` so the agent treats inbox messages as conversational prompts, not shell commands; got: %q", prompt)
+	}
+	if !strings.Contains(prompt, "detach: true") {
+		t.Errorf("copilot prompt should reference `detach: true` — copilot's bash-tool option for detached background processes (the analogue of claude's Monitor); got: %q", prompt)
+	}
+}
+
+// TestDefaultAgentPrompt_Codex_UsesForegroundWatchRecipe pins the
+// codex-family pattern: codex has no push primitive, so the agent
+// itself blocks on `ppz ls --watch` in the foreground and treats
+// the return as a wake signal that must be followed by a `ppz read`
+// before the next watch. The "wake signal" phrasing is what tells
+// codex not to re-watch immediately after wakeup (which would
+// re-trigger on the same unread snapshot indefinitely). The two
+// negative assertions guard against accidental copy-paste of the
+// claude- or copilot-specific tool names into the codex branch.
+func TestDefaultAgentPrompt_Codex_UsesForegroundWatchRecipe(t *testing.T) {
+	prompt := defaultAgentPrompt("alice", "codex")
+	if !strings.Contains(prompt, "wake signal") {
+		t.Errorf("codex prompt should describe `ppz ls --watch` as a wake signal so the agent reads before re-watching (codex has no push primitive); got: %q", prompt)
+	}
+	if strings.Contains(prompt, "PushNotification") {
+		t.Errorf("codex prompt must not reference PushNotification — that's a claude-specific harness tool codex does not have; got: %q", prompt)
+	}
+	if strings.Contains(prompt, "detach: true") {
+		t.Errorf("codex prompt must not reference `detach: true` — that's a copilot-specific bash-tool option codex does not have; got: %q", prompt)
+	}
+}
+
+// TestDefaultAgentPrompt_Gemini_FallsBackToCodexRecipe pins gemini
+// onto the codex-family foreground-watch recipe. Until gemini's
+// own background/notification primitives are confirmed, sharing
+// codex's prompt is the safe default: it names no harness-specific
+// tools, only ppz verbs and a generic wake/read loop.
+func TestDefaultAgentPrompt_Gemini_FallsBackToCodexRecipe(t *testing.T) {
+	prompt := defaultAgentPrompt("alice", "gemini")
+	if !strings.Contains(prompt, "wake signal") {
+		t.Errorf("gemini prompt should reuse codex's foreground-watch recipe (`wake signal` language) — no harness-specific tools, just the generic ppz watch/read loop; got: %q", prompt)
+	}
+}
+
+// TestDefaultAgentPrompt_Pi_FallsBackToCodexRecipe pins pi onto
+// the codex-family recipe for the same reason as gemini: until
+// pi's own primitives are known, the harness-agnostic foreground
+// loop is the safe default.
+func TestDefaultAgentPrompt_Pi_FallsBackToCodexRecipe(t *testing.T) {
+	prompt := defaultAgentPrompt("alice", "pi")
+	if !strings.Contains(prompt, "wake signal") {
+		t.Errorf("pi prompt should reuse codex's foreground-watch recipe (`wake signal` language) — no harness-specific tools, just the generic ppz watch/read loop; got: %q", prompt)
 	}
 }
 
@@ -984,7 +1122,7 @@ func TestSpawnScript_RunsUnderBashLoginShell(t *testing.T) {
 	spec := agentSpec{
 		harness: "claude",
 		model:   "opus",
-		prompt:  defaultAgentPrompt("alice"),
+		prompt:  defaultAgentPrompt("alice", "claude"),
 	}
 	harnessArgv, err := buildHarnessSpawnArgv(spec)
 	if err != nil {

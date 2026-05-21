@@ -176,7 +176,10 @@ type agentSpec struct {
 
 // defaultAgentPrompt returns the orientation prompt sent when the user
 // supplies no positional prompt and no --prompt-file. Templated on the
-// handle so the Monitor recipe can pin PPZ_SESSION=<handle> inline.
+// handle so the inbox-watch recipe can pin PPZ_SESSION=<handle> inline,
+// and dispatched on harness so each harness gets a prompt that names its
+// own primitives (claude → Monitor + PushNotification; copilot → bash
+// detach: true; codex/gemini/pi → foreground `ppz ls --watch` loop).
 //
 // Inheriting PPZ_SESSION from the parent shell is unreliable: some
 // harness/Monitor combinations don't propagate env to subprocesses
@@ -185,7 +188,8 @@ type agentSpec struct {
 // tty-less session id the daemon has never seen — every ppz call
 // inside then fails E_NO_CURRENT_SOURCE. Setting PPZ_SESSION inline
 // in the recipe makes it robust to any future env-strip behavior.
-func defaultAgentPrompt(handle string) string {
+func defaultAgentPrompt(handle, harness string) string {
+	_ = harness // scaffold: harness branching lands in the follow-up commit
 	return `You are an agent running inside a ppz (pipes) pty. Your handle is "` + handle + `". Your terminal output is published to ` + handle + `.stdout. Other agents can reach you via ` + handle + `.inbox.
 
 Useful commands:
@@ -402,7 +406,7 @@ func resolveAgentSpec(args []string) (agentSpec, string, error) {
 		prompt = string(body)
 	}
 	if prompt == "" {
-		prompt = defaultAgentPrompt(handle)
+		prompt = defaultAgentPrompt(handle, harness)
 	}
 
 	return agentSpec{harness: harness, model: model, prompt: prompt, newWindow: fNewWindow}, handle, nil
