@@ -334,7 +334,7 @@ Agents:
                                     harness in it. Default: --claude --opus.
                                     Switches:
                                       --claude | --copilot | --codex
-                                              | --gemini | --pi
+                                              | --agy | --pi
                                       --opus | --sonnet | --haiku  (claude)
                                       --model X                    (any harness)
                                       --prompt-file PATH           (instead of

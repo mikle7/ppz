@@ -17,7 +17,7 @@ type terminalInboxAlertConfig struct {
 	Cooldown  time.Duration
 	Message   string
 	// Harness identifies which agent harness the wrapped PTY is
-	// running (one of "claude" / "copilot" / "codex" / "gemini" /
+	// running (one of "claude" / "copilot" / "codex" / "agy" /
 	// "pi", or empty for non-agent shares). Used by
 	// submitInputForHarness to pick the right submit-key byte
 	// sequence — claude reads `\x1b[13u` (kitty keyboard protocol

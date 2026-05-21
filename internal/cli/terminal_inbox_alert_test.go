@@ -185,14 +185,14 @@ func TestSubmitInputForHarness_Claude(t *testing.T) {
 // is the safest default for non-agent `ppz terminal share` calls
 // where PPZ_AGENT_HARNESS is unset.
 func TestSubmitInputForHarness_NonClaudeUsesCarriageReturn(t *testing.T) {
-	for _, h := range []string{"copilot", "codex", "gemini", "pi", "", "bogus"} {
+	for _, h := range []string{"copilot", "codex", "agy", "pi", "", "bogus"} {
 		t.Run(h, func(t *testing.T) {
 			got := submitInputForHarness(h, "hello\n")
 			if !strings.HasSuffix(got, "\r") {
 				t.Errorf("submitInputForHarness(%q) = %q, want trailing `\\r` so the harness's REPL submits on plain carriage return (kitty Enter is claude-only)", h, got)
 			}
 			if strings.Contains(got, "\x1b[13u") {
-				t.Errorf("submitInputForHarness(%q) = %q, must not contain kitty Enter escape — copilot/codex/gemini/pi treat it as literal bytes and the alert lands unsubmitted in the input buffer", h, got)
+				t.Errorf("submitInputForHarness(%q) = %q, must not contain kitty Enter escape — copilot/codex/agy/pi treat it as literal bytes and the alert lands unsubmitted in the input buffer", h, got)
 			}
 			if !strings.HasPrefix(got, "hello") {
 				t.Errorf("submitInputForHarness(%q) = %q, want `hello` prefix (message preserved)", h, got)
