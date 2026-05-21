@@ -2,7 +2,7 @@
 ppz agent create: missing handle: ppz agent create <name> [<prompt>] [flags...]
 rc=2
 --- 2: --claude --codex (mutually exclusive harnesses) ---
-ppz agent create: only one of --claude/--copilot/--codex/--gemini/--pi may be set; got [claude codex]
+ppz agent create: only one of --claude/--copilot/--codex/--agy/--pi may be set; got [claude codex]
 rc=2
 --- 3: --opus --sonnet (mutually exclusive shortcuts) ---
 ppz agent create: only one of --opus/--sonnet/--haiku may be set
