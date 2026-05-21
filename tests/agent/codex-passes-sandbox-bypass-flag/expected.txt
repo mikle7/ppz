@@ -1,0 +1,1 @@
+OK: codex invoked with --dangerously-bypass-approvals-and-sandbox
