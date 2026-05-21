@@ -89,15 +89,28 @@ func cmdSend(args []string) error {
 	}
 	handle, channel := target[:idx], target[idx+1:]
 
-	if *requestAck && *from == "" {
+	if *requestAck {
+		if *from != "" {
+			// --from and --request-ack don't compose. The ack:read auto-
+			// emit always routes to <envelope.sender>.inbox. --from lets
+			// the caller stamp any handle as the sender (informational
+			// per the spec — no auth gate), so combining them is asking
+			// the recipient's daemon to send an ack to an inbox the
+			// caller may or may not control. Silent dead letter at best,
+			// surprising delivery to a third party at worst.
+			//
+			// Resolution: if you want acks routed to your own inbox,
+			// `ppz set handle <handle>` first — that pins your session
+			// current AND matches your reading identity, so ack routing
+			// goes where you expect.
+			fmt.Fprintln(sendErr, "error: --from and --request-ack don't compose: the ack would route to <--from>.inbox, which may not be your reading inbox. Run 'ppz set handle <handle>' first to align sender identity with ack destination, or drop --request-ack.")
+			os.Exit(2)
+		}
 		// Preflight: --request-ack is only meaningful when the sender has
 		// a resolvable identity — otherwise the receiver's daemon, even
 		// if it does the ack auto-emit, has no destination to send the
 		// ack back to. Better to reject early at the CLI than let the
 		// user believe an ack will arrive.
-		//
-		// Skipped when --from is set: that flag IS the explicit sender,
-		// so the ack has a destination by definition.
 		if _, err := effectiveCurrentHandle(); err != nil {
 			return err
 		}
