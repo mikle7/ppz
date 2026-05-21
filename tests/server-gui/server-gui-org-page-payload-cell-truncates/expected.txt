@@ -1,2 +1,2 @@
-payload-class=cell-truncate
+payload-has-cell-truncate=true
 exit=0

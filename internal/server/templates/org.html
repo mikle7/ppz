@@ -39,7 +39,7 @@
           <tr data-source="{{.Handle}}"
               data-source-namespace="{{.Namespace}}"
               data-source-row="{{.Handle}}:{{.Pipe}}:{{.LastMessageAt}}:{{.PayloadDisplay}}">
-            <td data-cell="namespace"><code>{{.Namespace}}</code></td>
+            <td data-cell="namespace" class="cell-nowrap"><code>{{.Namespace}}</code></td>
             <td data-cell="source"><code>{{.Handle}}</code></td>
             <td data-cell="pipe" class="cell-nowrap">
               <a href="{{.PipeLink}}" data-source-pipe-link="{{.PipeLink}}">{{.Pipe}}</a>
@@ -48,7 +48,7 @@
               {{end}}
             </td>
             <td data-cell="last-message" class="cell-nowrap">{{if .HasLastMessage}}{{.LastMessageAt}}{{else}}<span class="empty">—</span>{{end}}</td>
-            <td data-cell="payload" class="cell-truncate" title="{{.PayloadDisplay}}">{{if .HasLastMessage}}{{.PayloadDisplay}}{{else}}<span class="empty">—</span>{{end}}</td>
+            <td data-cell="payload" class="cell-truncate"{{if .HasLastMessage}} title="{{.PayloadDisplay}}"{{end}}>{{if .HasLastMessage}}{{.PayloadDisplay}}{{else}}<span class="empty">—</span>{{end}}</td>
           </tr>
           {{end}}
         </tbody>

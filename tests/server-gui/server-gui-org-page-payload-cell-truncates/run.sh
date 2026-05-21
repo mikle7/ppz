@@ -21,12 +21,13 @@ wait_for 20 "ppz_a ls | grep -q 'fairly long payload'" >/dev/null
 PAGE="$(curl_server "/orgs/alpha")"
 
 # Project just the chat.inbox row (collapse the multi-line <tr> tag
-# first), then extract the data-cell="payload" td's class list.
+# first), then assert the data-cell="payload" td carries the
+# `cell-truncate` class. Boundary matcher (`\bcell-truncate\b`) so a
+# future sibling class on the same cell doesn't trip a non-regression.
 echo "$PAGE" \
   | tr '\n' ' ' \
   | sed -E 's/<tr /\n<tr /g' \
   | grep -E 'data-source-row="chat:inbox:' \
-  | grep -oE '<td[^>]*data-cell="payload"[^>]*class="[^"]*"' \
-  | grep -oE 'class="[^"]*"' \
-  | sed -E 's/class="([^"]*)"/payload-class=\1/' \
-  | head -1
+  | grep -oE '<td[^>]*data-cell="payload"[^>]*class="[^"]*\bcell-truncate\b[^"]*"' \
+  | head -1 \
+  | sed -E 's/.*/payload-has-cell-truncate=true/'
