@@ -89,12 +89,15 @@ func cmdSend(args []string) error {
 	}
 	handle, channel := target[:idx], target[idx+1:]
 
-	if *requestAck {
+	if *requestAck && *from == "" {
 		// Preflight: --request-ack is only meaningful when the sender has
-		// a current source — otherwise the receiver's daemon, even if
-		// it does the ack auto-emit, has no destination to send the ack
-		// back to. Better to reject early at the CLI than let the user
-		// believe an ack will arrive.
+		// a resolvable identity — otherwise the receiver's daemon, even
+		// if it does the ack auto-emit, has no destination to send the
+		// ack back to. Better to reject early at the CLI than let the
+		// user believe an ack will arrive.
+		//
+		// Skipped when --from is set: that flag IS the explicit sender,
+		// so the ack has a destination by definition.
 		if _, err := effectiveCurrentHandle(); err != nil {
 			return err
 		}
