@@ -337,6 +337,12 @@ func cmdTerminalShare(args []string) error {
 		IdleAfter: idleAfter,
 		Cooldown:  cooldown,
 		Message:   terminalInboxAlertMessage,
+		// PPZ_AGENT_HARNESS is exported into this process's env by
+		// setAgentEnv (agent.go) when the share is launched via
+		// `ppz agent create --<harness>`; standalone `ppz terminal
+		// share` invocations have no harness context and fall into
+		// the "" arm of submitInputForHarness (plain `\r`).
+		Harness: os.Getenv("PPZ_AGENT_HARNESS"),
 	}, ptmx)
 
 	wg.Add(1)
