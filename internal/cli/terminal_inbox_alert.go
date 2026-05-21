@@ -164,18 +164,17 @@ func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
 // is the lowest-risk default since most line-discipline REPLs accept
 // it as Enter, and the pause never hurts a REPL that would have
 // accepted CR in the same burst.
-//
-// GREEN follow-up implements the pause; today's stub still ships the
-// terminator in the same write so the new pause-required tests fail
-// as expected.
 func submitAlertToPTY(w io.Writer, harness, message string, sleep func(time.Duration)) error {
-	_ = sleep // GREEN: per-harness pause lands in the follow-up commit
 	trimmed := strings.TrimRight(message, "\r\n")
 	if harness == "claude" {
 		_, err := io.WriteString(w, trimmed+"\x1b[13u")
 		return err
 	}
-	_, err := io.WriteString(w, trimmed+"\r")
+	if _, err := io.WriteString(w, trimmed); err != nil {
+		return err
+	}
+	sleep(100 * time.Millisecond)
+	_, err := io.WriteString(w, "\r")
 	return err
 }
 
