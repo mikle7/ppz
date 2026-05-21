@@ -1,0 +1,2 @@
+payload-class=cell-truncate
+exit=0
