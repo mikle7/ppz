@@ -87,6 +87,17 @@ func (s *Server) handleGUIIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// namespaceDisplay renders a manifold for the org pipes table's
+// NAMESPACE column: empty (root) → "-", otherwise the manifold path
+// verbatim. Mirrors the convention `ppz ls` uses in cliproto so the
+// CLI and GUI surfaces stay aligned.
+func namespaceDisplay(manifold string) string {
+	if manifold == "" {
+		return "-"
+	}
+	return manifold
+}
+
 // siteURL reconstructs the browser-facing origin (scheme://host) from
 // the current request. Honours the X-Forwarded-Proto header so reverse-
 // proxied https deployments render correctly.
@@ -205,6 +216,7 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type sourceRow struct {
+		Namespace      string // manifold path, or "-" for root (mirrors `ppz ls`)
 		Handle         string
 		Pipe           string // broadcast / stdin / stdout / user-created
 		PipeLink       string // /orgs/<slug>/sources/<handle>/pipes/<pipe>
@@ -244,9 +256,10 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 		js, _ := s.JSFor(ctx, org.ID)
 		for _, p := range pipes {
 			row := sourceRow{
-				Handle:   src.Handle,
-				Pipe:     p,
-				PipeLink: fmt.Sprintf("/orgs/%s/sources/%s/pipes/%s", org.Name, src.Handle, p),
+				Namespace: namespaceDisplay(src.Manifold),
+				Handle:    src.Handle,
+				Pipe:      p,
+				PipeLink:  fmt.Sprintf("/orgs/%s/sources/%s/pipes/%s", org.Name, src.Handle, p),
 			}
 			streamName := natsubj.BuildStreamName(org.ID, src.Manifold, src.Handle, p)
 			if js == nil {
@@ -287,14 +300,20 @@ func (s *Server) handleGUIOrgTab(w http.ResponseWriter, r *http.Request) {
 	if len(uncollared) > 0 {
 		js, _ := s.JSFor(ctx, org.ID)
 		for _, up := range uncollared {
+			// URL routing still needs the combined `<manifold>.<leaf>`
+			// form so the pipe-detail handler can split on the last
+			// dot to recover (manifold, name). But the PIPE cell
+			// shows just the leaf — the manifold fact moves into
+			// the NAMESPACE column.
 			pipePath := up.Name
 			if up.Manifold != "" {
 				pipePath = up.Manifold + "." + up.Name
 			}
 			row := sourceRow{
-				Handle:   "",
-				Pipe:     pipePath,
-				PipeLink: fmt.Sprintf("/orgs/%s/pipes/%s", org.Name, pipePath),
+				Namespace: namespaceDisplay(up.Manifold),
+				Handle:    "",
+				Pipe:      up.Name,
+				PipeLink:  fmt.Sprintf("/orgs/%s/pipes/%s", org.Name, pipePath),
 			}
 			if js != nil {
 				streamName := natsubj.BuildStreamName(org.ID, up.Manifold, "", up.Name)

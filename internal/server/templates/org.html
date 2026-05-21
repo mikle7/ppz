@@ -32,12 +32,14 @@
       {{if .Sources}}
       <table id="pipes">
         <thead>
-          <tr><th>source</th><th>pipe</th><th>Last Message</th><th>payload</th></tr>
+          <tr><th>namespace</th><th>source</th><th>pipe</th><th>Last Message</th><th>payload</th></tr>
         </thead>
         <tbody>
           {{range .Sources}}
           <tr data-source="{{.Handle}}"
+              data-source-namespace="{{.Namespace}}"
               data-source-row="{{.Handle}}:{{.Pipe}}:{{.LastMessageAt}}:{{.PayloadDisplay}}">
+            <td><code>{{.Namespace}}</code></td>
             <td><code>{{.Handle}}</code></td>
             <td>
               <a href="{{.PipeLink}}" data-source-pipe-link="{{.PipeLink}}">{{.Pipe}}</a>
