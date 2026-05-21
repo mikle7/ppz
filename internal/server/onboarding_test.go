@@ -47,15 +47,20 @@ func TestDashboard_ShowsOnboardingWhenNoPipes(t *testing.T) {
 		`data-copy-target='[data-cmd="install"]'`,
 		`data-copy-target='[data-cmd="login"]'`,
 		`data-copy-target='[data-cmd="prompt"]'`,
+		"--agy",                            // onboarding example for the agy harness (replacing the deprecated gemini CLI)
 	} {
 		if !strings.Contains(body, hint) {
 			t.Errorf("onboarding body missing %q", hint)
 		}
 	}
 	// Old step 4 (ppz pipe create + ppz send) removed per design.
+	// `--gemini` removed since Google deprecated the gemini CLI in
+	// favour of antigravity (`agy`) — leaving it in the get-started
+	// snippet would teach new users a flag the CLI no longer accepts.
 	for _, removed := range []string{
 		"ppz pipe create lobby",
 		`ppz send lobby "hello"`,
+		"--gemini",
 	} {
 		if strings.Contains(body, removed) {
 			t.Errorf("onboarding body still contains removed step %q", removed)
