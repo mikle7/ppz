@@ -156,49 +156,71 @@ func TestTerminalInboxAlertPumpBuffersUserInputDuringAlertMode(t *testing.T) {
 	}
 }
 
-// TestSubmitInputForHarness_Claude pins today's behaviour: the
-// claude branch must return `\x1b[13u` (kitty keyboard protocol
-// Enter) so Claude Code's REPL submits the alert as a clean user
-// turn instead of leaving the literal escape sequence in its input
-// buffer.
-func TestSubmitInputForHarness_Claude(t *testing.T) {
-	got := submitInputForHarness("claude", "hello\n")
-	if !strings.HasSuffix(got, "\x1b[13u") {
-		t.Errorf("submitInputForHarness(\"claude\") = %q, want \\x1b[13u suffix (kitty keyboard Enter); claude's REPL relies on this to submit", got)
+// TestSubmitAlertToPTY_Claude pins the claude path: kitty keyboard
+// protocol Enter (`\x1b[13u`) is a single key-event escape, so
+// claude's REPL submits whatever input is on the line when it sees
+// the escape regardless of whether the bytes arrived in one write
+// or several. No pause is needed — and adding one would slow every
+// claude alert by 100ms for zero benefit. The test injects a
+// recording sleeper to verify it's never called on the claude path.
+func TestSubmitAlertToPTY_Claude(t *testing.T) {
+	var buf bytes.Buffer
+	var sleeps []time.Duration
+	if err := submitAlertToPTY(&buf, "claude", "hello\n", func(d time.Duration) {
+		sleeps = append(sleeps, d)
+	}); err != nil {
+		t.Fatalf("submitAlertToPTY: %v", err)
 	}
-	if !strings.HasPrefix(got, "hello") {
-		t.Errorf("submitInputForHarness(\"claude\") = %q, want `hello` prefix (message preserved)", got)
+	if len(sleeps) != 0 {
+		t.Errorf("claude path called sleep %d time(s) (%v); kitty Enter is a single key event, no pause needed", len(sleeps), sleeps)
 	}
-	if strings.HasSuffix(got, "\n\x1b[13u") || strings.HasSuffix(got, "\r\x1b[13u") {
-		t.Errorf("submitInputForHarness(\"claude\") = %q, want trailing CR/LF stripped before the kitty terminator", got)
+	if buf.String() != "hello\x1b[13u" {
+		t.Errorf("claude buf=%q; want \"hello\\x1b[13u\" (message + kitty Enter, no trailing CR/LF before terminator)", buf.String())
 	}
 }
 
-// TestSubmitInputForHarness_NonClaudeUsesCarriageReturn pins the
-// fix for the bug surfaced on copilot: every non-claude harness
-// must get a plain `\r` terminator. The kitty-Enter escape
-// (`\x1b[13u`) is only honoured by Claude Code; everyone else's
-// REPL leaves the bytes in the input buffer literally, which is
-// what made the alert visible as a `Please run 'ppz read inbox'
-// and action messages` string sitting unsubmitted on copilot
-// rather than triggering a turn. The empty/unknown harness arm
-// is the safest default for non-agent `ppz terminal share` calls
-// where PPZ_AGENT_HARNESS is unset.
-func TestSubmitInputForHarness_NonClaudeUsesCarriageReturn(t *testing.T) {
+// TestSubmitAlertToPTY_NonClaude_PausesBeforeCarriageReturn pins
+// the fix for the user-observed bug: with the message + `\r` in a
+// single write burst, copilot and codex were treating the CR as a
+// literal newline inside the line rather than as a submit. The
+// working pattern in `ppz command -cr` (cmdCommand at
+// command.go:93) writes the message, waits 100ms, then writes the
+// CR — two writes with a pause between them. Mirror that here.
+//
+// The test injects a sleeper that snapshots the buffer at the
+// moment sleep is called, so we can prove three things atomically:
+//   1. The pause happens exactly once, at 100ms (matches cmdCommand).
+//   2. The CR has NOT been written yet when sleep is called — the
+//      message is on the wire alone, giving the REPL time to flush
+//      it before the submit byte arrives.
+//   3. The final buffer is message + `\r` (sequence preserved).
+//
+// Runs over every harness that takes the `\r` arm: known
+// non-claude harnesses, plus empty (non-agent share) and a bogus
+// string (forward-compat default).
+func TestSubmitAlertToPTY_NonClaude_PausesBeforeCarriageReturn(t *testing.T) {
 	for _, h := range []string{"copilot", "codex", "agy", "pi", "", "bogus"} {
 		t.Run(h, func(t *testing.T) {
-			got := submitInputForHarness(h, "hello\n")
-			if !strings.HasSuffix(got, "\r") {
-				t.Errorf("submitInputForHarness(%q) = %q, want trailing `\\r` so the harness's REPL submits on plain carriage return (kitty Enter is claude-only)", h, got)
+			var buf bytes.Buffer
+			var snapshot string
+			var sleeps []time.Duration
+			if err := submitAlertToPTY(&buf, h, "hello\n", func(d time.Duration) {
+				snapshot = buf.String()
+				sleeps = append(sleeps, d)
+			}); err != nil {
+				t.Fatalf("submitAlertToPTY(%q): %v", h, err)
 			}
-			if strings.Contains(got, "\x1b[13u") {
-				t.Errorf("submitInputForHarness(%q) = %q, must not contain kitty Enter escape — copilot/codex/agy/pi treat it as literal bytes and the alert lands unsubmitted in the input buffer", h, got)
+			if len(sleeps) != 1 {
+				t.Fatalf("harness %q: sleep called %d time(s); want exactly 1 (cmdCommand -cr uses one 100ms pause between message and CR; same pattern)", h, len(sleeps))
 			}
-			if !strings.HasPrefix(got, "hello") {
-				t.Errorf("submitInputForHarness(%q) = %q, want `hello` prefix (message preserved)", h, got)
+			if sleeps[0] != 100*time.Millisecond {
+				t.Errorf("harness %q: sleep duration=%v; want 100ms (matches cmdCommand at command.go:93)", h, sleeps[0])
 			}
-			if strings.HasSuffix(got, "\n\r") || strings.HasSuffix(got, "\r\r") {
-				t.Errorf("submitInputForHarness(%q) = %q, want trailing CR/LF stripped before the carriage-return terminator", h, got)
+			if snapshot != "hello" {
+				t.Errorf("harness %q: buffer at pause = %q; want \"hello\" (message only; CR must not be written until after the pause — otherwise copilot/codex bundle it with the message and treat it as a literal newline)", h, snapshot)
+			}
+			if buf.String() != "hello\r" {
+				t.Errorf("harness %q: final buf=%q; want \"hello\\r\"", h, buf.String())
 			}
 		})
 	}

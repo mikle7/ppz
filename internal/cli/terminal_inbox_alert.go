@@ -108,7 +108,7 @@ func newTerminalInboxAlertPump(cfg terminalInboxAlertConfig, pty io.Writer) *ter
 		sm:  newTerminalInboxAlertStateMachine(cfg),
 		pty: pty,
 		write: func(message string) {
-			_, _ = io.WriteString(pty, submitInputForHarness(harness, message))
+			_ = submitAlertToPTY(pty, harness, message, time.Sleep)
 		},
 	}
 }
@@ -119,7 +119,7 @@ func newTerminalInboxAlertPumpForPTY(cfg terminalInboxAlertConfig, pty *os.File)
 	pump.write = func(message string) {
 		restore := setPTYInputEcho(pty.Fd(), false)
 		defer restore()
-		_, _ = io.WriteString(pty, submitInputForHarness(harness, message))
+		_ = submitAlertToPTY(pty, harness, message, time.Sleep)
 	}
 	return pump
 }
@@ -143,25 +143,40 @@ func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
 	return true
 }
 
-// submitInputForHarness returns message with its trailing newline
-// (CR/LF) stripped and a harness-appropriate submit terminator
-// appended, so the alert pump can inject a "press Enter" effect into
-// the wrapped PTY's input. Claude Code reads `\x1b[13u` (kitty
-// keyboard protocol Enter) and treats it as a clean user-submit;
-// every other harness's REPL takes that escape as literal bytes
-// (visible junk on screen) and submits on plain `\r` instead.
+// submitAlertToPTY writes the alert message followed by a
+// harness-appropriate Enter-equivalent into w. Claude Code reads
+// `\x1b[13u` (kitty keyboard protocol Enter) as a single key event,
+// so we send the message and terminator in one write. Every other
+// harness's REPL needs a plain `\r` to submit — but only when the CR
+// arrives slightly after the message bytes: copilot and codex were
+// observed treating the CR as a literal newline inside the line
+// rather than a submit when it shipped in the same write burst as
+// the message. `ppz command -cr` already uses a 100ms pause between
+// the message and the CR (see cmdCommand at command.go:93) and works
+// reliably on both harnesses, so we mirror that pattern.
+//
+// sleep is injected so tests can verify the pause happened without
+// blocking the test process. Production callers pass time.Sleep.
 //
 // Empty/unknown harness — non-agent `ppz terminal share` calls
 // where PPZ_AGENT_HARNESS is unset, or a harness we haven't yet
-// confirmed — falls into the `\r` arm: a plain carriage return is
-// the lowest-risk default since most line-discipline REPLs accept
-// it as Enter, whereas the kitty escape only works on Claude Code.
-func submitInputForHarness(harness, message string) string {
+// confirmed — falls into the `\r`+pause arm: a plain carriage return
+// is the lowest-risk default since most line-discipline REPLs accept
+// it as Enter, and the pause never hurts a REPL that would have
+// accepted CR in the same burst.
+//
+// GREEN follow-up implements the pause; today's stub still ships the
+// terminator in the same write so the new pause-required tests fail
+// as expected.
+func submitAlertToPTY(w io.Writer, harness, message string, sleep func(time.Duration)) error {
+	_ = sleep // GREEN: per-harness pause lands in the follow-up commit
 	trimmed := strings.TrimRight(message, "\r\n")
 	if harness == "claude" {
-		return trimmed + "\x1b[13u"
+		_, err := io.WriteString(w, trimmed+"\x1b[13u")
+		return err
 	}
-	return trimmed + "\r"
+	_, err := io.WriteString(w, trimmed+"\r")
+	return err
 }
 
 func (p *terminalInboxAlertPump) BeginAlertMode(now time.Time) {
