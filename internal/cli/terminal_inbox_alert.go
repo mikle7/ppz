@@ -16,6 +16,14 @@ type terminalInboxAlertConfig struct {
 	IdleAfter time.Duration
 	Cooldown  time.Duration
 	Message   string
+	// Harness identifies which agent harness the wrapped PTY is
+	// running (one of "claude" / "copilot" / "codex" / "gemini" /
+	// "pi", or empty for non-agent shares). Used by
+	// submitInputForHarness to pick the right submit-key byte
+	// sequence — claude reads `\x1b[13u` (kitty keyboard protocol
+	// Enter), other harnesses' REPLs treat that escape as literal
+	// bytes and need a plain `\r` to submit.
+	Harness string
 }
 
 type terminalInboxAlertStateMachine struct {
@@ -95,21 +103,23 @@ func newTerminalInboxAlertPump(cfg terminalInboxAlertConfig, pty io.Writer) *ter
 	if cfg.Message == "" {
 		cfg.Message = terminalInboxAlertMessage
 	}
+	harness := cfg.Harness
 	return &terminalInboxAlertPump{
 		sm:  newTerminalInboxAlertStateMachine(cfg),
 		pty: pty,
 		write: func(message string) {
-			_, _ = io.WriteString(pty, claudeSubmitInput(message))
+			_, _ = io.WriteString(pty, submitInputForHarness(harness, message))
 		},
 	}
 }
 
 func newTerminalInboxAlertPumpForPTY(cfg terminalInboxAlertConfig, pty *os.File) *terminalInboxAlertPump {
 	pump := newTerminalInboxAlertPump(cfg, pty)
+	harness := cfg.Harness
 	pump.write = func(message string) {
 		restore := setPTYInputEcho(pty.Fd(), false)
 		defer restore()
-		_, _ = io.WriteString(pty, claudeSubmitInput(message))
+		_, _ = io.WriteString(pty, submitInputForHarness(harness, message))
 	}
 	return pump
 }
@@ -133,7 +143,18 @@ func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
 	return true
 }
 
-func claudeSubmitInput(message string) string {
+// submitInputForHarness returns message with its trailing newline
+// (CR/LF) stripped and a harness-appropriate submit terminator
+// appended, so the alert pump can inject a "press Enter" effect into
+// the wrapped PTY's input. Claude Code reads `\x1b[13u` (kitty
+// keyboard protocol Enter) and treats it as a clean user-submit;
+// every other harness's REPL takes that escape as literal bytes
+// (visible junk on screen) and submits on plain `\r` instead. The
+// GREEN follow-up commit implements the branch; today's stub
+// always returns the claude shape so the existing claude pump test
+// continues to pass.
+func submitInputForHarness(harness, message string) string {
+	_ = harness // GREEN: per-harness branching lands in the follow-up commit
 	return strings.TrimRight(message, "\r\n") + "\x1b[13u"
 }
 

@@ -71,6 +71,7 @@ func TestTerminalInboxAlertPumpWritesClaudeSubmittedInboxAlertToPTYStdinAfterIdl
 	pump := newTerminalInboxAlertPump(terminalInboxAlertConfig{
 		IdleAfter: 15 * time.Second,
 		Message:   terminalInboxAlertMessage,
+		Harness:   "claude",
 	}, &ptyStdin)
 
 	pump.ObserveUserInput(now, []byte("half typed command"))
@@ -152,6 +153,86 @@ func TestTerminalInboxAlertPumpBuffersUserInputDuringAlertMode(t *testing.T) {
 	pump.EndAlertMode(now.Add(17 * time.Second))
 	if !strings.Contains(ptyStdin.String(), "typed during alert") {
 		t.Fatalf("PTY stdin after alert mode = %q, want buffered user input flushed", ptyStdin.String())
+	}
+}
+
+// TestSubmitInputForHarness_Claude pins today's behaviour: the
+// claude branch must return `\x1b[13u` (kitty keyboard protocol
+// Enter) so Claude Code's REPL submits the alert as a clean user
+// turn instead of leaving the literal escape sequence in its input
+// buffer.
+func TestSubmitInputForHarness_Claude(t *testing.T) {
+	got := submitInputForHarness("claude", "hello\n")
+	if !strings.HasSuffix(got, "\x1b[13u") {
+		t.Errorf("submitInputForHarness(\"claude\") = %q, want \\x1b[13u suffix (kitty keyboard Enter); claude's REPL relies on this to submit", got)
+	}
+	if !strings.HasPrefix(got, "hello") {
+		t.Errorf("submitInputForHarness(\"claude\") = %q, want `hello` prefix (message preserved)", got)
+	}
+	if strings.HasSuffix(got, "\n\x1b[13u") || strings.HasSuffix(got, "\r\x1b[13u") {
+		t.Errorf("submitInputForHarness(\"claude\") = %q, want trailing CR/LF stripped before the kitty terminator", got)
+	}
+}
+
+// TestSubmitInputForHarness_NonClaudeUsesCarriageReturn pins the
+// fix for the bug surfaced on copilot: every non-claude harness
+// must get a plain `\r` terminator. The kitty-Enter escape
+// (`\x1b[13u`) is only honoured by Claude Code; everyone else's
+// REPL leaves the bytes in the input buffer literally, which is
+// what made the alert visible as a `Please run 'ppz read inbox'
+// and action messages` string sitting unsubmitted on copilot
+// rather than triggering a turn. The empty/unknown harness arm
+// is the safest default for non-agent `ppz terminal share` calls
+// where PPZ_AGENT_HARNESS is unset.
+func TestSubmitInputForHarness_NonClaudeUsesCarriageReturn(t *testing.T) {
+	for _, h := range []string{"copilot", "codex", "gemini", "pi", "", "bogus"} {
+		t.Run(h, func(t *testing.T) {
+			got := submitInputForHarness(h, "hello\n")
+			if !strings.HasSuffix(got, "\r") {
+				t.Errorf("submitInputForHarness(%q) = %q, want trailing `\\r` so the harness's REPL submits on plain carriage return (kitty Enter is claude-only)", h, got)
+			}
+			if strings.Contains(got, "\x1b[13u") {
+				t.Errorf("submitInputForHarness(%q) = %q, must not contain kitty Enter escape — copilot/codex/gemini/pi treat it as literal bytes and the alert lands unsubmitted in the input buffer", h, got)
+			}
+			if !strings.HasPrefix(got, "hello") {
+				t.Errorf("submitInputForHarness(%q) = %q, want `hello` prefix (message preserved)", h, got)
+			}
+			if strings.HasSuffix(got, "\n\r") || strings.HasSuffix(got, "\r\r") {
+				t.Errorf("submitInputForHarness(%q) = %q, want trailing CR/LF stripped before the carriage-return terminator", h, got)
+			}
+		})
+	}
+}
+
+// TestTerminalInboxAlertPump_CopilotHarness_UsesCarriageReturnSubmit
+// pins the integration: the pump must thread cfg.Harness through
+// to its write callback so the on-PTY bytes carry the
+// harness-appropriate submit terminator. Without the wiring,
+// configuring Harness: "copilot" would still produce the kitty
+// escape and copilot's input buffer keeps showing the literal
+// alert message — exactly the user-observed bug.
+func TestTerminalInboxAlertPump_CopilotHarness_UsesCarriageReturnSubmit(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	var ptyStdin bytes.Buffer
+	pump := newTerminalInboxAlertPump(terminalInboxAlertConfig{
+		IdleAfter: 15 * time.Second,
+		Message:   terminalInboxAlertMessage,
+		Harness:   "copilot",
+	}, &ptyStdin)
+
+	pump.ObserveInboxMessage(now, cliproto.ReadMessage{Sender: "foo"})
+	if wrote := pump.Flush(now.Add(16 * time.Second)); !wrote {
+		t.Fatal("Flush after idle did not write alert")
+	}
+	got := ptyStdin.String()
+	if !strings.HasPrefix(got, "Please run 'ppz read inbox' and action messages") {
+		t.Errorf("PTY stdin alert = %q, want plain alert text prefix", got)
+	}
+	if !strings.HasSuffix(got, "\r") {
+		t.Errorf("PTY stdin alert = %q, want trailing `\\r` (copilot's REPL submits on carriage return; kitty Enter would leave the alert literal in the input buffer)", got)
+	}
+	if strings.Contains(got, "\x1b[13u") {
+		t.Errorf("PTY stdin alert = %q, must not contain claude's kitty Enter escape on copilot harness", got)
 	}
 }
 
