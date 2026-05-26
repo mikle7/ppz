@@ -1,5 +1,0 @@
-HH:MM:SS  -             older payload
---- ls after await ---
-alpha 0 1 RELATIVE older payload foo
-beta 1 1 RELATIVE newer payload foo
-exit=0

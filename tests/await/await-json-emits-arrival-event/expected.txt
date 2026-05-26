@@ -1,3 +1,0 @@
-{"event":"arrival","pipe":"chat.inbox"}
-json payload
-exit=0

@@ -1,5 +1,0 @@
-HH:MM:SS  foo           team chat
---- ls after await ---
-lobby 1 1 RELATIVE root noise foo
-team-a.chat 0 1 RELATIVE team chat foo
-exit=0

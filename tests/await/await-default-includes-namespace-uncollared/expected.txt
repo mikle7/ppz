@@ -1,2 +1,0 @@
-HH:MM:SS  foo           namespace hello
-exit=0

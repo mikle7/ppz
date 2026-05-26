@@ -347,9 +347,9 @@ var allHarnesses = []string{"claude", "copilot", "codex", "agy", "pi"}
 
 // backgroundMonitorHarnesses are the harnesses whose prompts wrap the
 // `ppz ls --watch` loop in a detached/background process (claude's
-// Monitor, copilot's bash detach:true). They share two invariants
-// (`sleep 60` throttle, no `ppz await` mention) that don't apply to
-// the codex-family foreground-watch pattern.
+// Monitor, copilot's bash detach:true). They share the `sleep 60`
+// throttle invariant that doesn't apply to the codex-family
+// foreground-watch pattern.
 var backgroundMonitorHarnesses = []string{"claude", "copilot"}
 
 // TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb keeps `ppz broadcast`
@@ -370,11 +370,9 @@ func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
 // TestDefaultAgentPrompt_MentionsLsWatch pins `ppz ls --watch` as
 // the recommended inbox-awareness primitive. It blocks until any
 // pipe has unread, prints a snapshot, and exits without advancing
-// any cursor — which is what a watch wants. The previous
-// recommendation (`ppz await`) drains as it follows, so wiring a
-// monitor to await races any later `ppz read inbox` and the
-// user-visible bug is "the agent claims it acted but my read shows
-// nothing". Every harness branch must reference the watch verb.
+// any cursor — which is what a watch wants. Every harness branch
+// must reference the watch verb so agents have a documented way to
+// idle without busy-looping.
 func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
 	for _, h := range allHarnesses {
 		t.Run(h, func(t *testing.T) {
@@ -401,20 +399,17 @@ func TestDefaultAgentPrompt_MentionsWho(t *testing.T) {
 	}
 }
 
-// TestDefaultAgentPrompt_OmitsAwait — keep `ppz await` out of the
-// boot prompt *for the background-Monitor harnesses*. It's still a
-// valid verb when the agent actively wants to drain, but mentioning
-// it in the useful-commands cheat sheet led agents to wire it into
-// a persistent Monitor, where it silently ate inbox messages the
-// user then asked them to `ppz read`. The codex-family prompt
-// references `ppz await --tail` only as an anti-pattern callout
-// ("do not use this for idle behavior"), which is the opposite
-// failure mode and is covered by a separate codex test.
+// TestDefaultAgentPrompt_OmitsAwait — `ppz await` was removed as a
+// verb (it was the wrong abstraction for agents: destructive read
+// raced any later `ppz read inbox`, and the user-visible bug was
+// "the agent claims it acted but my read shows nothing"). The boot
+// prompt must not reference the removed verb on any harness, or
+// agents will hit `unknown command` when they try it.
 func TestDefaultAgentPrompt_OmitsAwait(t *testing.T) {
-	for _, h := range backgroundMonitorHarnesses {
+	for _, h := range allHarnesses {
 		t.Run(h, func(t *testing.T) {
 			if strings.Contains(defaultAgentPrompt("test-handle", h), "ppz await") {
-				t.Errorf("defaultAgentPrompt(%q) must not mention `ppz await` — destructive read races `ppz read inbox`; use `ppz ls --watch` for awareness and `ppz read` for consumption", h)
+				t.Errorf("defaultAgentPrompt(%q) references the removed `ppz await` verb; agents will hit `unknown command` if they try it", h)
 			}
 		})
 	}

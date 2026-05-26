@@ -1,6 +1,0 @@
-HH:MM:SS  foo           drain me
---- ls after await ---
-bar.inbox 1 1 RELATIVE noise from another inbox foo
-foo.inbox 0 0 - - foo
-room 0 1 RELATIVE drain me foo
-exit=0
