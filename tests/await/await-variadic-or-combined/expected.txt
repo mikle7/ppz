@@ -1,2 +1,0 @@
-HH:MM:SS  -             from plaza
-exit=0

@@ -301,8 +301,6 @@ Operational guidance:
 
   Because ~ppz ls --watch~ does not advance cursors, do not put it in a tight loop. After it wakes, read the relevant pipe before waiting again, otherwise the same unread message may wake you repeatedly.
 
-  Do not use ~ppz await --tail~ as the default idle behavior, because it keeps running and does not return control after one arrival.
-
   If a sender is visible and the message requires acknowledgement, reply with:
     ppz send <sender> <reply>
 

@@ -67,8 +67,6 @@ func Run(args []string) error {
 		return cmdRead(rest)
 	case "reread":
 		return cmdReread(rest)
-	case "await":
-		return cmdAwait(rest)
 	case "send":
 		return cmdSend(rest)
 	case "command":
@@ -224,24 +222,6 @@ Messaging (the verbs you use most):
   ppz reread TGT [-l N --skip N --since DUR --json --tty --raw --bare]
                                    forensic / replay: every retained message;
                                    ignores and never advances the cursor.
-  ppz await [PATTERN...] [--tail --json --bare --tty --raw]
-                                   block until a matching pipe has unread,
-                                   then drain ONE pipe (oldest LastAt wins).
-                                   No args: watch <current>.inbox AND every
-                                   uncollared pipe at the current namespace
-                                   (rooms/lobbies). Other handles' inboxes
-                                   and pipes in other namespaces are NOT
-                                   included — address those by name to
-                                   include them.
-                                   Patterns OR-combine; globs use '*' (quoted)
-                                   or '%' (SQL-LIKE-style alias).
-                                   Banner 'messages arrived on <pipe>' goes
-                                   to STDERR; --json swaps it for a stdout
-                                   {"event":"arrival","pipe":"…"} line.
-                                   --tail loops drain-then-rewait until
-                                   SIGINT; --tty warns when woken pipe is
-                                   not stdout-shape but still honors the
-                                   flag.
   ppz command H [INSTR]            send INSTR to H.stdin (100 ms delay),
                                    then send a trailing control sequence
                                    (--claude (\\x1b[13u) / --cr / --crlf / --newline / --none)
