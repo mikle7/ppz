@@ -1,0 +1,5 @@
+--- after purge, before read ---
+unread=0 buffered=0
+--- after read ---
+unread=0 buffered=0
+exit=0
