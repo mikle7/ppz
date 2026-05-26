@@ -84,7 +84,11 @@ func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sour
 					info.LastAt = &lt
 				}
 				if cursor := cursors[daemonCursorKey(accountID, s.Handle, p)]; info.LastSeq > cursor {
-					info.Unread = info.LastSeq - cursor
+					// Cap at Total (buffered count): messages whose
+					// seq is below the stream's FirstSeq have been
+					// purged by TTL / msg-cap and can never be read,
+					// so reporting them as unread strands the user.
+					info.Unread = min(info.LastSeq-cursor, info.Total)
 				}
 				if info.LastSeq > 0 {
 					previewTargets = append(previewTargets, listPreviewTarget{

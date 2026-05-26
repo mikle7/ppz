@@ -1157,7 +1157,9 @@ func uncollaredPipeInfo(ctx context.Context, js jetstream.JetStream, accountID u
 	cursorKey := uncollaredCursorKey(natsubj.BuildSubject(accountID, manifold, "", name))
 	cursor := cursors.Get(session, cursorKey)
 	if sInfo.State.LastSeq > cursor {
-		info.Unread = sInfo.State.LastSeq - cursor
+		// Cap at buffered count so purged messages don't strand
+		// the unread counter — see list_snapshot.go for rationale.
+		info.Unread = min(sInfo.State.LastSeq-cursor, sInfo.State.Msgs)
 	}
 	// Best-effort preview/last-payload: fetch the last message if any.
 	if sInfo.State.LastSeq > 0 {
