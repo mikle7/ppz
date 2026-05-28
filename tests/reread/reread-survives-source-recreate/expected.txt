@@ -1,0 +1,4 @@
+--- reread replays the recreated stream regardless of stale cursor ---
+new-1
+new-2
+exit=0

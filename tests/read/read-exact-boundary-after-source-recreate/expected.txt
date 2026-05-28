@@ -1,0 +1,7 @@
+--- after recreate: ls counts all 3 as unread ---
+unread=3 buffered=3
+--- after recreate: read drains all 3 ---
+new-1
+new-2
+new-3
+exit=0
