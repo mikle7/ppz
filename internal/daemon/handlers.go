@@ -1153,9 +1153,11 @@ func uncollaredPipeInfo(ctx context.Context, js jetstream.JetStream, accountID u
 	}
 	info.Total = sInfo.State.Msgs
 	info.LastSeq = sInfo.State.LastSeq
-	// Cursor key matches handleRead's uncollared form.
+	// Cursor key matches handleRead's uncollared form. effectiveCursor
+	// resets a watermark stamped against a prior incarnation of this
+	// stream (pipe recreated) — see list_snapshot.go for rationale.
 	cursorKey := uncollaredCursorKey(natsubj.BuildSubject(accountID, manifold, "", name))
-	cursor := cursors.Get(session, cursorKey)
+	cursor := effectiveCursor(cursors.GetEntry(session, cursorKey), createdNanos(sInfo.Created), sInfo.State.LastSeq)
 	if sInfo.State.LastSeq > cursor {
 		// Cap at buffered count so purged messages don't strand
 		// the unread counter — see list_snapshot.go for rationale.
