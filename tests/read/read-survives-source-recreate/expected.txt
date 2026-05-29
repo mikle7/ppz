@@ -1,0 +1,9 @@
+--- before recreate: read drains all 3 ---
+msg-1
+msg-2
+msg-3
+--- after recreate: ls counts the new message as unread ---
+unread=1 buffered=1
+--- after recreate: read drains the new message ---
+after-recreate
+exit=0

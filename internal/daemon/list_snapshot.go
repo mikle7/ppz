@@ -45,7 +45,7 @@ type listPreviewResult struct {
 	payload   string
 }
 
-func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sources []cliproto.Source, accountID uuid.UUID, session string, patterns []string, cursors map[string]uint64) ([]cliproto.Source, error) {
+func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sources []cliproto.Source, accountID uuid.UUID, session string, patterns []string, cursors map[string]cursorEntry) ([]cliproto.Source, error) {
 	streamInfos, err := streamInfoByName(ctx, js, accountID)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,12 @@ func enrichSourcesWithPipeInfo(ctx context.Context, js jetstream.JetStream, sour
 					lt := si.State.LastTime.UTC()
 					info.LastAt = &lt
 				}
-				if cursor := cursors[daemonCursorKey(accountID, s.Handle, p)]; info.LastSeq > cursor {
+				// effectiveCursor resets a cursor stamped against a prior
+				// incarnation of this stream (source recreated) so a fresh
+				// stream's messages all count as unread instead of being
+				// hidden behind the stale watermark.
+				cursor := effectiveCursor(cursors[daemonCursorKey(accountID, s.Handle, p)], createdNanos(si.Created), si.State.LastSeq)
+				if info.LastSeq > cursor {
 					// Cap at Total (buffered count): messages whose
 					// seq is below the stream's FirstSeq have been
 					// purged by TTL / msg-cap and can never be read,
@@ -195,13 +200,13 @@ func fetchListPreviews(ctx context.Context, js jetstream.JetStream, targets []li
 	return results
 }
 
-func cursorSnapshot(c *cursors, session string) map[string]uint64 {
+func cursorSnapshot(c *cursors, session string) map[string]cursorEntry {
 	session = sessionIDForCursor(session)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	m, err := c.loadLocked(session)
 	if err != nil {
-		return map[string]uint64{}
+		return map[string]cursorEntry{}
 	}
 	return m
 }

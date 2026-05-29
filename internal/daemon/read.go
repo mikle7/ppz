@@ -192,7 +192,13 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	}
 	startSeq := info.State.FirstSeq
 	if !req.All && info.State.Msgs > 0 {
-		cursor := d.Cursors.Get(req.Session, cursorKey)
+		// effectiveCursor resets the baseline to 0 when the stored cursor
+		// was stamped against a prior incarnation of this stream (source
+		// destroyed + recreated) or otherwise sits ahead of LastSeq, so a
+		// fresh stream reads from its start rather than being silently
+		// skipped past.
+		entry := d.Cursors.GetEntry(req.Session, cursorKey)
+		cursor := effectiveCursor(entry, createdNanos(info.Created), info.State.LastSeq)
 		if cursor+1 > startSeq {
 			startSeq = cursor + 1
 		}
@@ -287,7 +293,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	// observational and shouldn't change anyone's unread count) or All (the
 	// `reread` forensic verb leaves cursor state untouched by design).
 	if !req.NoAdvance && !req.All && lastSeqSeen > 0 {
-		_ = d.Cursors.Advance(req.Session, cursorKey, lastSeqSeen)
+		_ = d.Cursors.Advance(req.Session, cursorKey, lastSeqSeen, createdNanos(info.Created))
 
 		// Auto-emit `ack:read` back to each original sender whose
 		// message had AckRequested set (v0.25.0 §4). Advance-then-emit
@@ -354,7 +360,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		// long-running follow keeps the unread count truthful.
 		if !req.NoAdvance && !req.All {
 			if md, mderr := msg.Metadata(); mderr == nil {
-				_ = d.Cursors.Advance(req.Session, cursorKey, md.Sequence.Stream)
+				_ = d.Cursors.Advance(req.Session, cursorKey, md.Sequence.Stream, createdNanos(info.Created))
 			}
 			// Per-message ack auto-emit for live messages (v0.25.0 §4).
 			// Detached: synchronous emission inside the Consume callback

@@ -1,0 +1,9 @@
+--- after recreate: ls counts all 5 as unread ---
+unread=5 buffered=5
+--- after recreate: read drains all 5 (no silent drop) ---
+new-1
+new-2
+new-3
+new-4
+new-5
+exit=0
