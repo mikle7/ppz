@@ -1,0 +1,9 @@
+--- B drains all 3 (cursor -> 3 on daemon B) ---
+msg-1
+msg-2
+msg-3
+--- B counts the recreated source's message as unread ---
+unread=1 buffered=1
+--- B drains the new message despite its stale cursor ---
+after-recreate
+exit=0
