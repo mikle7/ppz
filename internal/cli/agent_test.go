@@ -476,6 +476,44 @@ func TestDefaultAgentPrompt_MonitorRecipePinsSession(t *testing.T) {
 	}
 }
 
+// TestDefaultAgentPrompt_ScopesWatchToInbox pins the watch recipe to
+// the agent's own inbox. An UNscoped `ppz ls --watch` matches every
+// pipe — including the agent's own `<handle>.heartbeat` and
+// `<handle>.stdout`, which tick constantly — so it wakes on its own
+// noise rather than real messages. Observed with Claude Code: the
+// agent stopped trusting the noisy watch and replaced it with a
+// destructive background `ppz read` loop that drained its inbox.
+// Scoping the watch to `<handle>.inbox` (the daemon matches patterns
+// against handle, pipe, and `handle.pipe`) is what makes the watch
+// trustworthy. Every harness must scope it.
+func TestDefaultAgentPrompt_ScopesWatchToInbox(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if !strings.Contains(defaultAgentPrompt("eve", h), "ppz ls --watch eve.inbox") {
+				t.Errorf("defaultAgentPrompt(%q) should scope the watch to `ppz ls --watch eve.inbox` — an unscoped watch matches every pipe including the agent's own heartbeat/stdout and wakes on noise; got: %q", h, defaultAgentPrompt("eve", h))
+			}
+		})
+	}
+}
+
+// TestDefaultAgentPrompt_BackgroundMonitorForbidsRead pins the
+// never-`ppz read`-in-the-loop warning for the background-Monitor
+// harnesses (claude, copilot). Their Monitor runs detached, so a
+// `ppz read` placed inside it advances the session cursor and
+// consumes messages in the background — the agent's own foreground
+// `ppz read inbox` then comes back empty (the exact symptom reported
+// with Claude Code). The codex-family prompt watches in the
+// foreground and is covered by its own wake-signal guidance.
+func TestDefaultAgentPrompt_BackgroundMonitorForbidsRead(t *testing.T) {
+	for _, h := range backgroundMonitorHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if !strings.Contains(defaultAgentPrompt("eve", h), "never run `ppz read` inside the loop") {
+				t.Errorf("defaultAgentPrompt(%q) Monitor guidance must warn `never run `+\"`ppz read`\"+` inside the loop` — a background read drains the inbox so foreground reads come back empty; got: %q", h, defaultAgentPrompt("eve", h))
+			}
+		})
+	}
+}
+
 // TestDefaultAgentPrompt_UsesUncollaredTerminology fixes a "uncoloured"
 // → "uncollared" typo. The wire vocabulary in WIRE.md §1 is "collared"
 // (source-bound) vs "uncollared" (sourceless, e.g. chat-room pipes).
@@ -622,19 +660,21 @@ func TestDefaultAgentPrompt_Pi_FallsBackToCodexRecipe(t *testing.T) {
 	}
 }
 
-// TestDefaultAgentPrompt_OmitsReread keeps `ppz reread` out of every
-// harness's cheat-sheet for consistency. The verb is a forensic
-// helper for inspecting recent history without advancing the cursor
-// — useful when an operator is investigating but not part of the
-// boot-time orientation an agent needs. Mentioning it only in the
-// codex branch (as the original suggested prompt did) leaves
-// codex-family agents knowing a verb their claude/copilot peers
-// don't, which divergent the surface area we want to keep flat.
-func TestDefaultAgentPrompt_OmitsReread(t *testing.T) {
+// TestDefaultAgentPrompt_MentionsReread pins `ppz reread` as the
+// documented recovery path on every harness. The failure mode that
+// motivated this (observed with Claude Code): an agent that doesn't
+// trust the watch puts a destructive `ppz read` in a background loop,
+// which drains its own inbox so foreground reads come back empty. The
+// boot prompt now warns against the background read AND names `ppz
+// reread <pipe>` — which replays a pipe's retained history without
+// advancing the cursor — as the way to recover an already-drained
+// pipe. Asserting across every harness keeps the recovery advice flat
+// rather than codex-only.
+func TestDefaultAgentPrompt_MentionsReread(t *testing.T) {
 	for _, h := range allHarnesses {
 		t.Run(h, func(t *testing.T) {
-			if strings.Contains(defaultAgentPrompt("test-handle", h), "ppz reread") {
-				t.Errorf("defaultAgentPrompt(%q) references `ppz reread` — keep it out of the cheat-sheet; reread is a forensic verb, not a boot-time orientation primitive, and only the codex branch had it (claude/copilot don't)", h)
+			if !strings.Contains(defaultAgentPrompt("test-handle", h), "ppz reread") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz reread` as the recovery for a pipe drained by a stray background `ppz read` — without it an agent that drained its inbox has no documented way to replay it", h)
 			}
 		})
 	}

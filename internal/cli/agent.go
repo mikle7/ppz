@@ -209,20 +209,43 @@ func defaultAgentPrompt(handle, harness string) string {
 // pipe with persistent unread would re-arm the watch immediately and
 // flood the agent with duplicate notifications until something runs
 // `ppz read` to clear the cursor.
+//
+// Two hard-won details encoded in the prose:
+//
+//  1. The watch is scoped to `<handle>.inbox` (plus any rooms the
+//     agent has joined). An UNscoped `ppz ls --watch` matches every
+//     pipe, including the agent's own `<handle>.heartbeat` and
+//     `<handle>.stdout`, which tick constantly — the watch then wakes
+//     on its own noise, the agent stops trusting it, and improvises a
+//     destructive background `ppz read` loop instead.
+//  2. The Monitor must run `ppz ls --watch` ONLY, never `ppz read`.
+//     A background `ppz read` advances the session cursor and consumes
+//     messages, so the agent's own foreground `ppz read inbox` comes
+//     back empty. `ppz reread` is named as the recovery for a pipe
+//     already drained by a stray read.
+//
+// Authored with `~` standing in for backticks (raw Go strings can't
+// contain backticks) and `<HANDLE>` for the substitution slot, both
+// swapped at render time — same convention as codexAgentPrompt.
 func claudeAgentPrompt(handle string) string {
-	return `You are an agent running inside a ppz (pipes) pty. Your handle is "` + handle + `". Your terminal output is published to ` + handle + `.stdout. Other agents can reach you via ` + handle + `.inbox.
+	body := `You are an agent running inside a ppz (pipes) pty. Your handle is "<HANDLE>". Your terminal output is published to <HANDLE>.stdout. Other agents can reach you via <HANDLE>.inbox.
 
 Useful commands:
   ppz status                find out which source you are
   ppz who                   see which other agents are online
   ppz ls                    list sources × pipes
-  ppz ls --watch            block until any pipe has unread, then print a snapshot (non-destructive)
+  ppz ls --watch <pipes>    block until a matching pipe has unread, then print a snapshot (non-destructive)
   ppz read inbox            read new messages addressed to you
   ppz read <pipe>           read new messages from a pipe (e.g. a chat room)
   ppz send <handle> <text>  send a message to another agent
   ppz send <pipe> <text>    send a message to a pipe
 
-Create a persistent Monitor running ` + "`while true; do PPZ_SESSION=" + handle + " ppz ls --watch 2>/dev/null; sleep 60; done`" + ` that fires a PushNotification on each new message arrival. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited. The trailing sleep 60 throttles the loop: ls --watch is non-destructive, so without it the loop would re-fire immediately on every iteration as long as any pipe still has unread, flooding you with duplicate events until you ` + "`ppz read`" + ` to clear them.`
+Create a persistent Monitor running ~while true; do PPZ_SESSION=<HANDLE> ppz ls --watch <HANDLE>.inbox 2>/dev/null; sleep 60; done~ that fires a PushNotification on each new message arrival. Scope the watch to the pipes you actually care about — your own <HANDLE>.inbox plus any rooms or uncollared pipes you have joined (e.g. ~ppz ls --watch <HANDLE>.inbox project-room~). With no pattern the watch matches every pipe, including your own <HANDLE>.heartbeat and <HANDLE>.stdout, which tick constantly — it would then wake on noise instead of real messages. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited. The trailing sleep 60 throttles the loop: ls --watch is non-destructive, so without it the loop would re-fire immediately on every iteration as long as a matching pipe still has unread, flooding you with duplicate events until you ~ppz read~ to clear them.
+
+Keep the Monitor to ~ppz ls --watch~ only — never run ~ppz read~ inside the loop. ~ppz read~ advances your session cursor and consumes messages, so a background read drains the pipe and your own foreground ~ppz read inbox~ then comes back empty. When the Monitor fires, do the ~ppz read~ in your own turn. If a stray background read has already drained a pipe, ~ppz reread <pipe>~ replays its full retained history without advancing the cursor.`
+	body = strings.ReplaceAll(body, "~", "`")
+	body = strings.ReplaceAll(body, "<HANDLE>", handle)
+	return body
 }
 
 // copilotAgentPrompt is the GitHub Copilot CLI variant. Two
@@ -237,8 +260,12 @@ Create a persistent Monitor running ` + "`while true; do PPZ_SESSION=" + handle 
 //     run independently of the agent's foreground turn. Naming the
 //     option explicitly avoids the agent running the loop
 //     synchronously and stalling the session.
+//
+// The scoped-watch and never-background-read guidance mirrors
+// claudeAgentPrompt — see its doc comment for the rationale. Authored
+// with `~`/`<HANDLE>` swapped at render time.
 func copilotAgentPrompt(handle string) string {
-	return `You are an agent running inside a ppz (pipes) pty. Your handle is "` + handle + `". Your terminal output is published to ` + handle + `.stdout. Other agents can reach you via ` + handle + `.inbox.
+	body := `You are an agent running inside a ppz (pipes) pty. Your handle is "<HANDLE>". Your terminal output is published to <HANDLE>.stdout. Other agents can reach you via <HANDLE>.inbox.
 
 You are the GitHub Copilot CLI. You respond to natural language instructions — messages sent to your inbox should be phrased as conversational prompts, not raw shell commands.
 
@@ -246,15 +273,20 @@ Useful commands:
   ppz status                find out which source you are
   ppz who                   see which other agents are online
   ppz ls                    list sources × pipes
-  ppz ls --watch            block until any pipe has unread, then print a snapshot (non-destructive)
+  ppz ls --watch <pipes>    block until a matching pipe has unread, then print a snapshot (non-destructive)
   ppz read inbox            read new messages addressed to you
   ppz read <pipe>           read new messages from a pipe (e.g. a chat room)
   ppz send <handle> <text>  send a message to another agent
   ppz send <pipe> <text>    send a message to a pipe
 
 Use your bash tool with detach: true to create a persistent Monitor running:
-  while true; do PPZ_SESSION=` + handle + ` ppz ls --watch 2>/dev/null; sleep 60; done
-This should fire a PushNotification on each new message arrival. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited. The trailing sleep 60 throttles the loop: ls --watch is non-destructive, so without it the loop would re-fire immediately on every iteration as long as any pipe still has unread, flooding you with duplicate events until you ` + "`ppz read`" + ` to clear them.`
+  while true; do PPZ_SESSION=<HANDLE> ppz ls --watch <HANDLE>.inbox 2>/dev/null; sleep 60; done
+This should fire a PushNotification on each new message arrival. Scope the watch to the pipes you actually care about — your own <HANDLE>.inbox plus any rooms or uncollared pipes you have joined (e.g. ~ppz ls --watch <HANDLE>.inbox project-room~). With no pattern the watch matches every pipe, including your own <HANDLE>.heartbeat and <HANDLE>.stdout, which tick constantly — it would then wake on noise instead of real messages. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited. The trailing sleep 60 throttles the loop: ls --watch is non-destructive, so without it the loop would re-fire immediately on every iteration as long as a matching pipe still has unread, flooding you with duplicate events until you ~ppz read~ to clear them.
+
+Keep the Monitor to ~ppz ls --watch~ only — never run ~ppz read~ inside the loop. ~ppz read~ advances your session cursor and consumes messages, so a background read drains the pipe and your own foreground ~ppz read inbox~ then comes back empty. When the Monitor fires, do the ~ppz read~ in your own turn. If a stray background read has already drained a pipe, ~ppz reread <pipe>~ replays its full retained history without advancing the cursor.`
+	body = strings.ReplaceAll(body, "~", "`")
+	body = strings.ReplaceAll(body, "<HANDLE>", handle)
+	return body
 }
 
 // codexAgentPrompt is the foreground-watch variant used by codex
@@ -300,6 +332,8 @@ Operational guidance:
   ~ppz ls --watch~ is intentionally non-destructive: it wakes when a matching pipe has unread messages, prints a snapshot, and exits. After it returns, inspect the relevant unread pipe with ~ppz read inbox~ or ~ppz read <pipe>~, then handle the message.
 
   Because ~ppz ls --watch~ does not advance cursors, do not put it in a tight loop. After it wakes, read the relevant pipe before waiting again, otherwise the same unread message may wake you repeatedly.
+
+  Do not run ~ppz read~ in a background loop: it advances your session cursor and consumes messages, so a foreground ~ppz read~ would then come back empty. If a stray read has already drained a pipe, ~ppz reread <pipe>~ replays its full retained history without advancing the cursor.
 
   If a sender is visible and the message requires acknowledgement, reply with:
     ppz send <sender> <reply>
