@@ -33,6 +33,20 @@ const skewSeconds = 30
 // errors from RefreshFn.
 const retryAfter = 5 * time.Second
 
+// OnRefreshedFn fires after refreshNow successfully swaps in fresh
+// credentials. The daemon hooks this to proactively rebuild its NATS
+// connection within the 60s overlap window (User JWT `nbf` is set 30s
+// before issuance, so old + new are both valid for ~60s around the
+// rotation point), eliminating the disconnect/reconnect gap that
+// otherwise lands when the server kicks the live connection at the
+// old JWT's exp — and the transient E_NATS_UNREACHABLE that a send
+// running inside that gap surfaces to callers.
+//
+// Runs synchronously on the refresh goroutine. Implementations must
+// not block on anything that could deadlock with the goroutine that
+// called RefreshNowIfDue.
+type OnRefreshedFn func(jwt, seed string, expUnix int64)
+
 // RefreshLoop monitors one (org, JWT) pair and refreshes it before
 // expiry. Concurrency: Current() may be called from any goroutine;
 // Start/Stop must be called from the same goroutine.
@@ -40,6 +54,7 @@ type RefreshLoop struct {
 	AccountID          string
 	Refresh        RefreshFn
 	OnUnauthorized func(accountID string)
+	OnRefreshed    OnRefreshedFn
 
 	mu      sync.Mutex
 	jwt     string
@@ -171,6 +186,13 @@ func (r *RefreshLoop) refreshNow(ctx context.Context) error {
 	r.seed = newSeed
 	r.expUnix = newExp
 	r.lastAt = time.Now()
+	// Capture under lock; invoke without it so callers (the daemon's
+	// swapNC) can't deadlock with Current() / other RefreshLoop methods.
+	cb := r.OnRefreshed
 	r.mu.Unlock()
+
+	if cb != nil {
+		cb(newJWT, newSeed, newExp)
+	}
 	return nil
 }

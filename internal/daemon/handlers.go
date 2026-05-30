@@ -186,6 +186,36 @@ func (d *Daemon) startRefreshLoop(accountID, jwt, seed string, expUnix int64) {
 		OnUnauthorized: func(string) {
 			d.State.SetLoginCheck(cliproto.LoginCheckInvalid)
 		},
+		// Proactively rebuild the NATS connection with the fresh creds
+		// during the 60s rotation overlap window (server `nbf` is set
+		// 30s before issuance, refresh fires at exp-30s, so both JWTs
+		// are valid for ~60s around the rotation point). This pre-empts
+		// the server kicking the live connection at the old JWT's exp,
+		// eliminating the ~3s disconnect/reconnect blip and the
+		// transient E_NATS_UNREACHABLE that lands on any send running
+		// inside it.
+		//
+		// connectNATSWithRefresh's callbacks read d.Refresh.Current()
+		// lazily on (re)connect, and the refresh loop has just stamped
+		// the fresh creds before invoking OnRefreshed — so the new
+		// connection authenticates with the new JWT. Failures here are
+		// best-effort: leaving the old NC in place falls back to the
+		// pre-fix behaviour (server kicks at exp; nats.go reconnects),
+		// so a transient connect failure during rotation is no worse
+		// than today.
+		OnRefreshed: func(_, _ string, _ int64) {
+			if d.NATSURL == "" {
+				return
+			}
+			newNC, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.NATSEvents)
+			if err != nil || newNC == nil {
+				return
+			}
+			d.swapNC(newNC)
+			if aid, perr := uuid.Parse(d.State.AccountID()); perr == nil {
+				d.subscribeOrgHeartbeats(aid)
+			}
+		},
 	}
 	// context.Background — refresh loop outlives any single IPC
 	// request. Stop() (called on Login replacement / Logout) is the

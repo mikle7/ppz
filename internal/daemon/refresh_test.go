@@ -171,6 +171,55 @@ func TestRefreshLoopRefreshNowIfDueSkipsFreshCredential(t *testing.T) {
 	}
 }
 
+// TestRefreshLoop_FiresOnRefreshedAfterRefresh: after refreshNow swaps
+// in fresh credentials, OnRefreshed must fire with those credentials.
+// This is the hook the daemon uses to proactively rebuild its NATS
+// connection during the 60s rotation overlap window, instead of waiting
+// for the server to kick the live connection at the old JWT's exp —
+// which surfaces to callers as a ~3s disconnect/reconnect gap and a
+// transient E_NATS_UNREACHABLE on any send inside it.
+//
+// Symmetric to OnUnauthorized's contract: same goroutine, same
+// fire-on-state-change semantics, distinct trigger.
+func TestRefreshLoop_FiresOnRefreshedAfterRefresh(t *testing.T) {
+	type rec struct {
+		jwt, seed string
+		exp       int64
+	}
+	rcv := make(chan rec, 1)
+
+	expectedExp := time.Now().Add(time.Hour).Unix()
+	refFn := func(ctx context.Context, accountID string) (string, string, int64, error) {
+		return "fresh-jwt", "fresh-seed", expectedExp, nil
+	}
+
+	r := &RefreshLoop{
+		AccountID: "test-org",
+		Refresh:   refFn,
+		OnRefreshed: func(jwt, seed string, expUnix int64) {
+			select {
+			case rcv <- rec{jwt, seed, expUnix}:
+			default:
+			}
+		},
+	}
+	expSoon := time.Now().Add(500 * time.Millisecond).Unix()
+	if err := r.Start(context.Background(), "init-jwt", "init-seed", expSoon); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer r.Stop()
+
+	select {
+	case got := <-rcv:
+		if got.jwt != "fresh-jwt" || got.seed != "fresh-seed" || got.exp != expectedExp {
+			t.Fatalf("OnRefreshed got (%q, %q, %d), want (fresh-jwt, fresh-seed, %d)",
+				got.jwt, got.seed, got.exp, expectedExp)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnRefreshed was not called within 2s of refresh")
+	}
+}
+
 // TestRefreshTimer_HandlesUnauthorized: when RefreshFn returns
 // ErrUnauthorized, the loop stops + invokes OnUnauthorized so the
 // daemon can surface "session expired" via `ppz status`.
