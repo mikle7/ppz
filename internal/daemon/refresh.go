@@ -186,6 +186,13 @@ func (r *RefreshLoop) refreshNow(ctx context.Context) error {
 	r.seed = newSeed
 	r.expUnix = newExp
 	r.lastAt = time.Now()
+	// Capture under lock; invoke without it so callers (the daemon's
+	// swapNC) can't deadlock with Current() / other RefreshLoop methods.
+	cb := r.OnRefreshed
 	r.mu.Unlock()
+
+	if cb != nil {
+		cb(newJWT, newSeed, newExp)
+	}
 	return nil
 }
