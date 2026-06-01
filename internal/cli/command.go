@@ -14,22 +14,30 @@ import (
 // cmdCommand: ppz command <handle> [instruction] [--claude|--cr|--crlf|--newline|--none]
 //
 // Sends an optional instruction to <handle>.stdin, waits 100 ms, then sends a
-// trailing control sequence.  Default sequence is \n (Enter).  Flags select
-// alternatives:
+// trailing control sequence.  Default sequence is \r (carriage return) — what
+// a real keyboard Enter produces, and the byte every non-claude agent harness
+// (codex / copilot / agy / pi) and most line-discipline REPLs accept as
+// "submit". Claude Code is the outlier: its REPL only treats `\x1b[13u`
+// (kitty keyboard protocol Enter) as a submit; use `--claude` there. The
+// earlier `\n` default looked like Enter in transcripts but produced a
+// literal newline in every modern TUI input box — symptom was the message
+// landing on a new line of the prompt with no turn fired (issue: every
+// non-claude harness; pre-v0.36).
 //
 //	--claude   \x1b[13u  (XTerm CSI-u "submit" — same as pty inbox alerting)
-//	--cr       \r
+//	--cr       \r        (explicit; same as the default)
 //	--crlf     \r\n
-//	--newline  \n        (explicit; same as the default)
+//	--newline  \n        (was the default pre-v0.36 — kept for callers
+//	                     scripted against the old behaviour)
 //	--none               no trailing sequence — sends instruction only
 func cmdCommand(args []string) error {
 	// Go's flag package stops at the first non-flag argument, so we
 	// pre-separate flags from positional args to support any ordering.
 	fs := flag.NewFlagSet("command", flag.ContinueOnError)
-	useClaude  := fs.Bool("claude", false, "trailing sequence: XTerm CSI-u submit \\x1b[13u")
-	useCR      := fs.Bool("cr", false, "trailing sequence: carriage-return \\r")
+	useClaude  := fs.Bool("claude", false, "trailing sequence: XTerm CSI-u submit \\x1b[13u (claude only)")
+	useCR      := fs.Bool("cr", false, "trailing sequence: carriage-return \\r (same as default)")
 	useCRLF    := fs.Bool("crlf", false, "trailing sequence: carriage-return + newline \\r\\n")
-	useNewline := fs.Bool("newline", false, "trailing sequence: newline \\n (same as default)")
+	useNewline := fs.Bool("newline", false, "trailing sequence: newline \\n (pre-v0.36 default)")
 	useNone    := fs.Bool("none", false, "no trailing sequence — send instruction only")
 
 	var flagArgs, rest []string
@@ -54,7 +62,7 @@ func cmdCommand(args []string) error {
 		instruction = rest[1]
 	}
 
-	ctrlSeq := "\n"
+	ctrlSeq := "\r"
 	switch {
 	case *useClaude:
 		ctrlSeq = "\x1b[13u"
