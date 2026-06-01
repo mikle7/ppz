@@ -8,7 +8,12 @@ import (
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
-func TestCmdCommand_DefaultSequenceIsNewline(t *testing.T) {
+// TestCmdCommand_DefaultSequenceIsCR pins the default terminator at `\r`
+// (a real keyboard Enter byte). Pre-v0.36 the default was `\n`, which
+// every modern TUI input box (codex/copilot/agy/pi) treated as a literal
+// newline inside the prompt rather than a submit — see the doc comment
+// on cmdCommand.
+func TestCmdCommand_DefaultSequenceIsCR(t *testing.T) {
 	reqs := setupCommandDaemon(t)
 
 	if err := cmdCommand([]string{"myhost", "ls -la"}); err != nil {
@@ -19,7 +24,7 @@ func TestCmdCommand_DefaultSequenceIsNewline(t *testing.T) {
 		t.Fatalf("want 2 requests, got %d", len(*reqs))
 	}
 	assertStdinRequest(t, (*reqs)[0], "myhost", "ls -la")
-	assertStdinRequest(t, (*reqs)[1], "myhost", "\n")
+	assertStdinRequest(t, (*reqs)[1], "myhost", "\r")
 }
 
 func TestCmdCommand_NoInstructionSendsOnlyCtrlSeq(t *testing.T) {
@@ -32,7 +37,7 @@ func TestCmdCommand_NoInstructionSendsOnlyCtrlSeq(t *testing.T) {
 	if len(*reqs) != 1 {
 		t.Fatalf("want 1 request, got %d", len(*reqs))
 	}
-	assertStdinRequest(t, (*reqs)[0], "myhost", "\n")
+	assertStdinRequest(t, (*reqs)[0], "myhost", "\r")
 }
 
 func TestCmdCommand_ClaudeFlag(t *testing.T) {

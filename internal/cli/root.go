@@ -223,8 +223,12 @@ Messaging (the verbs you use most):
                                    forensic / replay: every retained message;
                                    ignores and never advances the cursor.
   ppz command H [INSTR]            send INSTR to H.stdin (100 ms delay),
-                                   then send a trailing control sequence
-                                   (--claude (\\x1b[13u) / --cr / --crlf / --newline / --none)
+                                   then send a trailing control sequence.
+                                   Default: \\r (carriage-return Enter, the
+                                   byte every non-claude harness accepts).
+                                   --claude (\\x1b[13u, kitty Enter) /
+                                   --cr (\\r) / --crlf / --newline (\\n) /
+                                   --none
 
 Acks (read receipts, v0.25):
   Use 'ppz send … --request-ack' when you need to know the recipient saw
