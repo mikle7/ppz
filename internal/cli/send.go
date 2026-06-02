@@ -114,6 +114,16 @@ func cmdSend(args []string) error {
 			// against the per-tty current source — not the "default"
 			// session, which is rarely what the user actually has set.
 			Session: sessionID(),
+			// Forward PPZ_CURRENT_HANDLE as an explicit sender hint when
+			// the env says we're inside a wrapped pty (terminalShareEnv
+			// exports it). The daemon's IPCCreate skips SetCurrent for
+			// PTY-kind sources so its own State.Current(session) would
+			// otherwise be empty, even though `ppz status` /
+			// `ppz read inbox` / the `--request-ack` preflight all
+			// agree the wrapped handle is current via the same env var.
+			// Empty hint preserves today's behaviour (daemon falls back
+			// to State.Current) — see senderForRequest in sender_resolve.go.
+			Sender: os.Getenv("PPZ_CURRENT_HANDLE"),
 		},
 		&reply); err != nil {
 		return err

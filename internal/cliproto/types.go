@@ -270,6 +270,16 @@ type SendRequest struct {
 	// Session keys the per-session current-source fallback when neither
 	// Handle nor PPZ_CURRENT_HANDLE is set.
 	Session string `json:"session,omitempty"`
+	// Sender is the CLI's resolved current-handle hint, used to stamp
+	// envelope.sender. The CLI is the only place PPZ_CURRENT_HANDLE
+	// (set by `ppz terminal share` in the wrapped shell) can be read,
+	// so it forwards the effective current as a hint and the daemon
+	// honours it when its per-session State.Current is empty (the PTY-
+	// share case: IPCCreate skips SetCurrent for PTY-kind sources, so
+	// the daemon never learns the inner shell's current even though
+	// the env says it's set). Empty Sender preserves today's behaviour:
+	// daemon falls back to State.Current(Session).
+	Sender string `json:"sender,omitempty"`
 
 	// Phase 1.5: BareTarget carries the raw target string when the user
 	// typed `ppz send LEAF` without a dot. The CLI mangles the bare form
@@ -301,6 +311,13 @@ type SendBatchRequest struct {
 	BareTarget string   `json:"bare_target,omitempty"` // Phase 1.5: see SendRequest.BareTarget
 	Payloads   []string `json:"payloads"`
 	Session    string   `json:"session,omitempty"`
+	// No Sender field: the only batch caller is `ppz terminal share`'s
+	// stdout/stdctrl publisher (sendStreamBatch / sendStreamLine), which
+	// runs in the share *parent* process — not the wrapped child. The
+	// parent's PPZ_CURRENT_HANDLE is the outer shell's current, NOT the
+	// wrapped handle, so forwarding it would stamp the wrong sender on
+	// <handle>.stdout messages. The daemon's State.Current(session)
+	// fallback (via senderForRequest) is the right resolution here.
 }
 
 // SendBatchReply mirrors SendReply but as parallel arrays,
