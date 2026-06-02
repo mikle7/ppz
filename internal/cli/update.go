@@ -29,6 +29,31 @@ type updateManifest struct {
 	ReleaseURL    string `json:"release_url,omitempty"`
 }
 
+// updateFetchTimeout bounds the manifest fetch in fetchLatestIfNewer.
+// The default is 2s: raw.githubusercontent.com routinely takes
+// ~770–890ms to respond (measured on real networks), so the original
+// 750ms deadline sat inside that band — every check hit
+// context.DeadlineExceeded, the error was swallowed, and `ppz status` /
+// `ppz version` showed no "update available" notice even when a newer
+// release existed (#94). 2s clears typical latency with margin while
+// staying imperceptible interactively. PPZ_UPDATE_TIMEOUT overrides it
+// for users on a higher-latency link where even 2s is too tight (the
+// notice is best-effort: on a timeout the error is swallowed and nothing
+// prints); tests set it small. Mirrors PPZ_IPC_TIMEOUT.
+var updateFetchTimeout = 2 * time.Second
+
+// updateCheckTimeout resolves the manifest-fetch deadline: the
+// PPZ_UPDATE_TIMEOUT override when it parses to a positive duration,
+// else updateFetchTimeout.
+func updateCheckTimeout() time.Duration {
+	if v := os.Getenv("PPZ_UPDATE_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return updateFetchTimeout
+}
+
 // fetchLatestIfNewer is the single point where we decide "is the CLI
 // behind the manifest". Both the stderr nudge (maybeNotifyUpdate) and
 // the `ppz status` amber state (updateAvailableForCLI) route through
@@ -46,14 +71,7 @@ func fetchLatestIfNewer() (string, bool) {
 	if !isExactReleaseVersion(version.Version) {
 		return "", false
 	}
-	// 2s budget: raw.githubusercontent.com routinely takes 770–890ms to
-	// respond (measured on real networks), so the previous 750ms
-	// deadline overshot on a typical fetch — every check silently hit
-	// context.DeadlineExceeded, the error was swallowed below, and
-	// `ppz status` / `ppz version` showed no notification even when a
-	// newer release was published. 2s clears typical latency while
-	// staying imperceptible interactively.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout())
 	defer cancel()
 
 	manifest, err := fetchUpdateManifest(ctx)
