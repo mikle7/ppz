@@ -13,6 +13,12 @@ type Code string
 const (
 	ENotLoggedIn       Code = "E_NOT_LOGGED_IN"
 	EDaemonNotRunning  Code = "E_DAEMON_NOT_RUNNING"
+	// EDaemonTimeout is returned by the CLI when the daemon accepted the
+	// IPC connection but did not reply within the client deadline. Per
+	// the send delivery contract clause 2, the CLI must never hang: a
+	// stalled daemon (e.g. mid-restart, before it serves IPC) bounds out
+	// to this error instead of blocking forever.
+	EDaemonTimeout Code = "E_DAEMON_TIMEOUT"
 	EInvalidAPIKey     Code = "E_INVALID_API_KEY"
 	ESourceTaken       Code = "E_SOURCE_TAKEN"
 	ESourceNotFound    Code = "E_SOURCE_NOT_FOUND"
@@ -35,6 +41,15 @@ const (
 	// match the handle regex (lowercase alnum + hyphens, max 32, no
 	// leading/trailing hyphen). Phase 1.5.
 	EInvalidManifold Code = "E_INVALID_MANIFOLD"
+
+	// EDeliveryUnconfirmed is returned when `ppz send` published a
+	// message but did not receive a JetStream PubAck within the deadline.
+	// The message MAY or MAY NOT have landed — distinct from
+	// ENATSUnreachable ("never left") so callers can decide whether to
+	// retry knowing a retry may duplicate. Per the send delivery
+	// contract: exit 0 ONLY on a confirmed PubAck; unconfirmed is a
+	// failure, never silent success.
+	EDeliveryUnconfirmed Code = "E_DELIVERY_UNCONFIRMED"
 
 	// ENameTaken — Phase 1.5.1 first-wins collision rule. Within a
 	// manifold, user-typed names share a namespace across source
@@ -81,6 +96,10 @@ func ExitCode(c Code) int {
 		return 24
 	case ENameTaken:
 		return 21
+	case EDeliveryUnconfirmed:
+		return 25
+	case EDaemonTimeout:
+		return 26
 	}
 	return 1
 }
@@ -127,6 +146,10 @@ func Message(c Code) string {
 		return "invalid manifold: each dot-separated segment must match [a-z0-9-] (max 32, no leading/trailing -, not reserved)"
 	case ENameTaken:
 		return "name already taken by another resource at this manifold"
+	case EDeliveryUnconfirmed:
+		return "delivery unconfirmed; the message was published but the server did not acknowledge it in time — it may or may not have landed; retry if your workflow tolerates a possible duplicate"
+	case EDaemonTimeout:
+		return "daemon did not respond in time; it may be busy or stuck (e.g. mid-restart) — retry, or run 'ppz daemon restart'"
 	}
 	return "unknown error"
 }

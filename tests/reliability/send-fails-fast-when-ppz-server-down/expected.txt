@@ -1,0 +1,3 @@
+setup=OK
+verdict=ERROR-DELIVERY
+exit=0
