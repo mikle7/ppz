@@ -155,9 +155,18 @@ func renderSummary(w io.Writer, s cliproto.DiagSummary, dropsLastHour int) {
 	fmt.Fprintf(w, "url: %s\n", url)
 }
 
-// renderEvents prints the chronological tail aligned by column. Format
-// is space-separated, not table-bordered, so it's grep-friendly. The
-// per-line shape is: HH:MM:SS  type        caller                nc=ID  reason
+// renderEvents prints the chronological tail. Format is space-
+// separated, not table-bordered, so it's grep-friendly. The per-line
+// shape is:
+//
+//	<type> <RFC3339-timestamp> caller=<name> nc=<id> reason="<text>"
+//
+// Type is at column 0 by contract — e2e tests grep for
+// ^(disconnect|reconnect|daemon_start|daemon_stop) at line start
+// (tests/daemon/diagnostics-shows-lifecycle-events,
+// tests/reliability/nats-events-recorded-in-diagnostics). This shape
+// also matches the pre-Phase-0 format so external scrapers don't
+// break.
 func renderEvents(w io.Writer, events []cliproto.DiagEvent, onDiskCount int, sinceStr string) {
 	if len(events) == 0 {
 		fmt.Fprintln(w, "Recent events: (none)")
@@ -181,18 +190,12 @@ func renderEvents(w io.Writer, events []cliproto.DiagEvent, onDiskCount int, sin
 		if nc == "" {
 			nc = "—"
 		}
-		reason := ev.Reason
-		if reason == "" {
-			reason = `""`
-		} else {
-			reason = fmt.Sprintf("%q", reason)
-		}
-		fmt.Fprintf(w, "  %s  %-10s caller=%-28s nc=%s  reason=%s\n",
-			ev.At.Local().Format("15:04:05"),
+		fmt.Fprintf(w, "%-12s %s  caller=%-28s nc=%s  reason=%q\n",
 			ev.Type,
+			ev.At.UTC().Format(time.RFC3339),
 			caller,
 			nc,
-			reason,
+			ev.Reason,
 		)
 	}
 }

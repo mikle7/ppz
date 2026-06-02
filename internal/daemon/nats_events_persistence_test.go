@@ -120,8 +120,14 @@ func TestTailNATSEventLog_LastN(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("tail: got %d, want 3", len(got))
 	}
-	if got[0].At != base.Add(7*time.Second) || got[2].At != base.Add(9*time.Second) {
-		t.Errorf("tail returned wrong range: first=%s last=%s", got[0].At, got[len(got)-1].At)
+	// time.Time.Equal compares wall-clock instants ignoring location-
+	// pointer identity; == is wrong here because JSON unmarshal returns
+	// time.UTC while base carries time.Local (even when both render UTC
+	// in CI, the *Location pointers differ).
+	if !got[0].At.Equal(base.Add(7*time.Second)) || !got[2].At.Equal(base.Add(9*time.Second)) {
+		t.Errorf("tail returned wrong range: first=%s last=%s, want %s..%s",
+			got[0].At, got[len(got)-1].At,
+			base.Add(7*time.Second), base.Add(9*time.Second))
 	}
 }
 
