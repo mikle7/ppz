@@ -870,7 +870,10 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 		writeIPC(conn, cliproto.SendBatchReply{})
 		return
 	}
-	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session, req.Sender)
+	// Batch path passes "" for reqSender: the only caller is the share
+	// parent's stdout/stdctrl publisher, where the CLI-side env doesn't
+	// represent the wrapped handle. See SendBatchRequest doc comment.
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session, "")
 	if e != nil {
 		writeIPCErr(conn, e)
 		return

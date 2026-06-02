@@ -311,12 +311,13 @@ type SendBatchRequest struct {
 	BareTarget string   `json:"bare_target,omitempty"` // Phase 1.5: see SendRequest.BareTarget
 	Payloads   []string `json:"payloads"`
 	Session    string   `json:"session,omitempty"`
-	// Sender mirrors SendRequest.Sender — the CLI's resolved current-
-	// handle hint, used to stamp envelope.sender. Terminal-share's
-	// stdin forwarding uses the batch IPC, and it runs inside the
-	// same wrapped-pty context as `ppz send`, so it benefits from
-	// the same hint precedence. See SendRequest.Sender for the why.
-	Sender string `json:"sender,omitempty"`
+	// No Sender field: the only batch caller is `ppz terminal share`'s
+	// stdout/stdctrl publisher (sendStreamBatch / sendStreamLine), which
+	// runs in the share *parent* process — not the wrapped child. The
+	// parent's PPZ_CURRENT_HANDLE is the outer shell's current, NOT the
+	// wrapped handle, so forwarding it would stamp the wrong sender on
+	// <handle>.stdout messages. The daemon's State.Current(session)
+	// fallback (via senderForRequest) is the right resolution here.
 }
 
 // SendBatchReply mirrors SendReply but as parallel arrays,
