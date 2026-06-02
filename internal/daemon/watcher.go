@@ -40,7 +40,7 @@ func (d *Daemon) watchState(ctx context.Context, hupCh <-chan os.Signal) {
 			// socket and redials. Without the follow eviction the
 			// stdin/inbox forwarders sit on a healthy-looking conn
 			// whose underlying JetStream consumer just died.
-			d.swapNC(nil)
+			d.swapNC("watchState-creds-gone", nil)
 		}
 		// Capture sigs after LoadFromDisk so hup-triggered reloads also
 		// align the cache.
