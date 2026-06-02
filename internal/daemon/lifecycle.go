@@ -82,15 +82,19 @@ func appendLifecycleLog(home string, ev NATSEvent) error {
 
 // recordDaemonLifecycle is the joint hook for daemon start / stop
 // events: appends to the in-memory ring (so the current process's
-// `ppz diagnostics` includes it) AND to the on-disk log (so the next
-// daemon picks it up at startup).
+// `ppz diagnostics` includes it) AND to BOTH on-disk logs — the small
+// lifecycle log (32-entry cap, daemon bounces only) so a fresh daemon
+// reseeds its ring; and the larger connection-events log so a single
+// unified --since=DURATION query returns everything in chronological
+// order, lifecycle + connection events interleaved.
 func (d *Daemon) recordDaemonLifecycle(typ, reason string) {
-	at := time.Now()
+	ev := NATSEvent{V: NATSEventSchemaVersion, Type: typ, At: time.Now(), Reason: reason}
 	if d.NATSEvents != nil {
-		d.NATSEvents.Append(typ, reason, at)
+		d.NATSEvents.Append(ev)
 	}
 	if d.Home == "" {
 		return
 	}
-	_ = appendLifecycleLog(d.Home, NATSEvent{Type: typ, At: at, Reason: reason})
+	_ = appendLifecycleLog(d.Home, ev)
+	_ = appendNATSEventLog(d.Home, ev)
 }

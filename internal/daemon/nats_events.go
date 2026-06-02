@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -33,22 +34,62 @@ func natsStateString(nc *nats.Conn) string {
 }
 
 // natsEventRingCap is the maximum number of NATS connection-state events
-// retained in memory. Phase 0 of the agent-hardening plan calls for a
-// short tail — enough to catch events that happened "a few minutes ago"
-// when an operator runs `ppz diagnostics`, not a full history.
-const natsEventRingCap = 32
+// retained in memory. Sized so a few rotation bursts (each ~8-12 events
+// under contention — see docs/diagnostics.md "burst-swap-storm") fit
+// without aging out the surrounding context. Full history lives on disk
+// in `nats-events.jsonl`; the ring is the hot tail used by the default
+// `ppz diagnostics` output.
+const natsEventRingCap = 256
+
+// NATSEventSchemaVersion is the on-disk + on-wire schema version stamped
+// on every NATSEvent. Bumped when fields are renamed or semantics
+// change; new fields with json:",omitempty" do not require a bump.
+// Reader contract is documented in docs/diagnostics.md.
+const NATSEventSchemaVersion = 1
 
 // NATSEvent is one entry in the daemon's NATS connection-state log.
-// Type is one of "connect", "disconnect", "reconnect", "closed" —
-// matching the nats.go handler set we register. At is the moment the
-// handler fired. Reason captures the error string for disconnect /
-// closed events (empty for the others). Phase 0 is observe-only —
-// these events drive `ppz status` and `ppz diagnostics` output but do not
-// influence reconnect behaviour.
+//
+// Type vocabulary (closed set — extend with care, document in
+// docs/diagnostics.md):
+//   - "connect"     — nats.go ConnectHandler fired (initial / reconnect success)
+//   - "disconnect"  — nats.go DisconnectErrHandler fired
+//   - "reconnect"   — nats.go ReconnectHandler fired
+//   - "closed"      — nats.go ClosedHandler fired
+//   - "swap"        — daemon code called swapNC (Caller names which fn)
+//   - "warn"        — non-fatal failure (e.g. resubscribe error)
+//   - "daemon_start" / "daemon_stop" — lifecycle hooks
+//
+// Caller distinguishes daemon-initiated transitions from nats.go-initiated
+// ones: "nats.go" for library callbacks, the Go function name otherwise
+// ("ensureNATS", "OnRefreshed-callback", "handleLogin", "watchState").
+// This is the single most useful field for "who closed this connection?"
+// — see the burst-swap-storm pattern.
+//
+// NCID is the connection's pointer address ("0x14000123abc"), letting a
+// reader trace which logical NC each event references across a rotation.
+//
+// JWTExp is the unix-seconds `exp` of the JWT in use at event time. 0
+// means unknown (lifecycle / warn events, or pre-login). Used by the
+// post-rotation-auth-violation pattern.
 type NATSEvent struct {
+	V      int       `json:"v"`
 	Type   string    `json:"type"`
 	At     time.Time `json:"at"`
+	Caller string    `json:"caller,omitempty"`
+	NCID   string    `json:"nc_id,omitempty"`
+	JWTExp int64     `json:"jwt_exp,omitempty"`
 	Reason string    `json:"reason,omitempty"`
+}
+
+// ncID renders a *nats.Conn pointer as a stable identity string for
+// event correlation. Nil renders as "" so callers don't have to
+// nil-check before stamping. Format is implementation-defined; readers
+// should treat it as opaque.
+func ncID(nc *nats.Conn) string {
+	if nc == nil {
+		return ""
+	}
+	return fmt.Sprintf("%p", nc)
 }
 
 // NATSEventRing is a fixed-capacity, append-only, drop-oldest ring of
@@ -74,10 +115,17 @@ func newNATSEventRing(cap int) *NATSEventRing {
 // Append records one event. When the ring is full the oldest entry is
 // dropped — diag's value is precisely catching transient events that
 // happened "a few minutes ago", so we keep the tail and lose the head.
-func (r *NATSEventRing) Append(typ, reason string, at time.Time) {
+// The full history (beyond ring cap) lives on disk in nats-events.jsonl;
+// see nats_events_persistence.go.
+//
+// V is stamped to NATSEventSchemaVersion if zero, so callers don't have
+// to remember to set it on every Append.
+func (r *NATSEventRing) Append(ev NATSEvent) {
+	if ev.V == 0 {
+		ev.V = NATSEventSchemaVersion
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	ev := NATSEvent{Type: typ, At: at, Reason: reason}
 	if len(r.events) < r.cap {
 		r.events = append(r.events, ev)
 		return

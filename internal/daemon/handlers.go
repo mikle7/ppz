@@ -25,34 +25,46 @@ import (
 	"github.com/pipescloud/ppz/internal/natsubj"
 )
 
-// natsObserveOptions returns the connection-state observation handlers
-// (Phase 0 of agent hardening). Both connect helpers below splat these
-// onto every nats.Connect so disconnect / reconnect / closed transitions
-// land in the daemon's NATSEventRing — surfaced by `ppz status` and
-// `ppz diagnostics`.
+// natsObserveOptions returns the connection-state observation handlers.
+// Both connect helpers below splat these onto every nats.Connect so
+// disconnect / reconnect / closed transitions are captured by the
+// daemon — surfaced by `ppz status` and `ppz diagnostics`.
 //
-// Phase 0 is observe-only — no behaviour change. We do NOT pass
-// nats.MaxReconnects(-1) or jitter options here; those are Phase 1
-// fixes scoped against the data this instrumentation produces.
+// store receives one NATSEvent per nats.go callback firing; the daemon
+// wires this to d.recordNATSEvent (ring + jsonl). nil disables capture
+// (tests). jwtExpFn (optional) returns the unix-seconds `exp` of the
+// JWT in use at event time, stamped onto every event so readers can
+// spot "disconnect at jwt_exp == now" (the post-rotation-auth-violation
+// pattern). nil for the static-cred helper (connectNATSWithJWT).
 //
-// Caller passes the ring rather than the daemon to keep the helpers
-// importable from anywhere they're needed without a circular reference
-// back to the daemon struct. ring may be nil (tests / paths without
-// observability), in which case the handlers no-op.
-func natsObserveOptions(ring *NATSEventRing) []nats.Option {
-	record := func(typ, reason string) {
-		if ring == nil {
+// Every event from this path carries Caller="nats.go" to distinguish
+// library-initiated transitions from daemon-initiated ones (which carry
+// the originating function name — see swapNC's "swap" events).
+func natsObserveOptions(store func(NATSEvent), jwtExpFn func() int64) []nats.Option {
+	record := func(typ, reason string, nc *nats.Conn) {
+		if store == nil {
 			return
 		}
-		ring.Append(typ, reason, time.Now())
+		var jwtExp int64
+		if jwtExpFn != nil {
+			jwtExp = jwtExpFn()
+		}
+		store(NATSEvent{
+			Type:   typ,
+			At:     time.Now(),
+			Caller: "nats.go",
+			NCID:   ncID(nc),
+			JWTExp: jwtExp,
+			Reason: reason,
+		})
 	}
 	return []nats.Option{
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
 			reason := ""
 			if err != nil {
 				reason = err.Error()
 			}
-			record("disconnect", reason)
+			record("disconnect", reason, nc)
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
 			reason := ""
@@ -61,7 +73,7 @@ func natsObserveOptions(ring *NATSEventRing) []nats.Option {
 					reason = u
 				}
 			}
-			record("reconnect", reason)
+			record("reconnect", reason, nc)
 		}),
 		nats.ClosedHandler(func(nc *nats.Conn) {
 			reason := ""
@@ -70,15 +82,16 @@ func natsObserveOptions(ring *NATSEventRing) []nats.Option {
 					reason = e.Error()
 				}
 			}
-			record("closed", reason)
+			record("closed", reason, nc)
 		}),
 	}
 }
 
 // connectNATSWithJWT connects to NATS at url, authenticating with the
 // supplied User JWT + seed (Phase 3). Static — kept for legacy code
-// paths that don't yet flow through the refresh loop.
-func connectNATSWithJWT(url, userJWT, userSeed string, ring *NATSEventRing) (*nats.Conn, error) {
+// paths that don't yet flow through the refresh loop. store may be nil
+// to disable event capture.
+func connectNATSWithJWT(url, userJWT, userSeed string, store func(NATSEvent)) (*nats.Conn, error) {
 	if userJWT == "" || userSeed == "" {
 		return nil, errors.New("connectNATSWithJWT: missing nats user jwt/seed in credentials")
 	}
@@ -91,7 +104,7 @@ func connectNATSWithJWT(url, userJWT, userSeed string, ring *NATSEventRing) (*na
 			func() (string, error) { return userJWT, nil },
 			func(nonce []byte) ([]byte, error) { return kp.Sign(nonce) },
 		),
-	}, natsObserveOptions(ring)...)
+	}, natsObserveOptions(store, nil)...)
 	return nats.Connect(url, opts...)
 }
 
@@ -99,8 +112,11 @@ func connectNATSWithJWT(url, userJWT, userSeed string, ring *NATSEventRing) (*na
 // User JWT + seed from the supplied RefreshLoop on every (re)connect.
 // nats.go calls the callbacks once per connection establishment; if
 // the refresh loop has rotated credentials in the meantime, the next
-// reconnect picks up the fresh values.
-func connectNATSWithRefresh(url string, r *RefreshLoop, ring *NATSEventRing) (*nats.Conn, error) {
+// reconnect picks up the fresh values. store may be nil to disable
+// event capture; when set, every observe event is stamped with the
+// current JWT exp from r so the post-rotation-auth-violation pattern
+// can correlate disconnects with rotation timing.
+func connectNATSWithRefresh(url string, r *RefreshLoop, store func(NATSEvent)) (*nats.Conn, error) {
 	jwt, seed := r.Current()
 	if jwt == "" || seed == "" {
 		return nil, errors.New("connectNATSWithRefresh: refresh loop has no credentials yet")
@@ -126,7 +142,7 @@ func connectNATSWithRefresh(url string, r *RefreshLoop, ring *NATSEventRing) (*n
 				return kp.Sign(nonce)
 			},
 		),
-	}, natsObserveOptions(ring)...)
+	}, natsObserveOptions(store, r.JWTExp)...)
 	return nats.Connect(url, opts...)
 }
 
@@ -207,11 +223,11 @@ func (d *Daemon) startRefreshLoop(accountID, jwt, seed string, expUnix int64) {
 			if d.NATSURL == "" {
 				return
 			}
-			newNC, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.NATSEvents)
+			newNC, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.recordNATSEvent)
 			if err != nil || newNC == nil {
 				return
 			}
-			d.swapNC(newNC)
+			d.swapNC("OnRefreshed-callback", newNC)
 			if aid, perr := uuid.Parse(d.State.AccountID()); perr == nil {
 				d.subscribeOrgHeartbeats(aid)
 			}
@@ -286,8 +302,8 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 	// is active would otherwise silently break the .stdin /.inbox
 	// relays anchored to the prior NC.
 	d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
-	newNC, _ := connectNATSWithRefresh(natsURL, d.Refresh, d.NATSEvents)
-	d.swapNC(newNC)
+	newNC, _ := connectNATSWithRefresh(natsURL, d.Refresh, d.recordNATSEvent)
+	d.swapNC("handleLogin", newNC)
 	if newNC != nil {
 		if aid, err := uuid.Parse(ex.AccountID); err == nil {
 			d.subscribeOrgHeartbeats(aid)
@@ -322,7 +338,7 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 			// post-rotation NATS connection. Same shape as logout /
 			// re-login; centralizing via swapNC makes this
 			// deterministic across every NC-replacement site.
-			d.swapNC(nil)
+			d.swapNC("ensureNATS-refresh-due", nil)
 		}
 	}
 	if d.NC != nil && d.NC.IsConnected() {
@@ -371,7 +387,7 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	// Record that signal alongside the nats.go-provided ReconnectHandler
 	// events so `ppz diagnostics` surfaces both reconnect mechanisms.
 	wasDisconnected := d.NC != nil && !d.NC.IsConnected()
-	nc, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.NATSEvents)
+	nc, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.recordNATSEvent)
 	if err != nil {
 		return cliproto.New(cliproto.ENATSUnreachable)
 	}
@@ -379,9 +395,16 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	// existing follows anchored to the prior (disconnected) NC would
 	// otherwise stay on a dead consumer — see the
 	// share-stdin-survives-share-daemon-logout / -relogin pins.
-	d.swapNC(nc)
-	if wasDisconnected && d.NATSEvents != nil {
-		d.NATSEvents.Append("reconnect", "ensureNATS rebuilt connection", time.Now())
+	d.swapNC("ensureNATS", nc)
+	if wasDisconnected {
+		d.recordNATSEvent(NATSEvent{
+			Type:   "reconnect",
+			At:     time.Now(),
+			Caller: "ensureNATS",
+			NCID:   ncID(nc),
+			JWTExp: d.Refresh.JWTExp(),
+			Reason: "ensureNATS rebuilt connection",
+		})
 	}
 	// Subscribe to all org heartbeats so ppz who is cross-daemon-aware.
 	if aid, err := uuid.Parse(d.State.AccountID()); err == nil {

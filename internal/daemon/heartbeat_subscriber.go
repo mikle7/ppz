@@ -65,7 +65,13 @@ func (d *Daemon) subscribeOrgHeartbeats(accountID uuid.UUID) {
 		}
 		d.Heartbeats.Stamp(handle, env.Payload, time.Now())
 	})
-	if err != nil && d.NATSEvents != nil {
-		d.NATSEvents.Append("warn", "subscribeOrgHeartbeats: "+err.Error(), time.Now())
+	if err != nil {
+		d.recordNATSEvent(NATSEvent{
+			Type:   "warn",
+			At:     time.Now(),
+			Caller: "subscribeOrgHeartbeats",
+			NCID:   ncID(d.NC),
+			Reason: err.Error(),
+		})
 	}
 }

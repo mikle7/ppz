@@ -111,6 +111,21 @@ func (r *RefreshLoop) LastRefreshAt() time.Time {
 	return r.lastAt
 }
 
+// JWTExp returns the unix-seconds `exp` claim of the cached JWT, or 0
+// if no credentials have been cached yet. Used by natsObserveOptions
+// to stamp the JWT exp onto every connection-state event — the
+// post-rotation-auth-violation pattern relies on this to correlate
+// disconnects with rotation timing. Safe for concurrent callers; nil-
+// receiver returns 0 so callers can pass r.JWTExp without nil-checking.
+func (r *RefreshLoop) JWTExp() int64 {
+	if r == nil {
+		return 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.expUnix
+}
+
 // RefreshNowIfDue refreshes synchronously when the cached credential is already
 // inside its refresh window. It covers machines waking from sleep: the timer
 // goroutine may not have run yet, but the next command must not continue with

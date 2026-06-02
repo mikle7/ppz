@@ -76,7 +76,28 @@ func New(home, sock string) *Daemon {
 // and there's no replacement to install. Callers are responsible for
 // any nats.Conn lifecycle (connectNATSWithRefresh ownership) outside
 // of swapping the pointer.
-func (d *Daemon) swapNC(newNC *nats.Conn) {
+//
+// caller is the originating function name ("ensureNATS",
+// "OnRefreshed-callback", "handleLogin", ...), recorded on the
+// emitted "swap" event so readers can attribute every NC transition.
+// The swap event captures both the old and new NC IDs in Reason so a
+// single line tells the full story; the inevitable nats.go-driven
+// disconnect+closed pair (from closing the old NC) lands separately
+// with Caller="nats.go" — that's the noise the burst-swap-storm
+// pattern detects.
+func (d *Daemon) swapNC(caller string, newNC *nats.Conn) {
+	oldID := ncID(d.NC)
+	newID := ncID(newNC)
+	if d.NATSEvents != nil {
+		d.recordNATSEvent(NATSEvent{
+			Type:   "swap",
+			At:     time.Now(),
+			Caller: caller,
+			NCID:   newID,
+			JWTExp: d.Refresh.JWTExp(),
+			Reason: "old=" + oldID + " new=" + newID,
+		})
+	}
 	if d.Follows != nil {
 		d.Follows.closeAll()
 	}
@@ -84,6 +105,20 @@ func (d *Daemon) swapNC(newNC *nats.Conn) {
 		d.NC.Close()
 	}
 	d.NC = newNC
+}
+
+// recordNATSEvent is the single sink for connection-state events: it
+// stamps the in-memory ring (hot tail for `ppz status` /
+// `ppz diagnostics`) AND appends to the on-disk jsonl (full history,
+// surviving restarts and burst-rate aging). Failures on the disk path
+// are silent — observability is best-effort.
+func (d *Daemon) recordNATSEvent(ev NATSEvent) {
+	if d.NATSEvents != nil {
+		d.NATSEvents.Append(ev)
+	}
+	if d.Home != "" {
+		_ = appendNATSEventLog(d.Home, ev)
+	}
 }
 
 // Run runs the daemon in the foreground. Returns when ctx is cancelled or
@@ -98,14 +133,18 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	defer os.Remove(filepath.Join(d.Home, filePID))
 
-	// Diagnostics ring: prime from the on-disk lifecycle log (so the
-	// previous daemon's stop event is observable here), then record our
-	// own start. The stop counterpart fires on shutdown below.
+	// Diagnostics ring: prime from BOTH the on-disk lifecycle log (so
+	// the previous daemon's stop event is observable here) AND the
+	// connection-events tail (so a fresh process's `ppz diagnostics`
+	// shows the burst that prompted the operator to restart it).
+	// Then record our own start; the stop counterpart fires on
+	// shutdown below.
 	if d.NATSEvents != nil {
 		for _, ev := range loadLifecycleLog(d.Home) {
-			d.NATSEvents.Append(ev.Type, ev.Reason, ev.At)
+			d.NATSEvents.Append(ev)
 		}
 	}
+	d.loadNATSEventLogTail()
 	d.recordDaemonLifecycle("daemon_start", "")
 	defer d.recordDaemonLifecycle("daemon_stop", "graceful")
 

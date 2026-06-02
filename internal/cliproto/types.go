@@ -550,27 +550,72 @@ type HTTPError struct {
 	Error Error `json:"error"`
 }
 
-// DiagRequest is the input to `ppz diagnostics` — currently empty. Reserved
-// for future scoping flags (per-subsystem filters, since-when, etc.).
-type DiagRequest struct{}
+// DiagRequest is the input to `ppz diagnostics`. SinceUnix scopes the
+// returned events to the trailing window (0 = default in-memory ring
+// only; non-zero = scan the on-disk jsonl from this unix-seconds
+// timestamp forward). The on-disk store is documented in
+// docs/diagnostics.md.
+type DiagRequest struct {
+	SinceUnix int64 `json:"since_unix,omitempty"`
+}
 
 // DiagEvent is one connection-state transition in DiagReply. Fields
 // mirror the daemon's NATSEvent struct (kept as a separate type so
-// the IPC contract is independent of internal storage).
+// the IPC contract is independent of internal storage). Schema is
+// versioned by V; current is 1. See docs/diagnostics.md for the
+// vocabulary of Type and Caller values.
 type DiagEvent struct {
+	V      int       `json:"v"`
 	Type   string    `json:"type"`
 	At     time.Time `json:"at"`
+	Caller string    `json:"caller,omitempty"`
+	NCID   string    `json:"nc_id,omitempty"`
+	JWTExp int64     `json:"jwt_exp,omitempty"`
 	Reason string    `json:"reason,omitempty"`
 }
 
-// DiagReply carries the daemon's introspection snapshot. Phase 0:
-// just the NATS connection state + recent connection-state events.
-// Future phases will extend with refresh-loop state, JetStream
-// consumer lag, etc.
+// DiagPattern is one detector match against the visible event window.
+// See internal/daemon/nats_event_patterns.go for the registered set.
+type DiagPattern struct {
+	Name   string    `json:"name"`
+	At     time.Time `json:"at"`
+	Detail string    `json:"detail"`
+}
+
+// DiagSummary is the always-shown top-of-`ppz diagnostics` block. All
+// fields are optional — Summary{} (zero value) renders as "no info"
+// in the CLI rather than an error.
+//
+// State / StateSince describe the live connection. RefreshLastAt /
+// RefreshNextDueAt cover the JWT rotation loop (zero RefreshNextDueAt
+// = loop not running). URL is the NATS broker URL the daemon is
+// configured against — useful when PPZ_NATS_URL overrides have been
+// set out-of-band.
+type DiagSummary struct {
+	State            string    `json:"state,omitempty"`
+	StateSince       time.Time `json:"state_since,omitempty"`
+	URL              string    `json:"url,omitempty"`
+	RefreshLastAt    time.Time `json:"refresh_last_at,omitempty"`
+	RefreshNextDueAt time.Time `json:"refresh_next_due_at,omitempty"`
+}
+
+// DiagReply carries the daemon's introspection snapshot.
+//
+// Summary is rendered at the top of default CLI output. Patterns are
+// the detector hits, surfaced as ⚠ lines so the operator (or an AI
+// agent reading the output) doesn't need to read docs/diagnostics.md
+// to know what's wrong. NATSEvents is the chronological event slice
+// — either the in-memory ring (default) or the on-disk scan when
+// SinceUnix was set. OnDiskCount is the total events in the active
+// jsonl, so the CLI can print "247 older events on disk → ppz
+// diagnostics --since=…" hints.
 type DiagReply struct {
-	NATSState         string      `json:"nats_state,omitempty"`
-	NATSDropsLastHour int         `json:"nats_drops_last_hour,omitempty"`
-	NATSEvents        []DiagEvent `json:"nats_events"`
+	Summary           DiagSummary   `json:"summary"`
+	Patterns          []DiagPattern `json:"patterns,omitempty"`
+	NATSState         string        `json:"nats_state,omitempty"`
+	NATSDropsLastHour int           `json:"nats_drops_last_hour,omitempty"`
+	NATSEvents        []DiagEvent   `json:"nats_events"`
+	OnDiskCount       int           `json:"on_disk_count,omitempty"`
 }
 
 // WhoRequest is the input to `ppz who`. Empty for v1 — filters are

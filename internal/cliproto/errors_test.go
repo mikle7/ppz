@@ -81,3 +81,16 @@ func TestMessage_ENATSUnreachable_MentionsCredentialCause(t *testing.T) {
 		t.Errorf("Message(ENATSUnreachable) should mention credentials / login / auth / expired as a possible cause (MoltHub feedback, docs/AGENT_HARDENING.md Track B); got:\n  %q", msg)
 	}
 }
+
+// TestMessage_ENATSUnreachable_MentionsBundle pins the diagnostics
+// bundle pointer. Discoverability is the whole reason --bundle exists:
+// the user (or AI agent) reading the error message must learn that
+// ppz diagnostics --bundle captures a bug report without having to
+// read --help or docs/diagnostics.md. If the message stops naming
+// the flag, that channel breaks silently.
+func TestMessage_ENATSUnreachable_MentionsBundle(t *testing.T) {
+	msg := Message(ENATSUnreachable)
+	if !strings.Contains(msg, "diagnostics") || !strings.Contains(msg, "--bundle") {
+		t.Errorf("Message(ENATSUnreachable) should point at 'ppz diagnostics --bundle' as the bug-report path; got:\n  %q", msg)
+	}
+}

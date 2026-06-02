@@ -109,8 +109,12 @@ func Message(c Code) string {
 	case ENATSUnreachable:
 		// MoltHub 2026-05-08: most-common cause was expired credentials,
 		// not URL misconfig. Lead with that; keep PPZ_NATS_URL guidance
-		// for non-docker setups.
-		return "nats unreachable; common causes: expired credentials (try 'ppz daemon logout' then re-login), or on non-docker setups missing PPZ_NATS_URL=nats://localhost:4222"
+		// for non-docker setups. The diagnostics --bundle pointer is the
+		// "what do I do if neither remediation works?" path — captures
+		// the persisted event log + state for a bug report. Surfacing
+		// it here is the only reliable way users (and AI agents) learn
+		// the flag exists; see docs/diagnostics.md.
+		return "nats unreachable; common causes: expired credentials (try 'ppz daemon logout' then re-login), or on non-docker setups missing PPZ_NATS_URL=nats://localhost:4222; if neither fixes it, run 'ppz diagnostics --bundle' to capture a bug report"
 	case EInvalidPipe:
 		// MoltHub 2026-05-08: enumerating only the four built-in pipes
 		// misled agents into thinking custom pipes were unsupported.
