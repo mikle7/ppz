@@ -247,49 +247,96 @@ func TestLsCallsMaybeNotifyUpdate(t *testing.T) {
 	}
 }
 
-// TestMaybeNotifyUpdate_FetchTimeoutCoversTypicalGitHubLatency is a
-// regression guard for the 2026-06-02 user report ("ppz update checking
-// is broken"). The manifest URL is served by raw.githubusercontent.com,
-// which routinely takes ~770–890ms to respond on normal networks
-// (measured directly). If fetchLatestIfNewer's deadline drops below
-// that, every fetch hits context.DeadlineExceeded, the error is
-// silently swallowed (update.go:53-54 returns "", false), and `ppz
-// status` / `ppz version` show no notification even when a newer
-// release is published.
+// TestUpdateFetchDeadline_DefaultCoversTypicalLatency is the regression
+// guard for the 2026-06-02 user report ("ppz update checking is broken",
+// #94). The manifest URL is served by raw.githubusercontent.com, which
+// routinely takes ~770–890ms to respond on normal networks (measured
+// directly). If the *default* fetch deadline drops below that band,
+// every check hits context.DeadlineExceeded, the error is silently
+// swallowed (fetchLatestIfNewer returns "", false), and `ppz status` /
+// `ppz version` show no notification even when a newer release exists —
+// exactly the 750ms bug #94 fixed.
 //
-// Stand up a manifest server that responds after 900ms — deliberately
-// above the original 750ms budget, comfortably below a 2s budget — and
-// assert maybeNotifyUpdate still prints the upgrade hint. RED at any
-// timeout below ~900ms; GREEN once the deadline is widened.
-func TestMaybeNotifyUpdate_FetchTimeoutCoversTypicalGitHubLatency(t *testing.T) {
-	oldVersion := version.Version
-	version.Version = "v1.2.3"
-	t.Cleanup(func() { version.Version = oldVersion })
+// This pins the default constant directly rather than sleeping a real
+// ~900ms in the suite: it is deterministic, instant, and fails the
+// moment someone tightens the default back under the latency band. The
+// full fetch->parse->notify path and the PPZ_UPDATE_TIMEOUT override are
+// exercised end-to-end by TestFetchLatestIfNewer_HonorsUpdateTimeoutEnvOverride.
+func TestUpdateFetchDeadline_DefaultCoversTypicalLatency(t *testing.T) {
+	const minBudget = 1500 * time.Millisecond
+	if updateFetchTimeout < minBudget {
+		t.Fatalf("default update fetch deadline = %s, want >= %s to clear typical raw.githubusercontent.com latency (~770–890ms) with margin; "+
+			"a tighter default silently suppresses the update notice (#94)", updateFetchTimeout, minBudget)
+	}
+}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(900 * time.Millisecond)
-		_, _ = w.Write([]byte(`{"latest_version":"v1.2.4"}`))
-	}))
-	t.Cleanup(srv.Close)
-	t.Setenv("PPZ_UPDATE_MANIFEST_URL", srv.URL)
-
+// captureStderr runs fn with os.Stderr redirected to a pipe and returns
+// everything written to it. The update notice is a single short line, so
+// it fits the pipe buffer without a draining goroutine.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
-	oldStderr := os.Stderr
+	old := os.Stderr
 	os.Stderr = w
-	maybeNotifyUpdate()
+	fn()
 	_ = w.Close()
-	os.Stderr = oldStderr
-
+	os.Stderr = old
 	out, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("read stderr: %v", err)
 	}
 	_ = r.Close()
+	return string(out)
+}
 
-	if !strings.Contains(string(out), "update available: ppz v1.2.4 (current v1.2.3)") {
-		t.Fatalf("update notice missing for a 900ms-delayed manifest fetch — the deadline is too tight; got %q", string(out))
+// TestFetchLatestIfNewer_HonorsUpdateTimeoutEnvOverride pins the
+// follow-up to #94: the manifest-fetch deadline must be operator-tunable
+// via PPZ_UPDATE_TIMEOUT, not a single hardcoded guess. #94 widened the
+// deadline from 750ms to a fixed 2s based on one network's measurement,
+// but 2s is still a guess — a user on a high-latency link (mobile,
+// satellite, distant CDN edge) can exceed it and silently get no notice,
+// the very failure #94 fixed. An override (mirroring PPZ_IPC_TIMEOUT)
+// lets them widen it; it also lets this test drive the real
+// fetch->parse->notify path deterministically at small delays instead of
+// sleeping ~900ms of real time.
+//
+// A manifest server responds after a fixed delay; the override must be
+// able to BOTH tighten the deadline below that delay (fetch times out ->
+// notice suppressed) and widen it above (fetch completes -> notice
+// prints).
+//
+// RED: with a hardcoded deadline that ignores the env, the tight 20ms
+// override is disregarded, the 120ms response slips under the 2s default,
+// and the notice prints when it should have been suppressed.
+// GREEN: the override is honored, so 20ms times out and 2s does not.
+func TestFetchLatestIfNewer_HonorsUpdateTimeoutEnvOverride(t *testing.T) {
+	oldVersion := version.Version
+	version.Version = "v1.2.3"
+	t.Cleanup(func() { version.Version = oldVersion })
+
+	const serverDelay = 120 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(serverDelay)
+		_, _ = w.Write([]byte(`{"latest_version":"v1.2.4"}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("PPZ_UPDATE_MANIFEST_URL", srv.URL)
+
+	// Tighter than the server delay: the fetch must time out and the
+	// notice must be suppressed.
+	t.Setenv("PPZ_UPDATE_TIMEOUT", "20ms")
+	if out := captureStderr(t, maybeNotifyUpdate); strings.Contains(out, "update available") {
+		t.Fatalf("PPZ_UPDATE_TIMEOUT=20ms should have timed out the %s fetch and suppressed the notice, but got: %q", serverDelay, out)
+	}
+
+	// Wider than the server delay: the fetch completes and the notice
+	// prints — proving the override widens as well as tightens (and that
+	// the suppression above was the timeout, not a broken fetch).
+	t.Setenv("PPZ_UPDATE_TIMEOUT", "2s")
+	if out := captureStderr(t, maybeNotifyUpdate); !strings.Contains(out, "update available: ppz v1.2.4 (current v1.2.3)") {
+		t.Fatalf("PPZ_UPDATE_TIMEOUT=2s should have let the %s fetch complete and printed the notice, but got: %q", serverDelay, out)
 	}
 }
