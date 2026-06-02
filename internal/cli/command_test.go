@@ -141,6 +141,47 @@ func TestCmdCommand_FlagAfterPositionalArgsErrors(t *testing.T) {
 	}
 }
 
+// TestCmdCommand_StampsSenderFromEnvInsideSharedTerminal repros the
+// same shared-pty sender-empty bug for `ppz command`, the sibling
+// IPC-send verb. `ppz command H "instr"` issues TWO SendRequests
+// (instruction, then terminator) via the same daemon.Call(IPCSend,
+// …) shape `ppz send` uses, and both today omit any Sender hint —
+// so an inner-shell `ppz command other-agent "do X"` lands on the
+// receiver's stdin pipe with envelope.sender="" even though every
+// other verb agrees you ARE the wrapped handle.
+//
+// Pinning here ensures the GREEN fix wires both sites symmetrically;
+// fixing only `ppz send` would leave `ppz command` regressed.
+//
+// RED today.
+func TestCmdCommand_StampsSenderFromEnvInsideSharedTerminal(t *testing.T) {
+	t.Setenv("PPZ_SESSION", "jimmy")
+	t.Setenv("PPZ_CURRENT_HANDLE", "jimmy")
+
+	reqs := setupCommandDaemon(t)
+
+	if err := cmdCommand([]string{"other-agent", "do X"}); err != nil {
+		t.Fatalf("cmdCommand: %v", err)
+	}
+
+	if len(*reqs) != 2 {
+		t.Fatalf("want 2 SendRequests (instruction + terminator), got %d", len(*reqs))
+	}
+	// Both the instruction send AND the trailing-control-sequence send
+	// must carry the hint — `ppz command` does them as two distinct IPC
+	// calls (see command.go:93 — the 100ms pause that makes copilot/
+	// codex/agy treat the terminator as submit), and an asymmetric fix
+	// would stamp sender on one and "" on the other.
+	if (*reqs)[0].Sender != "jimmy" {
+		t.Fatalf("instruction SendRequest.Sender = %q, want %q — `ppz command` must forward PPZ_CURRENT_HANDLE for the same reasons `ppz send` does",
+			(*reqs)[0].Sender, "jimmy")
+	}
+	if (*reqs)[1].Sender != "jimmy" {
+		t.Fatalf("terminator SendRequest.Sender = %q, want %q — both IPC sends must carry the hint; receiver's stdin pipe sees two envelopes",
+			(*reqs)[1].Sender, "jimmy")
+	}
+}
+
 func setupCommandDaemon(t *testing.T) *[]cliproto.SendRequest {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "ppz-command-")

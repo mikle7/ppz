@@ -821,7 +821,7 @@ func (d *Daemon) handleSend(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.EInvalidSubject))
 		return
 	}
-	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session, req.Sender)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -870,7 +870,7 @@ func (d *Daemon) handleSendBatch(ctx context.Context, conn net.Conn, params json
 		writeIPC(conn, cliproto.SendBatchReply{})
 		return
 	}
-	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session)
+	target, e := d.resolveSendTarget(ctx, req.Handle, req.Channel, req.BareTarget, req.Session, req.Sender)
 	if e != nil {
 		writeIPCErr(conn, e)
 		return
@@ -951,7 +951,11 @@ type sendTarget struct {
 // stale-current cleanup), JetStream stream existence, and ensureNATS.
 // Returns the destination subject + sender id on success. Used by
 // both handleSend (single) and handleSendBatch (N).
-func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, bareTarget, session string) (sendTarget, *cliproto.Error) {
+// reqSender is the CLI's hint (PPZ_CURRENT_HANDLE forwarded from the
+// calling shell). senderForRequest decides whether it wins over the
+// daemon's per-session state — kept in one helper so the precedence
+// rule has a single audit point.
+func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, bareTarget, session, reqSender string) (sendTarget, *cliproto.Error) {
 	if _, ok := d.State.Credentials(); !ok {
 		return sendTarget{}, cliproto.New(cliproto.ENotLoggedIn)
 	}
@@ -991,9 +995,13 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 				// handle when one is set. Empty otherwise (anonymous
 				// send). Mirrors how collared sends carry the source
 				// handle as the actor identity.
+				//
+				// Sender selection routed through senderForRequest so
+				// CLI-supplied hints (env-resolved current) override
+				// the daemon's per-session state in a single place.
 				return sendTarget{
 					subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
-					sender:  d.State.Current(session),
+					sender:  senderForRequest(reqSender, d.State.Current(session)),
 				}, nil
 			case errors.Is(err, jetstream.ErrStreamNotFound):
 				// Fall through to the legacy collared interpretation.
@@ -1094,7 +1102,7 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 	}
 	return sendTarget{
 		subject: natsubj.BuildSubject(accountID, currentManifold, current, pipe),
-		sender:  d.State.Current(session),
+		sender:  senderForRequest(reqSender, d.State.Current(session)),
 	}, nil
 }
 

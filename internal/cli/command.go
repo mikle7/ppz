@@ -86,6 +86,13 @@ func cmdCommand(args []string) error {
 				// Forward session id so daemon.envelope.sender resolves
 				// against this tty's current source — same fix as send.go.
 				Session: sessionID(),
+				// Forward PPZ_CURRENT_HANDLE as sender hint — same reason
+				// as send.go. Inside a `ppz terminal share` wrapped pty,
+				// the daemon's per-session state is empty even though
+				// env says we're the wrapped handle; without the hint,
+				// envelope.sender lands on the receiver's stdin pipe
+				// blank. See senderForRequest in sender_resolve.go.
+				Sender: os.Getenv("PPZ_CURRENT_HANDLE"),
 			},
 			&reply); err != nil {
 			return err
