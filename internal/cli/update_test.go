@@ -247,50 +247,26 @@ func TestLsCallsMaybeNotifyUpdate(t *testing.T) {
 	}
 }
 
-// TestMaybeNotifyUpdate_FetchTimeoutCoversTypicalGitHubLatency is a
-// regression guard for the 2026-06-02 user report ("ppz update checking
-// is broken"). The manifest URL is served by raw.githubusercontent.com,
-// which routinely takes ~770–890ms to respond on normal networks
-// (measured directly). If fetchLatestIfNewer's deadline drops below
-// that, every fetch hits context.DeadlineExceeded, the error is
-// silently swallowed (update.go:53-54 returns "", false), and `ppz
-// status` / `ppz version` show no notification even when a newer
-// release is published.
+// TestUpdateFetchDeadline_DefaultCoversTypicalLatency is the regression
+// guard for the 2026-06-02 user report ("ppz update checking is broken",
+// #94). The manifest URL is served by raw.githubusercontent.com, which
+// routinely takes ~770–890ms to respond on normal networks (measured
+// directly). If the *default* fetch deadline drops below that band,
+// every check hits context.DeadlineExceeded, the error is silently
+// swallowed (fetchLatestIfNewer returns "", false), and `ppz status` /
+// `ppz version` show no notification even when a newer release exists —
+// exactly the 750ms bug #94 fixed.
 //
-// Stand up a manifest server that responds after 900ms — deliberately
-// above the original 750ms budget, comfortably below a 2s budget — and
-// assert maybeNotifyUpdate still prints the upgrade hint. RED at any
-// timeout below ~900ms; GREEN once the deadline is widened.
-func TestMaybeNotifyUpdate_FetchTimeoutCoversTypicalGitHubLatency(t *testing.T) {
-	oldVersion := version.Version
-	version.Version = "v1.2.3"
-	t.Cleanup(func() { version.Version = oldVersion })
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(900 * time.Millisecond)
-		_, _ = w.Write([]byte(`{"latest_version":"v1.2.4"}`))
-	}))
-	t.Cleanup(srv.Close)
-	t.Setenv("PPZ_UPDATE_MANIFEST_URL", srv.URL)
-
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	oldStderr := os.Stderr
-	os.Stderr = w
-	maybeNotifyUpdate()
-	_ = w.Close()
-	os.Stderr = oldStderr
-
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read stderr: %v", err)
-	}
-	_ = r.Close()
-
-	if !strings.Contains(string(out), "update available: ppz v1.2.4 (current v1.2.3)") {
-		t.Fatalf("update notice missing for a 900ms-delayed manifest fetch — the deadline is too tight; got %q", string(out))
+// This pins the default constant directly rather than sleeping a real
+// ~900ms in the suite: it is deterministic, instant, and fails the
+// moment someone tightens the default back under the latency band. The
+// full fetch->parse->notify path and the PPZ_UPDATE_TIMEOUT override are
+// exercised end-to-end by TestFetchLatestIfNewer_HonorsUpdateTimeoutEnvOverride.
+func TestUpdateFetchDeadline_DefaultCoversTypicalLatency(t *testing.T) {
+	const minBudget = 1500 * time.Millisecond
+	if updateFetchTimeout < minBudget {
+		t.Fatalf("default update fetch deadline = %s, want >= %s to clear typical raw.githubusercontent.com latency (~770–890ms) with margin; "+
+			"a tighter default silently suppresses the update notice (#94)", updateFetchTimeout, minBudget)
 	}
 }
 

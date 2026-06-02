@@ -47,7 +47,10 @@ ppz upgrade
 the curl one-liner. Release builds of `ppz login`, `ppz status`, and
 `ppz version` also check a lightweight manifest on GitHub and print a
 non-blocking update notice when a newer CLI is available. Set
-`PPZ_UPDATE_CHECK=0` to suppress those notices.
+`PPZ_UPDATE_CHECK=0` to suppress those notices. The manifest fetch is
+bounded by a 2s deadline; on a high-latency link where that is too tight
+(the notice silently won't appear), widen it with
+`PPZ_UPDATE_TIMEOUT=5s` (any Go duration).
 
 **From source (requires Go 1.22+):**
 
