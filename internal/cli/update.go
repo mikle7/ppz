@@ -46,7 +46,14 @@ func fetchLatestIfNewer() (string, bool) {
 	if !isExactReleaseVersion(version.Version) {
 		return "", false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	// 2s budget: raw.githubusercontent.com routinely takes 770–890ms to
+	// respond (measured on real networks), so the previous 750ms
+	// deadline overshot on a typical fetch — every check silently hit
+	// context.DeadlineExceeded, the error was swallowed below, and
+	// `ppz status` / `ppz version` showed no notification even when a
+	// newer release was published. 2s clears typical latency while
+	// staying imperceptible interactively.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	manifest, err := fetchUpdateManifest(ctx)
