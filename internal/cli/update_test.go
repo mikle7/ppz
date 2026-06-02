@@ -293,3 +293,74 @@ func TestMaybeNotifyUpdate_FetchTimeoutCoversTypicalGitHubLatency(t *testing.T) 
 		t.Fatalf("update notice missing for a 900ms-delayed manifest fetch — the deadline is too tight; got %q", string(out))
 	}
 }
+
+// captureStderr runs fn with os.Stderr redirected to a pipe and returns
+// everything written to it. The update notice is a single short line, so
+// it fits the pipe buffer without a draining goroutine.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	fn()
+	_ = w.Close()
+	os.Stderr = old
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	_ = r.Close()
+	return string(out)
+}
+
+// TestFetchLatestIfNewer_HonorsUpdateTimeoutEnvOverride pins the
+// follow-up to #94: the manifest-fetch deadline must be operator-tunable
+// via PPZ_UPDATE_TIMEOUT, not a single hardcoded guess. #94 widened the
+// deadline from 750ms to a fixed 2s based on one network's measurement,
+// but 2s is still a guess — a user on a high-latency link (mobile,
+// satellite, distant CDN edge) can exceed it and silently get no notice,
+// the very failure #94 fixed. An override (mirroring PPZ_IPC_TIMEOUT)
+// lets them widen it; it also lets this test drive the real
+// fetch->parse->notify path deterministically at small delays instead of
+// sleeping ~900ms of real time.
+//
+// A manifest server responds after a fixed delay; the override must be
+// able to BOTH tighten the deadline below that delay (fetch times out ->
+// notice suppressed) and widen it above (fetch completes -> notice
+// prints).
+//
+// RED: with a hardcoded deadline that ignores the env, the tight 20ms
+// override is disregarded, the 120ms response slips under the 2s default,
+// and the notice prints when it should have been suppressed.
+// GREEN: the override is honored, so 20ms times out and 2s does not.
+func TestFetchLatestIfNewer_HonorsUpdateTimeoutEnvOverride(t *testing.T) {
+	oldVersion := version.Version
+	version.Version = "v1.2.3"
+	t.Cleanup(func() { version.Version = oldVersion })
+
+	const serverDelay = 120 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(serverDelay)
+		_, _ = w.Write([]byte(`{"latest_version":"v1.2.4"}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("PPZ_UPDATE_MANIFEST_URL", srv.URL)
+
+	// Tighter than the server delay: the fetch must time out and the
+	// notice must be suppressed.
+	t.Setenv("PPZ_UPDATE_TIMEOUT", "20ms")
+	if out := captureStderr(t, maybeNotifyUpdate); strings.Contains(out, "update available") {
+		t.Fatalf("PPZ_UPDATE_TIMEOUT=20ms should have timed out the %s fetch and suppressed the notice, but got: %q", serverDelay, out)
+	}
+
+	// Wider than the server delay: the fetch completes and the notice
+	// prints — proving the override widens as well as tightens (and that
+	// the suppression above was the timeout, not a broken fetch).
+	t.Setenv("PPZ_UPDATE_TIMEOUT", "2s")
+	if out := captureStderr(t, maybeNotifyUpdate); !strings.Contains(out, "update available: ppz v1.2.4 (current v1.2.3)") {
+		t.Fatalf("PPZ_UPDATE_TIMEOUT=2s should have let the %s fetch complete and printed the notice, but got: %q", serverDelay, out)
+	}
+}
