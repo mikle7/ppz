@@ -125,6 +125,8 @@ func (d *Daemon) buildFilteredList(ctx context.Context, accountID uuid.UUID, ses
 	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
 		return cliproto.ListReply{}, e
 	}
+	d.refreshSourceCache(lr.Sources)
+
 	js, err := jetstream.New(d.NC)
 	if err != nil {
 		return cliproto.ListReply{}, cliproto.New(cliproto.ENATSUnreachable)
