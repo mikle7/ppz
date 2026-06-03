@@ -1144,6 +1144,36 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+
+	// With patterns, delegate to the same filtering path --watch uses
+	// so `ppz ls foo%` and `ppz ls --watch foo%` agree on what
+	// matches. Without patterns, fall through to the original
+	// unfiltered enumeration — every other IPCList caller (source.go,
+	// pipe.go, completion.go, desktop.go) takes this path and expects
+	// the full snapshot.
+	if len(req.Patterns) > 0 {
+		if err := d.ensureNATS(ctx); err != nil {
+			if e, ok := err.(*cliproto.Error); ok {
+				writeIPCErr(conn, e)
+			} else {
+				writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+			}
+			return
+		}
+		accountID, err := uuid.Parse(d.State.AccountID())
+		if err != nil {
+			writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
+			return
+		}
+		reply, e := d.buildFilteredList(ctx, accountID, req.Session, req.Patterns)
+		if e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
+		writeIPC(conn, reply)
+		return
+	}
+
 	var lr cliproto.ListSourcesReply
 	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
 		writeIPCErr(conn, e)
