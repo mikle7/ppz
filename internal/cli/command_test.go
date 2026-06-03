@@ -20,11 +20,11 @@ func TestCmdCommand_DefaultSequenceIsCR(t *testing.T) {
 		t.Fatalf("cmdCommand: %v", err)
 	}
 
-	if len(*reqs) != 2 {
-		t.Fatalf("want 2 requests, got %d", len(*reqs))
+	if reqs.count() != 2 {
+		t.Fatalf("want 2 requests, got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[0], "myhost", "ls -la")
-	assertStdinRequest(t, (*reqs)[1], "myhost", "\r")
+	assertStdinRequest(t, reqs.at(0), "myhost", "ls -la")
+	assertStdinRequest(t, reqs.at(1), "myhost", "\r")
 }
 
 func TestCmdCommand_NoInstructionSendsOnlyCtrlSeq(t *testing.T) {
@@ -34,10 +34,10 @@ func TestCmdCommand_NoInstructionSendsOnlyCtrlSeq(t *testing.T) {
 		t.Fatalf("cmdCommand no instruction: %v", err)
 	}
 
-	if len(*reqs) != 1 {
-		t.Fatalf("want 1 request, got %d", len(*reqs))
+	if reqs.count() != 1 {
+		t.Fatalf("want 1 request, got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[0], "myhost", "\r")
+	assertStdinRequest(t, reqs.at(0), "myhost", "\r")
 }
 
 func TestCmdCommand_ClaudeFlag(t *testing.T) {
@@ -47,11 +47,11 @@ func TestCmdCommand_ClaudeFlag(t *testing.T) {
 		t.Fatalf("cmdCommand --claude: %v", err)
 	}
 
-	if len(*reqs) != 2 {
-		t.Fatalf("want 2 requests, got %d", len(*reqs))
+	if reqs.count() != 2 {
+		t.Fatalf("want 2 requests, got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[0], "myhost", "do something")
-	assertStdinRequest(t, (*reqs)[1], "myhost", "\x1b[13u")
+	assertStdinRequest(t, reqs.at(0), "myhost", "do something")
+	assertStdinRequest(t, reqs.at(1), "myhost", "\x1b[13u")
 }
 
 func TestCmdCommand_CRFlag(t *testing.T) {
@@ -61,10 +61,10 @@ func TestCmdCommand_CRFlag(t *testing.T) {
 		t.Fatalf("cmdCommand --cr: %v", err)
 	}
 
-	if len(*reqs) != 2 {
-		t.Fatalf("want 2 requests, got %d", len(*reqs))
+	if reqs.count() != 2 {
+		t.Fatalf("want 2 requests, got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[1], "myhost", "\r")
+	assertStdinRequest(t, reqs.at(1), "myhost", "\r")
 }
 
 func TestCmdCommand_CRLFFlag(t *testing.T) {
@@ -74,10 +74,10 @@ func TestCmdCommand_CRLFFlag(t *testing.T) {
 		t.Fatalf("cmdCommand --crlf: %v", err)
 	}
 
-	if len(*reqs) != 2 {
-		t.Fatalf("want 2 requests, got %d", len(*reqs))
+	if reqs.count() != 2 {
+		t.Fatalf("want 2 requests, got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[1], "myhost", "\r\n")
+	assertStdinRequest(t, reqs.at(1), "myhost", "\r\n")
 }
 
 func TestCmdCommand_NewlineFlag(t *testing.T) {
@@ -87,10 +87,10 @@ func TestCmdCommand_NewlineFlag(t *testing.T) {
 		t.Fatalf("cmdCommand --newline: %v", err)
 	}
 
-	if len(*reqs) != 2 {
-		t.Fatalf("want 2 requests, got %d", len(*reqs))
+	if reqs.count() != 2 {
+		t.Fatalf("want 2 requests, got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[1], "myhost", "\n")
+	assertStdinRequest(t, reqs.at(1), "myhost", "\n")
 }
 
 func TestCmdCommand_NoneFlag(t *testing.T) {
@@ -100,10 +100,10 @@ func TestCmdCommand_NoneFlag(t *testing.T) {
 		t.Fatalf("cmdCommand --none: %v", err)
 	}
 
-	if len(*reqs) != 1 {
-		t.Fatalf("want 1 request (instruction only, no ctrl seq), got %d", len(*reqs))
+	if reqs.count() != 1 {
+		t.Fatalf("want 1 request (instruction only, no ctrl seq), got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[0], "myhost", "ping")
+	assertStdinRequest(t, reqs.at(0), "myhost", "ping")
 }
 
 func TestCmdCommand_ClaudeFlagAfterPositionalArgs(t *testing.T) {
@@ -113,10 +113,10 @@ func TestCmdCommand_ClaudeFlagAfterPositionalArgs(t *testing.T) {
 		t.Fatalf("cmdCommand flag after positional args: %v", err)
 	}
 
-	if len(*reqs) != 2 {
-		t.Fatalf("want 2 requests, got %d", len(*reqs))
+	if reqs.count() != 2 {
+		t.Fatalf("want 2 requests, got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[1], "myhost", "\x1b[13u")
+	assertStdinRequest(t, reqs.at(1), "myhost", "\x1b[13u")
 }
 
 func TestCmdCommand_NoneFlagAfterPositionalArgs(t *testing.T) {
@@ -126,10 +126,10 @@ func TestCmdCommand_NoneFlagAfterPositionalArgs(t *testing.T) {
 		t.Fatalf("cmdCommand --none after positional args: %v", err)
 	}
 
-	if len(*reqs) != 1 {
-		t.Fatalf("want 1 request (instruction only), got %d", len(*reqs))
+	if reqs.count() != 1 {
+		t.Fatalf("want 1 request (instruction only), got %d", reqs.count())
 	}
-	assertStdinRequest(t, (*reqs)[0], "myhost", "ping")
+	assertStdinRequest(t, reqs.at(0), "myhost", "ping")
 }
 
 func TestCmdCommand_FlagAfterPositionalArgsErrors(t *testing.T) {
@@ -164,25 +164,25 @@ func TestCmdCommand_StampsSenderFromEnvInsideSharedTerminal(t *testing.T) {
 		t.Fatalf("cmdCommand: %v", err)
 	}
 
-	if len(*reqs) != 2 {
-		t.Fatalf("want 2 SendRequests (instruction + terminator), got %d", len(*reqs))
+	if reqs.count() != 2 {
+		t.Fatalf("want 2 SendRequests (instruction + terminator), got %d", reqs.count())
 	}
 	// Both the instruction send AND the trailing-control-sequence send
 	// must carry the hint — `ppz command` does them as two distinct IPC
 	// calls (see command.go:93 — the 100ms pause that makes copilot/
 	// codex/agy treat the terminator as submit), and an asymmetric fix
 	// would stamp sender on one and "" on the other.
-	if (*reqs)[0].Sender != "jimmy" {
+	if reqs.at(0).Sender != "jimmy" {
 		t.Fatalf("instruction SendRequest.Sender = %q, want %q — `ppz command` must forward PPZ_CURRENT_HANDLE for the same reasons `ppz send` does",
-			(*reqs)[0].Sender, "jimmy")
+			reqs.at(0).Sender, "jimmy")
 	}
-	if (*reqs)[1].Sender != "jimmy" {
+	if reqs.at(1).Sender != "jimmy" {
 		t.Fatalf("terminator SendRequest.Sender = %q, want %q — both IPC sends must carry the hint; receiver's stdin pipe sees two envelopes",
-			(*reqs)[1].Sender, "jimmy")
+			reqs.at(1).Sender, "jimmy")
 	}
 }
 
-func setupCommandDaemon(t *testing.T) *[]cliproto.SendRequest {
+func setupCommandDaemon(t *testing.T) *recorder[cliproto.SendRequest] {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "ppz-command-")
 	if err != nil {
