@@ -1,0 +1,2 @@
+room-b.inbox 1
+exit=0

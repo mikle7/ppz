@@ -216,8 +216,13 @@ func (d *Daemon) subsSnapshot(ctx context.Context, sessionID string) (cliproto.L
 	// Append synthetic zero-rows for subscribed-but-nonexistent subjects so
 	// `subs ls` shows the full subscription list. Dotted → collared (grouped
 	// into the handle's Source row); dotless → uncollared room/lobby.
+	//
+	// Glob/pattern subjects are skipped: they have no literal pipe of their
+	// own — they expand at read-time (via buildFilteredList's matchAnyTarget,
+	// above) to whatever currently matches, so a pattern surfaces as its
+	// matches or as nothing, never as a spurious literal row.
 	for _, subj := range subjects {
-		if covered[subj] {
+		if covered[subj] || isGlobPattern(subj) {
 			continue
 		}
 		if handle, pipe, ok := splitCollared(subj); ok {
@@ -255,6 +260,15 @@ func unreadOnly(in cliproto.ListReply) cliproto.ListReply {
 		}
 	}
 	return out
+}
+
+// isGlobPattern reports whether a subscribed subject is a glob/pattern
+// rather than a concrete subject. Covers filepath.Match metacharacters
+// (`*`, `?`, `[`) plus `%`, the SQL-LIKE alias that matchAnyTarget accepts
+// and rewrites to `*`. Pattern subs expand at read-time, so they never get
+// a synthetic literal row in subsSnapshot.
+func isGlobPattern(s string) bool {
+	return strings.ContainsAny(s, "*?[%")
 }
 
 // splitCollared mirrors `ppz read` target parsing: a dotted target is
