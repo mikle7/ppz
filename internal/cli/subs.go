@@ -118,6 +118,11 @@ func cmdSubsRm(args []string) error {
 
 // cmdSubsWait blocks until a subscribed pipe has unread, then prints only
 // the unread row(s) — the token-light hot path for an agent monitor loop.
+//
+// Like the single-shot `ls --watch` it builds on, a false-positive NATS
+// wakeup can occasionally make it return with NO rows (empty output,
+// exit 0). Consumers should loop and re-invoke `subs wait` rather than
+// treat an empty result as an error or end-of-stream.
 func cmdSubsWait(args []string) error {
 	fs := flag.NewFlagSet("subs wait", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "emit unread rows as JSON (same shape as ls --watch --json)")
@@ -136,8 +141,10 @@ func cmdSubsWait(args []string) error {
 
 // cmdSubsRead reads every subscribed pipe that has unread, in sorted order,
 // each block prefixed by a `=== <target> ===` separator so the consumer
-// knows which read table belongs to which subscription. Pipes with no
-// unread are skipped. Like `ppz read`, it advances the cursor as it goes.
+// knows which read table belongs to which subscription. The separator is
+// omitted under --raw and --json so those stay byte-faithful / parseable.
+// Pipes with no unread are skipped. Like `ppz read`, it advances the cursor
+// as it goes.
 func cmdSubsRead(args []string) error {
 	fs := flag.NewFlagSet("subs read", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "emit JSON envelopes per message")
@@ -152,8 +159,15 @@ func cmdSubsRead(args []string) error {
 		cliproto.SubsListRequest{Session: sessionID()}, &reply); err != nil {
 		return err
 	}
+	// The `=== <target> ===` banner is a human/tty affordance. Suppress it
+	// under --raw (which promises byte-faithful output) and --json (which
+	// must stay a clean parseable stream); otherwise it breaks both
+	// contracts. Default + --tty keep the banner.
+	banner := !*raw && !*asJSON
 	for _, target := range unreadTargets(reply) {
-		fmt.Fprintf(os.Stdout, "=== %s ===\n", target)
+		if banner {
+			fmt.Fprintf(os.Stdout, "=== %s ===\n", target)
+		}
 		if err := runRead(target, *asJSON, false /* follow */, *tty, *raw, *bare, false /* all */, 0, 0, 0); err != nil {
 			return err
 		}

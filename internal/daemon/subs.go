@@ -116,7 +116,8 @@ func (s *subscriptions) SweepHandle(handle string) error {
 	prefix := handle + "."
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".json.tmp") {
+		// `<sess>.json.tmp` write-temps already fail the .json suffix test.
+		if e.IsDir() || !strings.HasSuffix(name, ".json") {
 			continue
 		}
 		sess := strings.TrimSuffix(name, ".json")
