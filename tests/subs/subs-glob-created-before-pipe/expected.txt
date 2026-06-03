@@ -1,0 +1,4 @@
+--- before any matching pipe ---
+--- after matching pipe added ---
+room-a.inbox
+exit=0

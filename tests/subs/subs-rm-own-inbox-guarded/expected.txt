@@ -1,0 +1,6 @@
+guard=refused
+--- still subscribed ---
+foo.inbox
+force-rc=0
+--- after force ---
+exit=0

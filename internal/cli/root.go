@@ -63,6 +63,8 @@ func Run(args []string) error {
 		return cmdUpgrade(rest)
 	case "ls":
 		return cmdLs(rest)
+	case "subs":
+		return cmdSubsGroup(rest)
 	case "read":
 		return cmdRead(rest)
 	case "reread":

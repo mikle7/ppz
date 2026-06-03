@@ -109,6 +109,10 @@ reset_daemon_home() {
   done
   rm -f "$home/current.json.tmp" "$home/namespace.json.tmp" 2>/dev/null || true
   rm -rf "$home/cursors" 2>/dev/null || true
+  # Per-session pipe-subscription lists (ppz subs). Same per-session state
+  # as cursors — wipe between scenarios so subs added in one don't bleed
+  # into the next (e.g. a `mysh` session reused across scenarios).
+  rm -rf "$home/subs" 2>/dev/null || true
 }
 reset_daemon_home "${PPZ_DAEMON_A_HOME:-/tmp/a}"
 reset_daemon_home "${PPZ_DAEMON_B_HOME:-/tmp/b}"

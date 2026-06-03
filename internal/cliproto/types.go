@@ -42,6 +42,15 @@ const (
 	// the most recent heartbeat per source handle. Client-side filters
 	// and rendering happen in cmdWho; the daemon just dumps the cache.
 	IPCWho = "Who"
+
+	// Subs verbs — `ppz subs {ls,add,rm,wait,read}`. A curated per-session
+	// subset of pipe subjects that wait/read operate over. SubsList/SubsWait
+	// reply with a ListReply scoped to the subscription set; storage mirrors
+	// cursors (internal/daemon/subs.go).
+	IPCSubsList   = "SubsList"
+	IPCSubsAdd    = "SubsAdd"
+	IPCSubsRemove = "SubsRemove"
+	IPCSubsWait   = "SubsWait"
 )
 
 // Source kinds, mirrored from internal/db so non-db callers can use them.
@@ -579,6 +588,41 @@ type SourceDestroyRequest struct {
 type SourceDestroyReply struct {
 	Handle   string `json:"handle"`
 	Manifold string `json:"manifold,omitempty"` // Phase 1.5.2: render manifold.handle in display
+}
+
+// Subs IPC (`ppz subs`). Session keys the per-session subscription file,
+// cursor-style. SubsList/SubsWait reply with a ListReply scoped to the
+// subscription set, so the CLI renders subs exactly like `ppz ls`.
+
+type SubsListRequest struct {
+	Session string `json:"session,omitempty"`
+}
+
+type SubsAddRequest struct {
+	Session string   `json:"session,omitempty"`
+	Targets []string `json:"targets"`
+}
+
+type SubsRemoveRequest struct {
+	Session string   `json:"session,omitempty"`
+	Targets []string `json:"targets"`
+	// Force overrides the own-inbox guard: removing your own
+	// <session>.inbox (the auto-subscribed monitor) is refused unless set.
+	Force bool `json:"force,omitempty"`
+}
+
+// SubsAddReply / SubsRemoveReply carry the resulting subscription list so a
+// caller can confirm the new state without a follow-up SubsList.
+type SubsAddReply struct {
+	Subs []string `json:"subs"`
+}
+
+type SubsRemoveReply struct {
+	Subs []string `json:"subs"`
+}
+
+type SubsWaitRequest struct {
+	Session string `json:"session,omitempty"`
 }
 
 // HTTPError is the body shape of a non-2xx HTTP response.

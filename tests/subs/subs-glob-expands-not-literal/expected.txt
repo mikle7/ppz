@@ -1,0 +1,3 @@
+room-a.inbox
+room-b.inbox
+exit=0

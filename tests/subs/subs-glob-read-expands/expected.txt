@@ -1,0 +1,6 @@
+=== room-a.inbox ===
+=== room-b.inbox ===
+--- payloads ---
+from-a
+from-b
+exit=0

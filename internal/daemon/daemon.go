@@ -25,6 +25,11 @@ type Daemon struct {
 	NATSURL string
 	Cursors *cursors
 
+	// Subs holds the per-session pipe-subscription lists backing
+	// `ppz subs {ls,add,rm,wait,read}`. File-backed under
+	// <PPZ_HOME>/subs/, mirroring Cursors. See subs.go.
+	Subs *subscriptions
+
 	// Phase 3.5 — JWT refresh loop. Started on Login (and restored
 	// in ensureNATS for daemon restarts), holds the latest minted
 	// (jwt, seed) for the current org, and re-runs /auth/exchange
@@ -60,6 +65,7 @@ func New(home, sock string) *Daemon {
 		State:      NewState(home),
 		HTTP:       &http.Client{Timeout: 5 * time.Second},
 		Cursors:    newCursors(home),
+		Subs:       newSubscriptions(home),
 		NATSEvents: newNATSEventRing(natsEventRingCap),
 		Heartbeats: NewHeartbeatCache(),
 		Follows:    newFollowRegistry(),

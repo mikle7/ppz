@@ -1,0 +1,4 @@
+--- foo session ---
+foo.inbox
+--- creating shell session ---
+exit=0

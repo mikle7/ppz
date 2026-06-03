@@ -1,0 +1,7 @@
+--- separators ---
+=== bar.inbox ===
+=== foo.inbox ===
+--- payloads ---
+from-bar
+from-foo
+exit=0
