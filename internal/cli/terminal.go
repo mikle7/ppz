@@ -875,12 +875,19 @@ func cmdTerminalView(args []string) error {
 		return err
 	}
 
+	// Bind the process stdio to locals, same as cmdTerminalShare: the
+	// stdin-drain goroutine below reads os.Stdin, and referencing the
+	// global from a goroutine races with tests that reassign it. No test
+	// exercises cmdTerminalView today, but capturing keeps the pattern
+	// from biting the first one that does.
+	stdin, stdout := os.Stdin, os.Stdout
+
 	// Put the local tty in raw mode so user keystrokes aren't echoed
 	// locally by the terminal's line discipline. Drained below — but the
 	// echo is the emulator's job, only stoppable by clearing ECHO. No-op
 	// when stdin isn't a tty (test runner, scripted use). Tested by
 	// TestSetLocalRawMode_*.
-	restoreRaw := setLocalRawMode(os.Stdin.Fd())
+	restoreRaw := setLocalRawMode(stdin.Fd())
 	defer restoreRaw()
 
 	// Enter alt screen; ensure we exit it no matter how we leave this
@@ -890,9 +897,9 @@ func cmdTerminalView(args []string) error {
 	//   \x1b[2J      erase screen
 	//   ...payload bytes flow here...
 	//   \x1b[?1049l  exit alt screen, restore previous content + cursor
-	_, _ = io.WriteString(os.Stdout, "\x1b[?1049h\x1b[H\x1b[2J")
+	_, _ = io.WriteString(stdout, "\x1b[?1049h\x1b[H\x1b[2J")
 	defer func() {
-		_, _ = io.WriteString(os.Stdout, "\x1b[?1049l")
+		_, _ = io.WriteString(stdout, "\x1b[?1049l")
 	}()
 
 	// SIGINT / SIGTERM → close socket → daemon stops sending → we drain
@@ -915,7 +922,7 @@ func cmdTerminalView(args []string) error {
 				return
 			default:
 			}
-			n, err := os.Stdin.Read(buf)
+			n, err := stdin.Read(buf)
 			if err != nil {
 				return
 			}
@@ -940,7 +947,7 @@ func cmdTerminalView(args []string) error {
 			return evt.Error
 		}
 		if evt.Message != nil {
-			_, _ = io.WriteString(os.Stdout, evt.Message.Payload)
+			_, _ = io.WriteString(stdout, evt.Message.Payload)
 		}
 	}
 	return nil
