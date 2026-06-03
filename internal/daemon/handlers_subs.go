@@ -197,6 +197,13 @@ func (d *Daemon) subsSnapshot(ctx context.Context, sessionID string) (cliproto.L
 		return cliproto.ListReply{}, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()}
 	}
 
+	// Known v1 limitation: subjects are fed to buildFilteredList →
+	// matchAnyTarget, whose pipe-name-alone arm means a bare uncollared sub
+	// like `room` also matches (and wakes on) collared `<handle>.room`
+	// pipes. Harmless today (collared pipes are inbox/stdout/stdin/stdctrl/
+	// heartbeat/broadcast, not room-like names). The real fix is to make
+	// matchAnyTarget match the full <handle>.<pipe> target — an ls --watch
+	// semantics change deferred to its own follow-up PR.
 	reply, e := d.buildFilteredList(ctx, accountID, sessionID, subjects)
 	if e != nil {
 		return cliproto.ListReply{}, e
