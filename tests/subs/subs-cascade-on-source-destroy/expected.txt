@@ -1,0 +1,4 @@
+--- before destroy ---
+alice.inbox
+--- after destroy ---
+exit=0

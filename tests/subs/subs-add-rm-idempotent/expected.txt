@@ -1,0 +1,5 @@
+--- after add x2 ---
+room
+rm-absent-rc=0
+--- after rm ---
+exit=0

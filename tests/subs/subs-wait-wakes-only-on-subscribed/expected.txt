@@ -1,0 +1,3 @@
+unrelated=still-blocked
+--- wait output (pipe unread) ---
+foo.inbox 1

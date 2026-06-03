@@ -1,0 +1,2 @@
+{"handle":"foo","pipe":"inbox","total":1,"unread":1,"has_last_at":true}
+exit=0
