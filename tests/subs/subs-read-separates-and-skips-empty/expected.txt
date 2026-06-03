@@ -4,3 +4,4 @@
 --- payloads ---
 from-bar
 from-foo
+exit=0

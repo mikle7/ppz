@@ -523,6 +523,13 @@ func (d *Daemon) handleCreate(ctx context.Context, conn net.Conn, params json.Ra
 		return
 	}
 	d.State.RememberSource(reply.Handle, reply.Manifold)
+	// Auto-subscribe the new handle to its own inbox, keyed under the
+	// HANDLE (not the creating shell's session) — the subscription belongs
+	// to the agent, so it's visible to every subprocess inside
+	// `ppz terminal share <handle>` (PPZ_SESSION=<handle>) but never leaks
+	// into the operator's personal subs list. Idempotent; one hook covers
+	// source create, terminal share, and agent create — all route here.
+	_ = d.Subs.Add(reply.Handle, reply.Handle+".inbox")
 	// PTY sources don't become the daemon's "current" — the user retains
 	// their existing current message source so `ppz send` keeps working
 	// the way they expect outside the terminal.
@@ -673,6 +680,10 @@ func (d *Daemon) handleSourceDestroy(ctx context.Context, conn net.Conn, params 
 	}
 	d.State.ForgetPipe(req.Handle)
 	_ = d.State.ClearCurrentForHandle(req.Handle)
+	// Cascade: drop any subscription targeting the destroyed handle's pipes
+	// from every session's subs file — no zombie subs across recreate.
+	// Mirrors the cursor sweep pattern.
+	_ = d.Subs.SweepHandle(req.Handle)
 	writeIPC(conn, cliproto.SourceDestroyReply{Handle: req.Handle, Manifold: manifold})
 }
 
