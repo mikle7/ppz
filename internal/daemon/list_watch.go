@@ -163,43 +163,38 @@ func (d *Daemon) buildFilteredList(ctx context.Context, accountID uuid.UUID, ses
 	return cliproto.ListReply{Sources: enriched, UncollaredPipes: uncollared}, nil
 }
 
-// matchAnyTarget returns true if any pattern matches the (handle,pipe)
-// row. A pattern matches when filepath.Match succeeds against ANY of:
-//   - the handle alone (back-compat: `ls --watch agent-*` returns all
-//     pipes of every agent-* handle)
-//   - the pipe alone (so `ls --watch plaza` matches an uncollared
-//     pipe, and `ls --watch inbox` matches every handle's inbox)
-//   - the full `<handle>.<pipe>` target (lets `*.stdout` filter to
-//     stdout pipes only; covers manifold.pipe for uncollared at
-//     namespace since callers pass the full dotted path as pipe).
+// matchAnyTarget returns true if any pattern matches the row's full
+// `<handle>.<pipe>` target (for uncollared rows handle is empty, so the
+// target is the bare/dotted pipe path). Matching is full-name only — a
+// pattern is NOT tried against the handle alone or the pipe segment alone:
+//
+//   - `room`       matches only the uncollared pipe `room`, NOT a collared
+//                  `<handle>.room`. Use `*.room` / `%room` for the latter.
+//   - `alice`      matches only an uncollared pipe `alice`, NOT alice's
+//                  pipes. Use `alice.*` / `alice%` to watch a whole handle.
+//   - `*.stdout`   matches every handle's stdout (glob spans the dot).
+//   - `agent-*`    still matches `agent-one.inbox` etc — the `*` spans the
+//                  dot, so a handle-prefix glob naturally covers its pipes.
+//
+// This mirrors shell glob semantics (`ls Mus` vs `ls Mus*`) and keeps the
+// matcher predictable. The CLI separately warns when a fully-specified
+// literal (no glob chars) matches nothing, steering to the glob form.
 //
 // Empty patterns slice means "match anything".
 //
-// Accepts both `*` (standard glob, requires shell-quoting in zsh) and
-// `%` (SQL-LIKE-style alias, passes through unquoted in zsh/bash). The
-// SQL alias is translated to `*` before delegation to filepath.Match,
-// so `agent-*` and `agent-%` are interchangeable.
+// Accepts both `*` (standard glob, requires shell-quoting in zsh) and `%`
+// (SQL-LIKE-style alias, passes through unquoted). `%` is translated to `*`
+// before filepath.Match, so `agent-*` and `agent-%` are interchangeable.
 func matchAnyTarget(handle, pipe string, patterns []string) bool {
 	if len(patterns) == 0 {
 		return true
 	}
-	// target is the displayed dotted form. When handle is empty
-	// (uncollared), pipe IS the full path so target == pipe — that's
-	// fine, the second filepath.Match below catches it.
 	target := pipe
 	if handle != "" {
 		target = handle + "." + pipe
 	}
 	for _, raw := range patterns {
 		p := strings.ReplaceAll(raw, "%", "*")
-		if handle != "" {
-			if ok, _ := filepath.Match(p, handle); ok {
-				return true
-			}
-		}
-		if ok, _ := filepath.Match(p, pipe); ok {
-			return true
-		}
 		if ok, _ := filepath.Match(p, target); ok {
 			return true
 		}

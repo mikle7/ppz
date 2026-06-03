@@ -191,9 +191,12 @@ const usageText = `ppz — pipes for agents
 
 Messaging (the verbs you use most):
   ppz status                       daemon state, current handle, last token refresh
-  ppz ls [--watch [PATTERN...]]    list handles × pipes; --watch blocks until
-                                   unread arrives on a matching handle
-                                   (patterns use '*' quoted or % unquoted)
+  ppz ls [--watch] [PATTERN...]    list handles × pipes; --watch blocks until
+                                   unread arrives on a matching pipe.
+                                   PATTERNs glob the full <handle>.<pipe>
+                                   (e.g. '*.inbox', 'alice.*'); a literal
+                                   that matches no pipe warns (use a glob).
+                                   '*' quoted or % unquoted.
   ppz read TGT [--tail --json --tty --raw --bare]
                                    read NEW messages from <handle>.<pipe>;
                                    'ppz read inbox' reads <current>.inbox.

@@ -5,13 +5,11 @@ import (
 	"testing"
 )
 
-// TestMatchAnyTarget covers patterns that target the full
-// `<handle>.<pipe>` rather than just the handle. Today the matcher
-// only checks against handle, so a sensible-looking `*.stdout` pattern
-// never matches anything (no handle ends in `.stdout`). The fix
-// extends matching to also try `<handle>.<pipe>`.
-//
-// All these cases should pass once matchAnyTarget exists. RED today.
+// TestMatchAnyTarget covers full-name matching: a pattern matches the
+// full `<handle>.<pipe>` target (uncollared: the bare/dotted pipe path),
+// never the handle alone or the pipe segment alone. A handle-prefix glob
+// like `agent-*` still covers a handle's pipes because the `*` spans the
+// dot; but a bare `stdout` / `apple` does NOT — use `*.stdout` / `apple.*`.
 func TestMatchAnyTarget(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -21,7 +19,7 @@ func TestMatchAnyTarget(t *testing.T) {
 		want     bool
 	}{
 		{"empty patterns matches anything", "anything", "broadcast", nil, true},
-		{"handle-only pattern still matches (back-compat)", "agent-one", "broadcast", []string{"agent-*"}, true},
+		{"handle-prefix glob spans the dot to a pipe", "agent-one", "broadcast", []string{"agent-*"}, true},
 		{"pipe-suffix pattern matches stdout pipe", "apple", "stdout", []string{"*.stdout"}, true},
 		{"pipe-suffix pattern (sql alias)", "apple", "stdout", []string{"%.stdout"}, true},
 		{"pipe-suffix doesn't match broadcast pipe", "apple", "broadcast", []string{"*.stdout"}, false},
