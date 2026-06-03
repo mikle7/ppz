@@ -30,6 +30,14 @@ func TestMatchAnyTarget(t *testing.T) {
 		{"% spans handle.pipe boundary", "apple", "stdout", []string{"%stdout"}, true},
 		{"multiple patterns OR — handle plus pipe", "apple", "stdout", []string{"banana", "*.stdout"}, true},
 
+		// Full-name matching: a pattern must match the full <handle>.<pipe>
+		// target. A bare pipe name no longer matches a collared pipe, and a
+		// bare handle no longer matches its pipes — use a glob (`*.stdout`,
+		// `apple.*`) for those. RED until the pipe-alone + handle-alone arms
+		// are dropped.
+		{"bare pipe name does NOT match collared pipe", "apple", "stdout", []string{"stdout"}, false},
+		{"exact handle does NOT match its pipes", "apple", "stdout", []string{"apple"}, false},
+
 		// Uncollared pipes have handle="". A bare pattern matching the
 		// pipe name alone is the natural way to address them.
 		{"bare pattern matches uncollared pipe", "", "plaza", []string{"plaza"}, true},

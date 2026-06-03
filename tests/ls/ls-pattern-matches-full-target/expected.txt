@@ -1,0 +1,5 @@
+--- ls room (full-name: uncollared room only) ---
+room
+--- ls '*.room' (glob: collared alice.room) ---
+alice.room
+exit=0

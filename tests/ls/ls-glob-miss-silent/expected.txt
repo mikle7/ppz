@@ -1,0 +1,2 @@
+warned=no
+exit=0

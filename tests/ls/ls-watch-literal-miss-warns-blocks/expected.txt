@@ -1,0 +1,4 @@
+warned=yes
+blocked=yes
+--- glob form fires ---
+alice.inbox 1
