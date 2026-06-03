@@ -762,13 +762,7 @@ func (d *Daemon) handleSwitch(ctx context.Context, conn net.Conn, params json.Ra
 		writeIPCErr(conn, e)
 		return
 	}
-	handles := make([]string, 0, len(lr.Sources))
-		manifolds := make(map[string]string, len(lr.Sources))
-	for _, s := range lr.Sources {
-		handles = append(handles, s.Handle)
-		manifolds[s.Handle] = s.Manifold
-	}
-	d.State.ResetSources(handles, manifolds)
+	d.refreshSourceCache(lr.Sources)
 	if !d.State.KnowsPipe(req.Handle) {
 		writeIPCErr(conn, cliproto.NewSourceNotFound(req.Handle))
 		return
@@ -1081,13 +1075,7 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
 			return sendTarget{}, e
 		}
-		handles := make([]string, 0, len(lr.Sources))
-		manifolds := make(map[string]string, len(lr.Sources))
-		for _, s := range lr.Sources {
-			handles = append(handles, s.Handle)
-		manifolds[s.Handle] = s.Manifold
-		}
-		d.State.ResetSources(handles, manifolds)
+		d.refreshSourceCache(lr.Sources)
 		if !d.State.KnowsPipe(current) {
 			if fromCurrent {
 				_ = d.State.ClearCurrent(session)
@@ -1136,6 +1124,24 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 	}, nil
 }
 
+// refreshSourceCache replaces the daemon's known-handles set and
+// handle→manifold cache from a freshly-fetched /api/v1/sources
+// response. Both list paths (unfiltered handleList and pattern-
+// filtered buildFilteredList) call this — downstream paths that
+// read HandleManifold without self-healing (handleRead at
+// read.go:106, ack-emit publishEnvelope at publish.go:130)
+// otherwise misroute to the root manifold after a list as the
+// first daemon interaction following a restart.
+func (d *Daemon) refreshSourceCache(sources []cliproto.Source) {
+	handles := make([]string, 0, len(sources))
+	manifolds := make(map[string]string, len(sources))
+	for _, s := range sources {
+		handles = append(handles, s.Handle)
+		manifolds[s.Handle] = s.Manifold
+	}
+	d.State.ResetSources(handles, manifolds)
+}
+
 func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawMessage) {
 	var req cliproto.ListRequest
 	_ = json.Unmarshal(params, &req) // optional body
@@ -1144,18 +1150,42 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 		writeIPCErr(conn, cliproto.New(cliproto.ENotLoggedIn))
 		return
 	}
+
+	// With patterns, delegate to the same filtering path --watch uses
+	// so `ppz ls foo%` and `ppz ls --watch foo%` agree on what
+	// matches. Without patterns, fall through to the original
+	// unfiltered enumeration — every other IPCList caller (source.go,
+	// pipe.go, completion.go, desktop.go) takes this path and expects
+	// the full snapshot.
+	if len(req.Patterns) > 0 {
+		if err := d.ensureNATS(ctx); err != nil {
+			if e, ok := err.(*cliproto.Error); ok {
+				writeIPCErr(conn, e)
+			} else {
+				writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
+			}
+			return
+		}
+		accountID, err := uuid.Parse(d.State.AccountID())
+		if err != nil {
+			writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: "bad org id"})
+			return
+		}
+		reply, e := d.buildFilteredList(ctx, accountID, req.Session, req.Patterns)
+		if e != nil {
+			writeIPCErr(conn, e)
+			return
+		}
+		writeIPC(conn, reply)
+		return
+	}
+
 	var lr cliproto.ListSourcesReply
 	if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e != nil {
 		writeIPCErr(conn, e)
 		return
 	}
-	handles := make([]string, 0, len(lr.Sources))
-		manifolds := make(map[string]string, len(lr.Sources))
-	for _, s := range lr.Sources {
-		handles = append(handles, s.Handle)
-		manifolds[s.Handle] = s.Manifold
-	}
-	d.State.ResetSources(handles, manifolds)
+	d.refreshSourceCache(lr.Sources)
 
 	// Aggregate per-pipe info from JetStream (route B). List stream metadata
 	// once, then fetch latest payload previews only for non-empty streams.

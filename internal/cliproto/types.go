@@ -384,8 +384,13 @@ type Source struct {
 	LastBroadcastPayload *string    `json:"last_broadcast_payload,omitempty"`
 }
 
+// ListRequest is `ppz ls`. Patterns optionally narrow the snapshot to
+// matching pipes — same glob/SQL-LIKE semantics as ListWatchRequest
+// (see matchAnyTarget). Empty Patterns means "every pipe", which is
+// the historical behaviour every existing caller relies on.
 type ListRequest struct {
-	Session string `json:"session,omitempty"` // cursor key
+	Session  string   `json:"session,omitempty"` // cursor key
+	Patterns []string `json:"patterns,omitempty"`
 }
 
 // ListWatchRequest is `ppz ls --watch`. The daemon returns the same shape
