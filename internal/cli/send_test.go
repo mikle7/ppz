@@ -25,10 +25,10 @@ func TestCmdSend_BareHandleTargetsInbox(t *testing.T) {
 		t.Fatalf("cmdSend bare handle: %v", err)
 	}
 
-	if len(*requests) != 1 {
-		t.Fatalf("broadcast request count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("broadcast request count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Handle != "foo" || got.Channel != "inbox" || got.Payload != "hello inbox" {
 		t.Fatalf("bare send resolved to handle=%q channel=%q payload=%q, want foo.inbox hello inbox",
 			got.Handle, got.Channel, got.Payload)
@@ -60,10 +60,10 @@ func TestCmdSend_ForwardsSessionID(t *testing.T) {
 	if err := cmdSend([]string{"quux", "hi"}); err != nil {
 		t.Fatalf("cmdSend: %v", err)
 	}
-	if len(*requests) != 1 {
-		t.Fatalf("broadcast request count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("broadcast request count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Session != "tty-send-session-test" {
 		t.Fatalf("SendRequest.Session = %q, want %q (without it the daemon stamps sender=\"\")",
 			got.Session, "tty-send-session-test")
@@ -113,10 +113,10 @@ func TestCmdSend_StampsSenderFromEnvInsideSharedTerminal(t *testing.T) {
 	if err := cmdSend([]string{"eric", "hi"}); err != nil {
 		t.Fatalf("cmdSend: %v", err)
 	}
-	if len(*requests) != 1 {
-		t.Fatalf("SendRequest count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("SendRequest count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Sender != "jimmy" {
 		t.Fatalf("SendRequest.Sender = %q, want %q — PPZ_CURRENT_HANDLE=jimmy must be forwarded as the sender hint so the daemon can stamp envelope.sender even when its per-session State.Current is empty (the shared-pty case: IPCCreate skips SetCurrent for PTY-kind sources)",
 			got.Sender, "jimmy")
@@ -154,24 +154,24 @@ func TestCmdSend_NoEnvCurrent_OmitsSenderHint(t *testing.T) {
 	if err := cmdSend([]string{"eric", "hi"}); err != nil {
 		t.Fatalf("cmdSend: %v", err)
 	}
-	if len(*requests) != 1 {
-		t.Fatalf("SendRequest count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("SendRequest count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Sender != "" {
 		t.Fatalf("SendRequest.Sender = %q, want \"\" — no PPZ_CURRENT_HANDLE means no hint; daemon falls back to State.Current(session) on its own",
 			got.Sender)
 	}
 }
 
-func serveSendAliasDaemon(t *testing.T, sock string) *[]cliproto.SendRequest {
+func serveSendAliasDaemon(t *testing.T, sock string) *recorder[cliproto.SendRequest] {
 	t.Helper()
 	_ = os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen fake daemon: %v", err)
 	}
-	var broadcastRequests []cliproto.SendRequest
+	broadcastRequests := &recorder[cliproto.SendRequest]{}
 	done := make(chan struct{})
 	t.Cleanup(func() { <-done })
 	t.Cleanup(func() {
@@ -197,7 +197,7 @@ func serveSendAliasDaemon(t *testing.T, sock string) *[]cliproto.SendRequest {
 			if req.Method == cliproto.IPCSend {
 				var br cliproto.SendRequest
 				_ = json.Unmarshal(req.Params, &br)
-				broadcastRequests = append(broadcastRequests, br)
+				broadcastRequests.add(br)
 				_ = json.NewEncoder(conn).Encode(map[string]any{
 					"result": cliproto.SendReply{
 						ID:      "test-id",
@@ -210,5 +210,5 @@ func serveSendAliasDaemon(t *testing.T, sock string) *[]cliproto.SendRequest {
 		}
 	}()
 
-	return &broadcastRequests
+	return broadcastRequests
 }

@@ -27,10 +27,10 @@ func TestCmdPipeCreate_BareNameSkipsCurrentHandle(t *testing.T) {
 		t.Fatalf("cmdPipeCreate: %v", err)
 	}
 
-	if len(requests.creates) != 1 {
-		t.Fatalf("pipe create request count = %d, want 1", len(requests.creates))
+	if requests.creates.count() != 1 {
+		t.Fatalf("pipe create request count = %d, want 1", requests.creates.count())
 	}
-	got := requests.creates[0]
+	got := requests.creates.at(0)
 	if got.Handle != "" || got.Name != "alerts" {
 		t.Fatalf("pipe create resolved to handle=%q name=%q, want empty handle + name=alerts (Phase 1.5.1 rule: bare LEAF goes uncollared regardless of current handle)", got.Handle, got.Name)
 	}
@@ -46,10 +46,10 @@ func TestCmdPipeDestroy_BareNameSkipsCurrentHandle(t *testing.T) {
 		t.Fatalf("cmdPipeDestroy: %v", err)
 	}
 
-	if len(requests.destroys) != 1 {
-		t.Fatalf("pipe destroy request count = %d, want 1", len(requests.destroys))
+	if requests.destroys.count() != 1 {
+		t.Fatalf("pipe destroy request count = %d, want 1", requests.destroys.count())
 	}
-	got := requests.destroys[0]
+	got := requests.destroys.at(0)
 	if got.Handle != "" || got.BareTarget != "alerts" {
 		t.Fatalf("pipe destroy resolved to handle=%q bareTarget=%q, want empty handle + bareTarget=alerts (Phase 1.5.1 rule: bare LEAF destroys uncollared)", got.Handle, got.BareTarget)
 	}
@@ -68,8 +68,8 @@ func pipeCurrentTestSocket(t *testing.T) string {
 }
 
 type pipeCurrentRequests struct {
-	creates  []cliproto.PipeCreateRequest
-	destroys []cliproto.PipeDestroyRequest
+	creates  recorder[cliproto.PipeCreateRequest]
+	destroys recorder[cliproto.PipeDestroyRequest]
 }
 
 func servePipeCurrentDaemon(t *testing.T, sock, current string) *pipeCurrentRequests {
@@ -110,14 +110,14 @@ func servePipeCurrentDaemon(t *testing.T, sock, current string) *pipeCurrentRequ
 			case cliproto.IPCPipeCreate:
 				var pc cliproto.PipeCreateRequest
 				_ = json.Unmarshal(req.Params, &pc)
-				requests.creates = append(requests.creates, pc)
+				requests.creates.add(pc)
 				_ = json.NewEncoder(conn).Encode(map[string]any{
 					"result": cliproto.PipeCreateReply{Handle: pc.Handle, Name: pc.Name},
 				})
 			case cliproto.IPCPipeDestroy:
 				var pd cliproto.PipeDestroyRequest
 				_ = json.Unmarshal(req.Params, &pd)
-				requests.destroys = append(requests.destroys, pd)
+				requests.destroys.add(pd)
 				_ = json.NewEncoder(conn).Encode(map[string]any{
 					"result": cliproto.PipeDestroyReply{Handle: pd.Handle, Name: pd.Name},
 				})

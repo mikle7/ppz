@@ -34,10 +34,10 @@ func TestCmdTerminalShare_BareInvocationPrefersEnvCurrentHandle(t *testing.T) {
 		t.Fatalf("cmdTerminalShare bare: %v", err)
 	}
 
-	if len(requests.pipeCreates) != 3 {
-		t.Fatalf("pipe create request count = %d, want 3", len(requests.pipeCreates))
+	if requests.pipeCreates.count() != 3 {
+		t.Fatalf("pipe create request count = %d, want 3", requests.pipeCreates.count())
 	}
-	for _, got := range requests.pipeCreates {
+	for _, got := range requests.pipeCreates.snapshot() {
 		if got.Handle != "env-current" {
 			t.Fatalf("terminal share provisioned pipe %q on handle %q, want env-current", got.Name, got.Handle)
 		}
@@ -45,7 +45,7 @@ func TestCmdTerminalShare_BareInvocationPrefersEnvCurrentHandle(t *testing.T) {
 }
 
 type terminalCurrentRequests struct {
-	pipeCreates []cliproto.PipeCreateRequest
+	pipeCreates recorder[cliproto.PipeCreateRequest]
 }
 
 func serveTerminalCurrentDaemon(t *testing.T, sock, current string) *terminalCurrentRequests {
@@ -96,7 +96,7 @@ func handleTerminalCurrentDaemonConn(conn net.Conn, current string, requests *te
 	case cliproto.IPCPipeCreate:
 		var pc cliproto.PipeCreateRequest
 		_ = json.Unmarshal(req.Params, &pc)
-		requests.pipeCreates = append(requests.pipeCreates, pc)
+		requests.pipeCreates.add(pc)
 		_ = enc.Encode(map[string]any{
 			"result": cliproto.PipeCreateReply{Handle: pc.Handle, Name: pc.Name},
 		})

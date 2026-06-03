@@ -300,24 +300,32 @@ func cmdTerminalShare(args []string) error {
 	// a sensible default (80x24) — that way subscribers always see a
 	// concrete pty size on .stdctrl, and the wrapped child renders for
 	// some real geometry instead of the kernel's 0×0 default.
-	stdinIsTTY := term.IsTerminal(int(os.Stdin.Fd()))
+	// Bind the process stdio to locals for the lifetime of the share.
+	// The stdin reader and stdout publisher goroutines below read these;
+	// referencing the os.Stdin / os.Stdout globals from a goroutine
+	// instead races with tests that reassign them per-invocation
+	// (go test -race). Capturing also pins the share's stdio so a later
+	// reassignment can't redirect it mid-flight.
+	stdin, stdout := os.Stdin, os.Stdout
+
+	stdinIsTTY := term.IsTerminal(int(stdin.Fd()))
 	if !stdinIsTTY {
 		restorePTYEcho := setPTYInputEcho(ptmx.Fd(), false)
 		defer restorePTYEcho()
 	}
 	if stdinIsTTY {
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		oldState, err := term.MakeRaw(int(stdin.Fd()))
 		if err == nil {
-			defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+			defer func() { _ = term.Restore(int(stdin.Fd()), oldState) }()
 		}
-		_ = pty.InheritSize(os.Stdin, ptmx)
+		_ = pty.InheritSize(stdin, ptmx)
 		publishWinsize(handle, ptmx)
 
 		winch := make(chan os.Signal, 1)
 		signal.Notify(winch, syscall.SIGWINCH)
 		go func() {
 			for range winch {
-				_ = pty.InheritSize(os.Stdin, ptmx)
+				_ = pty.InheritSize(stdin, ptmx)
 				publishWinsize(handle, ptmx)
 			}
 		}()
@@ -361,7 +369,7 @@ func cmdTerminalShare(args []string) error {
 		buf := make([]byte, 1024)
 		var pending []byte
 		for {
-			n, err := os.Stdin.Read(buf)
+			n, err := stdin.Read(buf)
 			if n > 0 {
 				input := buf[:n]
 				if len(pending) > 0 {
@@ -388,7 +396,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		publishAndDisplayStdout(handle, ptmx, os.Stdout)
+		publishAndDisplayStdout(handle, ptmx, stdout)
 	}()
 
 	// Subscribe to <handle>.stdin → write to PTY master (external `ppz send`

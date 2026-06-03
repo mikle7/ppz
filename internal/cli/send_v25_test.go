@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
@@ -33,7 +32,7 @@ func TestCmdSend_RejectsAckSubjectAtCLI(t *testing.T) {
 	if cerr.Code != cliproto.EInvalidSubject {
 		t.Fatalf("error code = %s, want E_INVALID_SUBJECT", cerr.Code)
 	}
-	if n := len(*requests); n > 0 {
+	if n := requests.count(); n > 0 {
 		t.Fatalf("CLI should reject before any IPCSend call; got %d requests", n)
 	}
 }
@@ -52,7 +51,7 @@ func TestCmdSend_RequestAckRequiresCurrentSource(t *testing.T) {
 	if cerr.Code != cliproto.ENoCurrentSource {
 		t.Fatalf("error code = %s, want E_NO_CURRENT_SOURCE", cerr.Code)
 	}
-	for _, r := range *requests {
+	for _, r := range requests.snapshot() {
 		if r.AckRequested {
 			t.Fatalf("CLI should not have submitted a request with AckRequested=true")
 		}
@@ -98,14 +97,14 @@ func TestCmdSend_RequestAckSetsTokenAndField(t *testing.T) {
 	// IPCStatus is called for the preflight, so requests of method
 	// IPCSend must be the second-to-last call. Walk and find it.
 	found := false
-	for _, r := range *requests {
+	for _, r := range requests.snapshot() {
 		if r.AckRequested {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("no SendRequest with AckRequested=true reached the daemon; got %+v", *requests)
+		t.Fatalf("no SendRequest with AckRequested=true reached the daemon; got %+v", requests.snapshot())
 	}
 }
 
@@ -118,19 +117,18 @@ func TestCmdSend_SubjectAndInReplyTo(t *testing.T) {
 	if err := cmdSendForTest(args, &stdout, &stderr); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	if len(*requests) == 0 {
+	if requests.count() == 0 {
 		t.Fatalf("no broadcast request reached the daemon")
 	}
 	var got *cliproto.SendRequest
-	for i := range *requests {
-		r := (*requests)[i]
+	for _, r := range requests.snapshot() {
 		if r.MsgSubject != "" || r.InReplyTo != "" {
 			got = &r
 			break
 		}
 	}
 	if got == nil {
-		t.Fatalf("no SendRequest carried subject / in_reply_to: %+v", *requests)
+		t.Fatalf("no SendRequest carried subject / in_reply_to: %+v", requests.snapshot())
 	}
 	if got.MsgSubject != "status update" {
 		t.Fatalf("MsgSubject = %q, want status update", got.MsgSubject)
@@ -165,7 +163,7 @@ func asCliErr(t *testing.T, err error) *cliproto.Error {
 // (records the request and replies with a deterministic ID). Returns a
 // pointer to the recorded SendRequests so each test can assert on
 // what the CLI sent.
-func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.SendRequest, *[]string) {
+func setupV25SendDaemon(t *testing.T, current string) (*recorder[cliproto.SendRequest], *recorder[string]) {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "ppz-send-v25-")
 	if err != nil {
@@ -181,11 +179,8 @@ func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.SendRequest, 
 		t.Fatalf("listen fake daemon: %v", err)
 	}
 
-	var (
-		mu                sync.Mutex
-		broadcastRequests []cliproto.SendRequest
-		methodLog         []string
-	)
+	broadcastRequests := &recorder[cliproto.SendRequest]{}
+	methodLog := &recorder[string]{}
 	done := make(chan struct{})
 	t.Cleanup(func() { <-done })
 	t.Cleanup(func() {
@@ -208,9 +203,7 @@ func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.SendRequest, 
 				_ = conn.Close()
 				continue
 			}
-			mu.Lock()
-			methodLog = append(methodLog, req.Method)
-			mu.Unlock()
+			methodLog.add(req.Method)
 			switch req.Method {
 			case cliproto.IPCStatus:
 				_ = json.NewEncoder(conn).Encode(map[string]any{
@@ -219,9 +212,7 @@ func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.SendRequest, 
 			case cliproto.IPCSend:
 				var br cliproto.SendRequest
 				_ = json.Unmarshal(req.Params, &br)
-				mu.Lock()
-				broadcastRequests = append(broadcastRequests, br)
-				mu.Unlock()
+				broadcastRequests.add(br)
 				_ = json.NewEncoder(conn).Encode(map[string]any{
 					"result": cliproto.SendReply{
 						ID:      "deadbeefcafebabedeadbeefcafebabe",
@@ -234,5 +225,5 @@ func setupV25SendDaemon(t *testing.T, current string) (*[]cliproto.SendRequest, 
 		}
 	}()
 
-	return &broadcastRequests, &methodLog
+	return broadcastRequests, methodLog
 }

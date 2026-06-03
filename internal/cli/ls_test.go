@@ -35,10 +35,10 @@ func TestCmdLs_PatternsForwardToList(t *testing.T) {
 		t.Fatalf("cmdLs with pattern arg: %v (want filtered list, not error)", err)
 	}
 
-	if len(*requests) != 1 {
-		t.Fatalf("IPCList request count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("IPCList request count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if len(got.Patterns) != 1 || got.Patterns[0] != "clancy%" {
 		t.Fatalf("ListRequest.Patterns = %v, want [clancy%%]", got.Patterns)
 	}
@@ -61,22 +61,22 @@ func TestCmdLs_NoArgsSendsEmptyPatterns(t *testing.T) {
 	if err := cmdLs(nil); err != nil {
 		t.Fatalf("cmdLs no args: %v", err)
 	}
-	if len(*requests) != 1 {
-		t.Fatalf("IPCList request count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("IPCList request count = %d, want 1", requests.count())
 	}
-	if len((*requests)[0].Patterns) != 0 {
-		t.Fatalf("ListRequest.Patterns = %v, want empty", (*requests)[0].Patterns)
+	if len(requests.at(0).Patterns) != 0 {
+		t.Fatalf("ListRequest.Patterns = %v, want empty", requests.at(0).Patterns)
 	}
 }
 
-func serveLsListDaemon(t *testing.T, sock string) *[]cliproto.ListRequest {
+func serveLsListDaemon(t *testing.T, sock string) *recorder[cliproto.ListRequest] {
 	t.Helper()
 	_ = os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen fake daemon: %v", err)
 	}
-	var listRequests []cliproto.ListRequest
+	listRequests := &recorder[cliproto.ListRequest]{}
 	done := make(chan struct{})
 	t.Cleanup(func() { <-done })
 	t.Cleanup(func() {
@@ -102,7 +102,7 @@ func serveLsListDaemon(t *testing.T, sock string) *[]cliproto.ListRequest {
 			if req.Method == cliproto.IPCList {
 				var lr cliproto.ListRequest
 				_ = json.Unmarshal(req.Params, &lr)
-				listRequests = append(listRequests, lr)
+				listRequests.add(lr)
 				_ = json.NewEncoder(conn).Encode(map[string]any{
 					"result": cliproto.ListReply{},
 				})
@@ -111,5 +111,5 @@ func serveLsListDaemon(t *testing.T, sock string) *[]cliproto.ListRequest {
 		}
 	}()
 
-	return &listRequests
+	return listRequests
 }

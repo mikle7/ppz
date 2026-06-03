@@ -27,10 +27,10 @@ func TestRunRead_BareInboxResolvesToCurrentSourceInbox(t *testing.T) {
 		t.Fatalf("runRead inbox: %v", err)
 	}
 
-	if len(*requests) != 1 {
-		t.Fatalf("read request count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("read request count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Handle != "foo" || got.Channel != "inbox" {
 		t.Fatalf("read inbox resolved to %q.%q, want foo.inbox", got.Handle, got.Channel)
 	}
@@ -56,10 +56,10 @@ func TestRunRead_BareInboxPrefersEnvCurrentHandle(t *testing.T) {
 		t.Fatalf("runRead inbox: %v", err)
 	}
 
-	if len(*requests) != 1 {
-		t.Fatalf("read request count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("read request count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Handle != "env-current" || got.Channel != "inbox" {
 		t.Fatalf("read inbox resolved to %q.%q, want env-current.inbox", got.Handle, got.Channel)
 	}
@@ -82,10 +82,10 @@ func TestRunReread_BareInboxPrefersEnvCurrentHandle(t *testing.T) {
 		t.Fatalf("runRead reread inbox: %v", err)
 	}
 
-	if len(*requests) != 1 {
-		t.Fatalf("read request count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("read request count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Handle != "env-current" || got.Channel != "inbox" || !got.All {
 		t.Fatalf("reread inbox request = handle=%q channel=%q all=%v, want env-current.inbox all=true",
 			got.Handle, got.Channel, got.All)
@@ -150,10 +150,10 @@ func TestRunRead_ForwardsEnvCurrentHandleAsSenderHint(t *testing.T) {
 	if err := runRead("alan.inbox", true, false, false, false, false, false, 0, 0, 0); err != nil {
 		t.Fatalf("runRead: %v", err)
 	}
-	if len(*requests) != 1 {
-		t.Fatalf("ReadRequest count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("ReadRequest count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Sender != "alan" {
 		t.Fatalf("ReadRequest.Sender = %q, want %q — PPZ_CURRENT_HANDLE=alan must be forwarded as the reader's identity so the daemon's ack:read emission can stamp envelope.sender=alan instead of \"\"",
 			got.Sender, "alan")
@@ -182,24 +182,24 @@ func TestRunRead_NoEnvCurrent_OmitsSenderHint(t *testing.T) {
 	if err := runRead("alan.inbox", true, false, false, false, false, false, 0, 0, 0); err != nil {
 		t.Fatalf("runRead: %v", err)
 	}
-	if len(*requests) != 1 {
-		t.Fatalf("ReadRequest count = %d, want 1", len(*requests))
+	if requests.count() != 1 {
+		t.Fatalf("ReadRequest count = %d, want 1", requests.count())
 	}
-	got := (*requests)[0]
+	got := requests.at(0)
 	if got.Sender != "" {
 		t.Fatalf("ReadRequest.Sender = %q, want \"\" — no env override means no hint; daemon falls back to State.Current(session) via senderForRequest",
 			got.Sender)
 	}
 }
 
-func serveReadInboxAliasDaemon(t *testing.T, sock, current string) *[]cliproto.ReadRequest {
+func serveReadInboxAliasDaemon(t *testing.T, sock, current string) *recorder[cliproto.ReadRequest] {
 	t.Helper()
 	_ = os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen fake daemon: %v", err)
 	}
-	var readRequests []cliproto.ReadRequest
+	readRequests := &recorder[cliproto.ReadRequest]{}
 	done := make(chan struct{})
 	t.Cleanup(func() { <-done })
 	t.Cleanup(func() {
@@ -230,11 +230,11 @@ func serveReadInboxAliasDaemon(t *testing.T, sock, current string) *[]cliproto.R
 			case cliproto.IPCRead:
 				var rr cliproto.ReadRequest
 				_ = json.Unmarshal(req.Params, &rr)
-				readRequests = append(readRequests, rr)
+				readRequests.add(rr)
 			}
 			_ = conn.Close()
 		}
 	}()
 
-	return &readRequests
+	return readRequests
 }
