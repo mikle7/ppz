@@ -79,8 +79,20 @@ func cmdSubsLs(args []string) error {
 		cliproto.SubsListRequest{Session: sessionID()}, &reply); err != nil {
 		return err
 	}
-	printSubsReply(reply, *asJSON, *iso)
+	printSubsList(reply, *asJSON, *iso)
 	return nil
+}
+
+// printSubsList renders `subs ls`: a tree (pattern parents + matched
+// children) for the human table, or flat per-pipe rows with matched_by for
+// --json. Distinct from printSubsReply (used by `subs wait`), which keeps the
+// flat `ls --watch` shape for the unread-only payload.
+func printSubsList(reply cliproto.ListReply, asJSON, iso bool) {
+	if asJSON {
+		cliproto.PrintSubsListJSON(os.Stdout, reply.Sources, reply.UncollaredPipes)
+		return
+	}
+	cliproto.PrintSubsList(os.Stdout, reply.Sources, reply.UncollaredPipes, reply.Subscriptions, iso)
 }
 
 func cmdSubsAdd(args []string) error {
@@ -112,8 +124,23 @@ func cmdSubsRm(args []string) error {
 	var reply cliproto.SubsRemoveReply
 	// A guarded own-inbox removal returns E_OWN_INBOX from the daemon, which
 	// surfaces here as a non-zero exit — exactly the loud signal we want.
-	return daemon.Call(ipcSocket(), cliproto.IPCSubsRemove,
-		cliproto.SubsRemoveRequest{Session: sessionID(), Targets: targets, Force: *force}, &reply)
+	if err := daemon.Call(ipcSocket(), cliproto.IPCSubsRemove,
+		cliproto.SubsRemoveRequest{Session: sessionID(), Targets: targets, Force: *force}, &reply); err != nil {
+		return err
+	}
+	// Per-target feedback so a no-op `rm` is never silent. Removal semantics
+	// are unchanged; this just narrates the result.
+	for _, o := range reply.Outcomes {
+		switch {
+		case o.Removed:
+			fmt.Printf("removed: %s\n", o.Target)
+		case o.CoveredByPattern != "":
+			fmt.Printf("nothing removed: %s is covered by pattern '%s' — remove the pattern to stop watching it\n", o.Target, o.CoveredByPattern)
+		default:
+			fmt.Printf("nothing removed: no subscription matching '%s'\n", o.Target)
+		}
+	}
+	return nil
 }
 
 // cmdSubsWait blocks until a subscribed pipe has unread, then prints only

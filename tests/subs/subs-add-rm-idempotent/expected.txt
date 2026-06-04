@@ -1,5 +1,6 @@
 --- after add x2 ---
 room
+nothing removed: no subscription matching 'room'
 rm-absent-rc=0
 --- after rm ---
 exit=0

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -56,11 +57,51 @@ func (d *Daemon) handleSubsRemove(_ context.Context, conn net.Conn, params json.
 			}
 		}
 	}
+	// Snapshot the stored set BEFORE removal so we can report, per target,
+	// whether it was actually a stored subject (Removed) or merely an
+	// expanded match of a stored pattern (CoveredByPattern). Removal itself
+	// is unchanged: exact-string-match, idempotent.
+	before := d.Subs.List(req.Session)
+	inStore := make(map[string]bool, len(before))
+	var patterns []string
+	for _, s := range before {
+		inStore[s] = true
+		if cliproto.IsGlobPattern(s) {
+			patterns = append(patterns, s)
+		}
+	}
 	if err := d.Subs.Remove(req.Session, req.Targets...); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
-	writeIPC(conn, cliproto.SubsRemoveReply{Subs: d.Subs.List(req.Session)})
+	var outcomes []cliproto.SubsRemoveOutcome
+	for _, raw := range req.Targets {
+		t := strings.TrimSpace(raw)
+		if t == "" {
+			continue
+		}
+		switch {
+		case inStore[t]:
+			outcomes = append(outcomes, cliproto.SubsRemoveOutcome{Target: t, Removed: true})
+		default:
+			outcomes = append(outcomes, cliproto.SubsRemoveOutcome{Target: t, CoveredByPattern: firstCoveringPattern(t, patterns)})
+		}
+	}
+	writeIPC(conn, cliproto.SubsRemoveReply{Subs: d.Subs.List(req.Session), Outcomes: outcomes})
+}
+
+// firstCoveringPattern returns the first stored pattern (in the order given,
+// which is sorted) that matches target via the same %→* / filepath.Match
+// semantics as matchAnyTarget. Empty string if none — used to explain that a
+// removed-nothing target is actually surfaced by a pattern, not its own sub.
+func firstCoveringPattern(target string, patterns []string) string {
+	for _, p := range patterns {
+		g := strings.ReplaceAll(p, "%", "*")
+		if ok, _ := filepath.Match(g, target); ok {
+			return p
+		}
+	}
+	return ""
 }
 
 // handleSubsList replies with a ListReply scoped to the session's
@@ -240,7 +281,39 @@ func (d *Daemon) subsSnapshot(ctx context.Context, sessionID string) (cliproto.L
 		}
 	}
 	sortListReply(&reply)
+
+	// Attribution: tag each surfaced pipe with the subscribed subject(s) that
+	// matched it, and carry the verbatim subscription list. The CLI uses these
+	// to render pattern subs as parent rows (incl. a pattern that matches
+	// nothing, which has no pipe row) and to emit matched_by in --json.
+	for i := range reply.Sources {
+		h := reply.Sources[i].Handle
+		for j := range reply.Sources[i].PipeInfos {
+			reply.Sources[i].PipeInfos[j].MatchedBy = matchedSubjects(h, reply.Sources[i].PipeInfos[j].Pipe, subjects)
+		}
+	}
+	for i := range reply.UncollaredPipes {
+		reply.UncollaredPipes[i].Info.MatchedBy = matchedSubjects("", reply.UncollaredPipes[i].Name, subjects)
+	}
+	reply.Subscriptions = subjects
 	return reply, nil
+}
+
+// matchedSubjects returns the subscribed subjects matching (handle, pipe),
+// sorted — the same %→* / full-`<handle>.<pipe>` semantics matchAnyTarget
+// uses for filtering, run per-subject to record WHICH ones matched.
+func matchedSubjects(handle, pipe string, subjects []string) []string {
+	var out []string
+	for _, s := range subjects {
+		if matchAnyTarget(handle, pipe, []string{s}) {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
+	return out
 }
 
 // unreadOnly returns a copy of reply keeping only rows with unread > 0 —
@@ -268,12 +341,11 @@ func unreadOnly(in cliproto.ListReply) cliproto.ListReply {
 }
 
 // isGlobPattern reports whether a subscribed subject is a glob/pattern
-// rather than a concrete subject. Covers filepath.Match metacharacters
-// (`*`, `?`, `[`) plus `%`, the SQL-LIKE alias that matchAnyTarget accepts
-// and rewrites to `*`. Pattern subs expand at read-time, so they never get
-// a synthetic literal row in subsSnapshot.
+// rather than a concrete subject. Pattern subs expand at read-time, so they
+// never get a synthetic literal row in subsSnapshot. Delegates to the shared
+// cliproto definition so the daemon and the CLI tree renderer agree.
 func isGlobPattern(s string) bool {
-	return strings.ContainsAny(s, "*?[%")
+	return cliproto.IsGlobPattern(s)
 }
 
 // splitCollared mirrors `ppz read` target parsing: a dotted target is
