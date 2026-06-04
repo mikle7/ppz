@@ -148,8 +148,10 @@ func wrapUsageText(text string, width int) string {
 	raw := strings.Split(text, "\n")
 	joined := make([]string, 0, len(raw))
 	pending := ""
-	pendingDescCol := 0 // active descCol for Case A
-	runIndent := 0      // active indent for Case B
+	// pendingDescCol and runIndent are mutually exclusive: flushPending resets
+	// both, and the switch below sets at most one per new pending line.
+	pendingDescCol := 0 // Case A: description column of the current verb line
+	runIndent := 0      // Case B: indent shared by a deep description-only run
 
 	flushPending := func() {
 		if pending != "" {
@@ -185,6 +187,8 @@ func wrapUsageText(text string, width int) string {
 		case dc > indent:
 			pendingDescCol = dc
 		case indent >= 10 && dc == indent:
+			// Threshold of 10 rules out top-level verb lines (indent ≤ 4)
+			// and shallow section text, leaving only description-column prose.
 			runIndent = indent
 		}
 	}
@@ -198,15 +202,14 @@ func wrapUsageText(text string, width int) string {
 			continue
 		}
 		_, descCol := findDescCol(line)
-		descStart := descCol
 		contentBudget := width - descCol
 		if contentBudget <= 4 {
 			out = append(out, line)
 			continue
 		}
 		contPrefix := strings.Repeat(" ", descCol)
-		firstPrefix := line[:descStart]
-		words := strings.Fields(line[descStart:])
+		firstPrefix := line[:descCol]
+		words := strings.Fields(line[descCol:])
 		if len(words) == 0 {
 			out = append(out, line)
 			continue

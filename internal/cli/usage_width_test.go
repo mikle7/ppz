@@ -40,8 +40,10 @@ func TestUsage_FitsInCOLUMNS80(t *testing.T) {
 }
 
 // TestUsage_ExpandsAtCOLUMNS160: at a wide terminal the descriptions must
-// actually grow.  If every line still fits within 100 columns the reflowing
-// pass is a no-op and we have not fixed the narrow-layout bug.
+// actually grow, and must not overflow the budget. Paired lower+upper bounds:
+//   - lower: at least 3 lines must exceed 100 runes (a single long verb
+//     signature is not sufficient — description text must have reflowed).
+//   - upper: no line may exceed 160 runes (the wrap pass must honour the width).
 func TestUsage_ExpandsAtCOLUMNS160(t *testing.T) {
 	t.Setenv("COLUMNS", "160")
 
@@ -56,13 +58,18 @@ func TestUsage_ExpandsAtCOLUMNS160(t *testing.T) {
 
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
 	longEnough := 0
-	for _, line := range lines {
-		if len([]rune(strings.TrimRight(line, " \t"))) > 100 {
+	for i, line := range lines {
+		measured := strings.TrimRight(line, " \t")
+		runes := len([]rune(measured))
+		if runes > 160 {
+			t.Errorf("usage line %d exceeds COLUMNS=160 budget: %d runes\n%s", i+1, runes, line)
+		}
+		if runes > 100 {
 			longEnough++
 		}
 	}
-	if longEnough == 0 {
-		t.Errorf("COLUMNS=160 but no output line exceeds 100 runes — descriptions did not expand to use available terminal width")
+	if longEnough < 3 {
+		t.Errorf("COLUMNS=160 but only %d lines exceed 100 runes — descriptions did not expand to use available terminal width", longEnough)
 	}
 }
 
