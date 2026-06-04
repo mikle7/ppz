@@ -97,6 +97,12 @@ var topLevelVerbs = []string{
 	"who",
 }
 
+// subverbs maps a grouped top-level verb to its second-positional
+// completions. A verb absent from this map either takes no subverb
+// (e.g. status, ls, version) or takes only flags (e.g. diagnostics,
+// who) — in both cases the dispatcher falls through to the
+// target/handle logic or quietly emits nothing, which is the desired
+// behaviour for flag-only verbs.
 var subverbs = map[string][]string{
 	"agent":    {"create"},
 	"daemon":   {"start", "stop", "restart", "login", "logout"},
@@ -285,6 +291,11 @@ func listSourcesForCompletionLive() []cliproto.Source {
 // []cliproto.Source the emit* helpers already consume. The reverse
 // adapter keeps callers identical regardless of which daemon verb
 // answered.
+//
+// cr.Stale is intentionally discarded — from the shell's point of
+// view "daemon hasn't populated its cache yet" and "daemon has no
+// sources" both render the same: zero suggestions. Surfacing
+// staleness to the user mid-keystroke would be noise.
 func completeReplyToSources(cr cliproto.CompleteReply) []cliproto.Source {
 	out := make([]cliproto.Source, 0, len(cr.Sources))
 	for _, s := range cr.Sources {

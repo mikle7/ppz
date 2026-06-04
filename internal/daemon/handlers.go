@@ -1271,16 +1271,27 @@ func (d *Daemon) handleComplete(ctx context.Context, conn net.Conn, params json.
 		return
 	}
 
-	// Warm the cache once on cold daemon. Single cheap HTTP probe;
+	// Warm the cache on cold daemon. Single cheap HTTP probe;
 	// JetStream stays out of this path. Subsequent tabs hit the
 	// in-memory snapshot.
+	//
+	// Concurrent tab presses on a cold daemon would otherwise all
+	// observe !ok and race to fire GET /api/v1/sources. The lock +
+	// re-check coalesces them into one probe per cold start. The
+	// fast path (warm cache) skips the lock entirely.
 	if _, ok := d.State.CompletionSnapshot(); !ok {
-		var lr cliproto.ListSourcesReply
-		// Errors are swallowed: the daemon is happy to serve an empty
-		// completion list — tab completion's contract is "best effort".
-		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e == nil {
-			d.refreshSourceCache(lr.Sources)
+		d.completionWarmMu.Lock()
+		if _, ok := d.State.CompletionSnapshot(); !ok {
+			var lr cliproto.ListSourcesReply
+			// Errors are swallowed: tab completion's contract is "best
+			// effort". A failed probe leaves the cache cold so the NEXT
+			// caller retries — see completionWarmMu in daemon.go for
+			// why this isn't sync.Once.
+			if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e == nil {
+				d.refreshSourceCache(lr.Sources)
+			}
 		}
+		d.completionWarmMu.Unlock()
 	}
 
 	snapshot, loaded := d.State.CompletionSnapshot()

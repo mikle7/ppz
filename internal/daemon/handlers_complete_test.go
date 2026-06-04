@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
@@ -78,14 +80,18 @@ func TestHandleComplete_ServesFromCache(t *testing.T) {
 		sort.Strings(s.Pipes)
 		got[s.Handle] = s.Pipes
 	}
-	// alice (pty) merges pipesForKind(pty) ∪ user pipes; bob (message)
-	// gets just the message default.
+	// alice (pty) merges pipesForKind(KindPTY) ∪ user pipes; bob (message)
+	// gets just pipesForKind(KindMessage). The hardcoded expected sets
+	// track the auto-pipe vocabulary defined in handlers.go's pipesForKind
+	// — if a new auto-pipe lands (e.g. "stderr"), it must be added to
+	// wantAlice (PTY kind) too. Sorted-alpha order matches the input
+	// sort.Strings above so the comparison is deterministic.
 	wantAlice := []string{"alerts", "heartbeat", "inbox", "stdctrl", "stdin", "stdout"}
 	wantBob := []string{"inbox"}
-	if !equalStrings(got["alice"], wantAlice) {
+	if !slices.Equal(got["alice"], wantAlice) {
 		t.Errorf("alice pipes = %v, want %v", got["alice"], wantAlice)
 	}
-	if !equalStrings(got["bob"], wantBob) {
+	if !slices.Equal(got["bob"], wantBob) {
 		t.Errorf("bob pipes = %v, want %v", got["bob"], wantBob)
 	}
 }
@@ -134,6 +140,48 @@ func TestHandleComplete_ColdCacheWarmsOnce(t *testing.T) {
 	}
 }
 
+// TestHandleComplete_ColdCacheConcurrent: N concurrent tab presses on
+// a cold daemon must coalesce into ONE GET /api/v1/sources, not N.
+// Without completionWarmMu the cold check-then-act is a classic race
+// — every goroutine reads CompletionSnapshot()=false in parallel and
+// fires its own probe. The handler gates the first probe with a
+// barrier channel so all callers reach the !loaded check before any
+// probe completes; this maximises the race window.
+func TestHandleComplete_ColdCacheConcurrent(t *testing.T) {
+	const N = 8
+	var hits int32
+	release := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/sources", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		<-release // hold the first probe until we release
+		_ = json.NewEncoder(w).Encode(cliproto.ListSourcesReply{
+			Sources: []cliproto.Source{{Handle: "carol", Kind: string(cliproto.KindMessage)}},
+		})
+	})
+	d := newDaemonWithFakeServer(t, mux)
+
+	done := make(chan struct{}, N)
+	for range N {
+		go func() {
+			_, _ = callComplete(t, d, cliproto.CompleteRequest{})
+			done <- struct{}{}
+		}()
+	}
+	// Give every goroutine time to enter handleComplete and either
+	// acquire the warm lock or block on it. 50ms is generous against
+	// the in-process pipe + httptest server.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	for range N {
+		<-done
+	}
+
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Fatalf("/api/v1/sources hits = %d, want 1 — concurrent tab presses on cold daemon must coalesce", got)
+	}
+}
+
 // TestHandleComplete_LoggedOutReturnsStale: a daemon without credentials
 // returns Stale with no sources and no error. Tab completion must never
 // surface an authentication failure mid-keystroke.
@@ -151,16 +199,4 @@ func TestHandleComplete_LoggedOutReturnsStale(t *testing.T) {
 	if len(reply.Sources) != 0 {
 		t.Errorf("reply.Sources = %v, want empty on logged-out daemon", reply.Sources)
 	}
-}
-
-func equalStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

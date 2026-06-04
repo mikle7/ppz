@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -119,14 +120,61 @@ func TestComplete_TopLevel_IncludesCommand(t *testing.T) {
 	}
 }
 
-// TestComplete_TopLevel_IncludesNewVerbs: every verb root.go dispatches
-// must show up at `ppz <tab>`. Audit-driven gaps caught here so adding
-// a new verb without updating completion.go fails CI loudly.
-func TestComplete_TopLevel_IncludesNewVerbs(t *testing.T) {
+// TestComplete_TopLevel_MatchesDispatchTable: every verb root.go's
+// Run() switch dispatches must appear at `ppz <tab>`. This parses
+// root.go at test time rather than hardcoding a list — adding a new
+// verb without updating completion's topLevelVerbs fails CI
+// automatically, regardless of what the new verb is named.
+//
+// Excluded verbs are internal/help shortcuts that aren't meant for
+// everyday tab completion: __complete (hidden — invoked by the shell
+// hook), completion (one-shot setup verb), and the help triplet
+// (-h / --help / help — universal shell idioms, not surfaces we tab
+// users to discover).
+func TestComplete_TopLevel_MatchesDispatchTable(t *testing.T) {
+	src, err := os.ReadFile("root.go")
+	if err != nil {
+		t.Fatalf("read root.go: %v", err)
+	}
+
+	// `case "verb":` (or `case "v1", "v2":`) appears only inside Run's
+	// top-level switch — root.go has no other switches today. The
+	// outer regex captures the comma-separated quoted-string list; the
+	// inner regex pulls each verb out.
+	caseRe := regexp.MustCompile(`case\s+("[^"]+"(?:\s*,\s*"[^"]+")*)\s*:`)
+	stringRe := regexp.MustCompile(`"([^"]+)"`)
+
+	excluded := map[string]bool{
+		"__complete": true, // hidden — invoked by the shell hook itself
+		"completion": true, // one-shot setup verb
+		"-h":         true, // shell-idiom flags, not ppz verbs
+		"--help":     true,
+		"help":       true,
+	}
+
 	got := captureComplete(t, []string{""})
-	for _, want := range []string{"agent", "diagnostics", "who", "subs"} {
-		if !contains(got, want) {
-			t.Errorf("expected %q in top-level completions, got %v", want, got)
+	have := map[string]bool{}
+	for _, v := range got {
+		have[v] = true
+	}
+
+	dispatched := map[string]bool{}
+	for _, m := range caseRe.FindAllStringSubmatch(string(src), -1) {
+		for _, s := range stringRe.FindAllStringSubmatch(m[1], -1) {
+			verb := s[1]
+			if excluded[verb] {
+				continue
+			}
+			dispatched[verb] = true
+		}
+	}
+	if len(dispatched) == 0 {
+		t.Fatal("root.go parse found zero dispatched verbs — the regex is stale")
+	}
+
+	for verb := range dispatched {
+		if !have[verb] {
+			t.Errorf("verb %q is dispatched by root.go but missing from topLevelVerbs", verb)
 		}
 	}
 }
@@ -161,10 +209,15 @@ func TestComplete_SubsSubverb(t *testing.T) {
 	}
 }
 
-// withFakeSources swaps the daemon-listing seam for a canned snapshot
-// so target/handle completion paths can be exercised hermetically. The
-// returned cleanup restores the live implementation.
-func withFakeSources(t *testing.T, sources []cliproto.Source) {
+// injectFakeSources swaps the daemon-listing seam for a canned
+// snapshot so target/handle completion paths can be exercised
+// hermetically. t.Cleanup restores the live implementation.
+//
+// Mutates a package-level var — callers must NOT mark their test
+// t.Parallel(). If parallelism is ever wanted here, switch the seam
+// to an interface field on a per-call context the dispatcher reads
+// (e.g. cmdComplete signature change).
+func injectFakeSources(t *testing.T, sources []cliproto.Source) {
 	t.Helper()
 	orig := listSourcesForCompletion
 	listSourcesForCompletion = func() []cliproto.Source { return sources }
@@ -186,7 +239,7 @@ func fakeSources() []cliproto.Source {
 // also accepts uncollared names — covered separately once the uncollared
 // path is wired.
 func TestComplete_PipeDestroy_Targets(t *testing.T) {
-	withFakeSources(t, fakeSources())
+	injectFakeSources(t, fakeSources())
 	got := captureComplete(t, []string{"pipe", "destroy", ""})
 	for _, want := range []string{"alice.inbox", "alice.stdout", "bob.inbox"} {
 		if !contains(got, want) {
@@ -199,7 +252,7 @@ func TestComplete_PipeDestroy_Targets(t *testing.T) {
 // completes both bare handles AND handle.pipe — usage doc states both
 // are valid pattern targets.
 func TestComplete_SourceDestroy_HandlesAndTargets(t *testing.T) {
-	withFakeSources(t, fakeSources())
+	injectFakeSources(t, fakeSources())
 	got := captureComplete(t, []string{"source", "destroy", ""})
 	for _, want := range []string{"alice", "bob", "alice.inbox", "bob.inbox"} {
 		if !contains(got, want) {
@@ -211,7 +264,7 @@ func TestComplete_SourceDestroy_HandlesAndTargets(t *testing.T) {
 // TestComplete_SubsAdd_Targets: `ppz subs add <tab>` completes targets,
 // same vocabulary as send/read so users learn one rule.
 func TestComplete_SubsAdd_Targets(t *testing.T) {
-	withFakeSources(t, fakeSources())
+	injectFakeSources(t, fakeSources())
 	got := captureComplete(t, []string{"subs", "add", ""})
 	for _, want := range []string{"alice.inbox", "bob.inbox"} {
 		if !contains(got, want) {
@@ -224,7 +277,7 @@ func TestComplete_SubsAdd_Targets(t *testing.T) {
 // subs add takes a variadic target list, so the 2nd+ positionals must
 // also complete targets, not silently drop into "no completion".
 func TestComplete_SubsAdd_RepeatedTargets(t *testing.T) {
-	withFakeSources(t, fakeSources())
+	injectFakeSources(t, fakeSources())
 	got := captureComplete(t, []string{"subs", "add", "alice.inbox", ""})
 	if !contains(got, "bob.inbox") {
 		t.Errorf("expected target completion on repeated subs add positional, got %v", got)
@@ -234,7 +287,7 @@ func TestComplete_SubsAdd_RepeatedTargets(t *testing.T) {
 // TestComplete_SubsRm_Targets: `ppz subs rm <tab>` mirrors subs add —
 // answer #1 said "same as send/read targets", not "subscribed only".
 func TestComplete_SubsRm_Targets(t *testing.T) {
-	withFakeSources(t, fakeSources())
+	injectFakeSources(t, fakeSources())
 	got := captureComplete(t, []string{"subs", "rm", ""})
 	if !contains(got, "alice.inbox") || !contains(got, "bob.inbox") {
 		t.Errorf("expected targets under subs rm, got %v", got)
@@ -243,7 +296,7 @@ func TestComplete_SubsRm_Targets(t *testing.T) {
 
 // TestComplete_SubsRm_RepeatedTargets: variadic, same as add.
 func TestComplete_SubsRm_RepeatedTargets(t *testing.T) {
-	withFakeSources(t, fakeSources())
+	injectFakeSources(t, fakeSources())
 	got := captureComplete(t, []string{"subs", "rm", "alice.inbox", ""})
 	if !contains(got, "bob.inbox") {
 		t.Errorf("expected target completion on repeated subs rm positional, got %v", got)
