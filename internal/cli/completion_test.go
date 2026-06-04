@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
 // captureComplete runs cmdComplete with the given args and returns
@@ -114,6 +116,137 @@ func TestComplete_TopLevel_IncludesCommand(t *testing.T) {
 	got := captureComplete(t, []string{""})
 	if !contains(got, "command") {
 		t.Errorf("expected 'command' in top-level completions, got %v", got)
+	}
+}
+
+// TestComplete_TopLevel_IncludesNewVerbs: every verb root.go dispatches
+// must show up at `ppz <tab>`. Audit-driven gaps caught here so adding
+// a new verb without updating completion.go fails CI loudly.
+func TestComplete_TopLevel_IncludesNewVerbs(t *testing.T) {
+	got := captureComplete(t, []string{""})
+	for _, want := range []string{"agent", "diagnostics", "who", "subs"} {
+		if !contains(got, want) {
+			t.Errorf("expected %q in top-level completions, got %v", want, got)
+		}
+	}
+}
+
+// TestComplete_AgentSubverb: `ppz agent <tab>` → [create].
+// agent is grouped (see cmdAgentGroup) — without a subverb entry tab
+// falls into the "unknown subgroup" silent path.
+func TestComplete_AgentSubverb(t *testing.T) {
+	got := captureComplete(t, []string{"agent", ""})
+	if !contains(got, "create") {
+		t.Errorf("expected 'create' under agent, got %v", got)
+	}
+}
+
+// TestComplete_DaemonSubverbIncludesRestart: `ppz daemon <tab>` must
+// include 'restart'. The verb is wired (daemon.go:30, documented at
+// usage line 251) but absent from the subverbs table.
+func TestComplete_DaemonSubverbIncludesRestart(t *testing.T) {
+	got := captureComplete(t, []string{"daemon", ""})
+	if !contains(got, "restart") {
+		t.Errorf("expected 'restart' under daemon, got %v", got)
+	}
+}
+
+// TestComplete_SubsSubverb: `ppz subs <tab>` → all five subverbs.
+func TestComplete_SubsSubverb(t *testing.T) {
+	got := captureComplete(t, []string{"subs", ""})
+	for _, want := range []string{"ls", "add", "rm", "wait", "read"} {
+		if !contains(got, want) {
+			t.Errorf("expected %q under subs, got %v", want, got)
+		}
+	}
+}
+
+// withFakeSources swaps the daemon-listing seam for a canned snapshot
+// so target/handle completion paths can be exercised hermetically. The
+// returned cleanup restores the live implementation.
+func withFakeSources(t *testing.T, sources []cliproto.Source) {
+	t.Helper()
+	orig := listSourcesForCompletion
+	listSourcesForCompletion = func() []cliproto.Source { return sources }
+	t.Cleanup(func() { listSourcesForCompletion = orig })
+}
+
+// fakeSources is the canned source set used by every target-slot test.
+// Two handles, three pipes total — enough to exercise prefix filtering
+// and handle-vs-target distinction.
+func fakeSources() []cliproto.Source {
+	return []cliproto.Source{
+		{Handle: "alice", PipeInfos: []cliproto.PipeInfo{{Pipe: "inbox"}, {Pipe: "stdout"}}},
+		{Handle: "bob", PipeInfos: []cliproto.PipeInfo{{Pipe: "inbox"}}},
+	}
+}
+
+// TestComplete_PipeDestroy_Targets: `ppz pipe destroy <tab>` completes
+// existing <handle>.<pipe> so users can pick a real target. The verb
+// also accepts uncollared names — covered separately once the uncollared
+// path is wired.
+func TestComplete_PipeDestroy_Targets(t *testing.T) {
+	withFakeSources(t, fakeSources())
+	got := captureComplete(t, []string{"pipe", "destroy", ""})
+	for _, want := range []string{"alice.inbox", "alice.stdout", "bob.inbox"} {
+		if !contains(got, want) {
+			t.Errorf("expected %q in pipe destroy completions, got %v", want, got)
+		}
+	}
+}
+
+// TestComplete_SourceDestroy_HandlesAndTargets: `ppz source destroy <tab>`
+// completes both bare handles AND handle.pipe — usage doc states both
+// are valid pattern targets.
+func TestComplete_SourceDestroy_HandlesAndTargets(t *testing.T) {
+	withFakeSources(t, fakeSources())
+	got := captureComplete(t, []string{"source", "destroy", ""})
+	for _, want := range []string{"alice", "bob", "alice.inbox", "bob.inbox"} {
+		if !contains(got, want) {
+			t.Errorf("expected %q in source destroy completions, got %v", want, got)
+		}
+	}
+}
+
+// TestComplete_SubsAdd_Targets: `ppz subs add <tab>` completes targets,
+// same vocabulary as send/read so users learn one rule.
+func TestComplete_SubsAdd_Targets(t *testing.T) {
+	withFakeSources(t, fakeSources())
+	got := captureComplete(t, []string{"subs", "add", ""})
+	for _, want := range []string{"alice.inbox", "bob.inbox"} {
+		if !contains(got, want) {
+			t.Errorf("expected %q in subs add completions, got %v", want, got)
+		}
+	}
+}
+
+// TestComplete_SubsAdd_RepeatedTargets: `ppz subs add a.b <tab>` —
+// subs add takes a variadic target list, so the 2nd+ positionals must
+// also complete targets, not silently drop into "no completion".
+func TestComplete_SubsAdd_RepeatedTargets(t *testing.T) {
+	withFakeSources(t, fakeSources())
+	got := captureComplete(t, []string{"subs", "add", "alice.inbox", ""})
+	if !contains(got, "bob.inbox") {
+		t.Errorf("expected target completion on repeated subs add positional, got %v", got)
+	}
+}
+
+// TestComplete_SubsRm_Targets: `ppz subs rm <tab>` mirrors subs add —
+// answer #1 said "same as send/read targets", not "subscribed only".
+func TestComplete_SubsRm_Targets(t *testing.T) {
+	withFakeSources(t, fakeSources())
+	got := captureComplete(t, []string{"subs", "rm", ""})
+	if !contains(got, "alice.inbox") || !contains(got, "bob.inbox") {
+		t.Errorf("expected targets under subs rm, got %v", got)
+	}
+}
+
+// TestComplete_SubsRm_RepeatedTargets: variadic, same as add.
+func TestComplete_SubsRm_RepeatedTargets(t *testing.T) {
+	withFakeSources(t, fakeSources())
+	got := captureComplete(t, []string{"subs", "rm", "alice.inbox", ""})
+	if !contains(got, "bob.inbox") {
+		t.Errorf("expected target completion on repeated subs rm positional, got %v", got)
 	}
 }
 

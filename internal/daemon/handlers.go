@@ -1121,11 +1121,37 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 func (d *Daemon) refreshSourceCache(sources []cliproto.Source) {
 	handles := make([]string, 0, len(sources))
 	manifolds := make(map[string]string, len(sources))
+	completion := make([]cliproto.CompleteSource, 0, len(sources))
 	for _, s := range sources {
 		handles = append(handles, s.Handle)
 		manifolds[s.Handle] = s.Manifold
+		// Build the completion view alongside the existing caches.
+		// Auto-pipes (pipesForKind) PLUS user-created pipes (Source.Pipes
+		// from /api/v1/sources). De-dupe in case the server ever ships
+		// an auto-pipe name in the user list — defensive, costs O(k).
+		seen := map[string]bool{}
+		var pipes []string
+		for _, p := range pipesForKind(s.Kind) {
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			pipes = append(pipes, p)
+		}
+		for _, p := range s.Pipes {
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			pipes = append(pipes, p)
+		}
+		completion = append(completion, cliproto.CompleteSource{
+			Handle: s.Handle,
+			Pipes:  pipes,
+		})
 	}
 	d.State.ResetSources(handles, manifolds)
+	d.State.SetCompletionSnapshot(completion)
 }
 
 func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawMessage) {
@@ -1220,6 +1246,45 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 	}
 
 	writeIPC(conn, cliproto.ListReply{Sources: enriched, UncollaredPipes: uncollared})
+}
+
+// handleComplete is the lean read-only counterpart to handleList that
+// backs `ppz __complete` (the shell-tab hot path). It serves from the
+// in-memory completion cache populated by refreshSourceCache — no
+// NATS, no JetStream, and at most ONE cheap HTTP GET on a cold daemon
+// just to warm the cache. handleList by contrast pays two HTTP RTTs
+// to the server PLUS N JetStream Info()s and previews per pipe; that
+// was every tab press, hence the slowness.
+//
+// Failure modes are intentionally quiet: a logged-out daemon returns
+// Stale with no sources rather than an error, because tab completion
+// must never surface daemon-side problems to the user mid-keystroke.
+func (d *Daemon) handleComplete(ctx context.Context, conn net.Conn, params json.RawMessage) {
+	var req cliproto.CompleteRequest
+	_ = json.Unmarshal(params, &req) // optional body
+
+	if _, ok := d.State.Credentials(); !ok {
+		// Not logged in — nothing to complete against. Return a clean
+		// empty Stale reply so the shell shows no suggestions and the
+		// user isn't confused with an error mid-tab.
+		writeIPC(conn, cliproto.CompleteReply{Stale: true})
+		return
+	}
+
+	// Warm the cache once on cold daemon. Single cheap HTTP probe;
+	// JetStream stays out of this path. Subsequent tabs hit the
+	// in-memory snapshot.
+	if _, ok := d.State.CompletionSnapshot(); !ok {
+		var lr cliproto.ListSourcesReply
+		// Errors are swallowed: the daemon is happy to serve an empty
+		// completion list — tab completion's contract is "best effort".
+		if e := d.callServer(ctx, "GET", "/api/v1/sources", nil, &lr); e == nil {
+			d.refreshSourceCache(lr.Sources)
+		}
+	}
+
+	snapshot, loaded := d.State.CompletionSnapshot()
+	writeIPC(conn, cliproto.CompleteReply{Sources: snapshot, Stale: !loaded})
 }
 
 // uncollaredPipeInfo gathers JetStream stats for one uncollared pipe.

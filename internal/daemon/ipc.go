@@ -109,6 +109,8 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handleSubsRemove(ctx, conn, req.Params)
 	case cliproto.IPCSubsWait:
 		d.handleSubsWait(ctx, conn, req.Params)
+	case cliproto.IPCComplete:
+		d.handleComplete(ctx, conn, req.Params)
 	default:
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: "unknown method " + req.Method})
 	}
