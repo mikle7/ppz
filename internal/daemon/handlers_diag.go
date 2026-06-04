@@ -99,28 +99,36 @@ func (d *Daemon) diagSummary(state string) cliproto.DiagSummary {
 	}
 	if d.NATSEvents != nil {
 		events := d.NATSEvents.Snapshot()
-		out.StateSince = stateSinceFrom(state, events)
+		out.StateSince, _ = stateSinceFrom(state, events)
 	}
 	return out
 }
 
 // stateSinceFrom finds the timestamp at which the daemon entered the
 // given state, by scanning events backward for the most recent
-// transition into that state. Returns zero when no such event is in
-// the ring (fresh daemon, or state predates the ring's oldest entry).
-func stateSinceFrom(state string, events []NATSEvent) time.Time {
+// transition into that state. Returns zero (and "") when no such event
+// is in the ring (fresh daemon, or state predates the ring's oldest
+// entry).
+//
+// The returned event-type string is the token that anchored the
+// timestamp — "connect" / "reconnect" / "disconnect" / "closed". The
+// CLI uses it on the `ppz status` `nats:` line to colour the state
+// token: a first-connect renders green regardless of age, while a
+// recent reconnect is amber for the first minute (the "just recovered,
+// might re-flap" signal). See cliproto.formatNATSLine.
+func stateSinceFrom(state string, events []NATSEvent) (time.Time, string) {
 	want := stateEntryTypes(state)
 	if len(want) == 0 {
-		return time.Time{}
+		return time.Time{}, ""
 	}
 	for i := len(events) - 1; i >= 0; i-- {
 		for _, t := range want {
 			if events[i].Type == t {
-				return events[i].At
+				return events[i].At, events[i].Type
 			}
 		}
 	}
-	return time.Time{}
+	return time.Time{}, ""
 }
 
 // stateEntryTypes maps a high-level state string to the event types

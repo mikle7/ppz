@@ -183,6 +183,18 @@ type StatusReply struct {
 	// underlying event log is available via `ppz diagnostics`. (Phase 0 of
 	// agent hardening, docs/WIRE.md §8.)
 	NATSState string `json:"nats_state,omitempty"`
+	// NATSStateSince is when the daemon entered NATSState, derived from
+	// the most recent matching event in the in-memory ring. Nil when no
+	// such event is in the ring — e.g. fresh daemon, or the relevant
+	// transition has aged past the ring's oldest entry. Renders as a
+	// "(N <unit> ago)" suffix on the `nats:` line.
+	NATSStateSince *time.Time `json:"nats_state_since,omitempty"`
+	// NATSStateEntry is the event-type token that anchored
+	// NATSStateSince — "connect" / "reconnect" / "disconnect" / "closed".
+	// The CLI uses it to distinguish a clean first-connect (green
+	// regardless of age) from a recent reconnect (amber if uptime is
+	// short — see formatNATSLine). Empty when NATSStateSince is nil.
+	NATSStateEntry string `json:"nats_state_entry,omitempty"`
 }
 
 // LoginCheck values reported by StatusReply. Constants live in cliproto

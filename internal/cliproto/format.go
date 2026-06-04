@@ -206,18 +206,26 @@ func normaliseVersionForCompare(v string) string {
 	return v
 }
 
-// formatNATSLine renders the `nats:` line for `ppz status` (Phase 0
-// of agent hardening). Format pinned by tests/reliability/
-// nats-status-line — the prefix `nats: (connected|disconnected|
-// connecting)` is the contract.
+// formatNATSLine renders the `nats:` line for `ppz status`. The
+// `nats: <state>` prefix is the WIRE.md §8 contract — pinned by
+// tests/reliability/nats-status-line. The optional " (N <unit> ago)"
+// suffix is a strict extension surfacing connection stability: how
+// long has the daemon been in its current NATS state? Drives operator
+// intuition for "is this a fresh flap or a stable connection?"
 //
-// We deliberately keep the status line TERSE — just the current state
-// token. Per-event detail (timestamps, drop counters, error reasons)
-// lives in `ppz diagnostics` instead. Surfacing drop counts here would have
-// made `ppz status` fixtures flap whenever the daemon's lifetime
-// crossed an unrelated reconnect (test isolation issue: the ring
-// accumulates events across scenarios that share a daemon process).
-// `ppz diagnostics` is the right place to look when you want detail.
+// Colour matrix encodes the stability signal:
+//
+//   - connected + entry=connect  → green (clean first-connect, always stable)
+//   - connected + entry=reconnect, age <  60s → amber (just recovered, watch)
+//   - connected + entry=reconnect, age >= 60s → green (recovered, holding)
+//   - connected + no state-since → green (ring has no anchoring event)
+//   - disconnected / closed → red (any age)
+//   - connecting → dim
+//   - "" (unobserved) → red, label "unknown"
+//
+// Per-event forensic detail (drop counters, error reasons, full
+// timeline) still lives in `ppz diagnostics` — this line is intentionally
+// terse.
 //
 // State "" (daemon hasn't observed a NATS connection yet — fresh
 // process pre-login) renders as "unknown" so we don't lie.
@@ -226,16 +234,36 @@ func formatNATSLine(c statusColors, s StatusReply) string {
 	if state == "" {
 		state = "unknown"
 	}
-	colored := state
+	colored := colorNATSState(c, state, s.NATSStateSince, s.NATSStateEntry)
+	suffix := ""
+	if s.NATSStateSince != nil && !s.NATSStateSince.IsZero() {
+		suffix = " (" + RelativeTime(*s.NATSStateSince, timeNow()) + ")"
+	}
+	return fmt.Sprintf("nats: %s%s", colored, suffix)
+}
+
+// reconnectStableAfter is the minimum age past which a `reconnect` is
+// treated as a stable recovery (green) rather than a fresh flap (amber).
+// Chosen to comfortably outlast the nats.go reconnect backoff window so
+// re-flaps within that window stay visible as amber. Adjust here, not
+// at the call site, so the threshold has a single named source.
+const reconnectStableAfter = time.Minute
+
+func colorNATSState(c statusColors, state string, since *time.Time, entry string) string {
 	switch state {
 	case "connected":
-		colored = c.green(state)
+		if entry == "reconnect" && since != nil {
+			if timeNow().Sub(*since) < reconnectStableAfter {
+				return c.amber(state)
+			}
+		}
+		return c.green(state)
 	case "disconnected", "unknown":
-		colored = c.red(state)
+		return c.red(state)
 	case "connecting":
-		colored = c.dim(state)
+		return c.dim(state)
 	}
-	return fmt.Sprintf("nats: %s", colored)
+	return state
 }
 
 func coloredTokenRefreshAge(c statusColors, t, now time.Time) string {

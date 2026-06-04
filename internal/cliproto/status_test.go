@@ -265,3 +265,188 @@ func TestPrintStatus_RedOutOfSyncTakesPriorityOverUpdate(t *testing.T) {
 		t.Fatalf("status output missing red out-of-sync line\nwant line: %q\ngot:\n%q", wantLine, got)
 	}
 }
+
+// TestPrintStatus_NATSConnectedShowsDurationWhenStateSinceSet pins the
+// extension to the `nats:` line: when the daemon supplies a state-since
+// timestamp, it renders as "(N <unit> ago)" using the same RelativeTime
+// formatter the rest of `ppz status` uses for token-refresh age. The
+// existing "nats: <state>" prefix stays byte-identical (WIRE.md §8
+// contract) — this is a pure suffix extension.
+func TestPrintStatus_NATSConnectedShowsDurationWhenStateSinceSet(t *testing.T) {
+	now := time.Date(2026, 5, 3, 6, 44, 0, 0, time.UTC)
+	oldTimeNow := timeNow
+	timeNow = func() time.Time { return now }
+	t.Cleanup(func() { timeNow = oldTimeNow })
+
+	stateSince := now.Add(-5 * time.Minute)
+	var b bytes.Buffer
+	PrintStatusWithEnv(&b, StatusReply{
+		DaemonPID:       12953,
+		LoggedIn:        true,
+		URL:             "https://pipescloud.io",
+		AccountName:     "jamesmiles",
+		Current:         "foo",
+		NATSState:       "connected",
+		NATSStateSince:  &stateSince,
+		NATSStateEntry:  "connect",
+	}, "", "", false)
+
+	wantLine := "nats: connected (5 minutes ago)\n"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantLine)) {
+		t.Fatalf("status output missing nats duration line\nwant line: %q\ngot:\n%q", wantLine, got)
+	}
+}
+
+// TestPrintStatus_NATSOmitsDurationWhenStateSinceNil covers the daemon-
+// can't-tell case (fresh process where the relevant event has aged out
+// of the in-memory ring, or no transition has happened yet). Better to
+// say nothing than to lie with a wrong duration.
+func TestPrintStatus_NATSOmitsDurationWhenStateSinceNil(t *testing.T) {
+	var b bytes.Buffer
+	PrintStatusWithEnv(&b, StatusReply{
+		DaemonPID:   12953,
+		LoggedIn:    true,
+		URL:         "https://pipescloud.io",
+		AccountName: "jamesmiles",
+		Current:     "foo",
+		NATSState:   "connected",
+	}, "", "", false)
+
+	wantLine := "nats: connected\n"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantLine)) {
+		t.Fatalf("status output should render bare nats line when state-since nil\nwant line: %q\ngot:\n%q", wantLine, got)
+	}
+	// And the "(seconds|minutes|hours|days ago)" suffix must NOT appear —
+	// guard against accidentally rendering a zero-time duration.
+	if bytes.Contains(b.Bytes(), []byte("ago)")) {
+		t.Fatalf("status should not render a duration when state-since is nil; got:\n%q", b.String())
+	}
+}
+
+// TestPrintStatus_NATSConnectIsAlwaysGreen pins the stability colouring
+// rule: a `connect` entry (initial connect, no prior flap) renders the
+// state token GREEN regardless of how recently it fired. Compare with
+// `reconnect` which goes amber for the first minute (see
+// TestPrintStatus_NATSReconnectAmberWhenRecent).
+func TestPrintStatus_NATSConnectIsAlwaysGreen(t *testing.T) {
+	now := time.Date(2026, 5, 3, 6, 44, 0, 0, time.UTC)
+	oldTimeNow := timeNow
+	timeNow = func() time.Time { return now }
+	t.Cleanup(func() { timeNow = oldTimeNow })
+
+	tests := []struct {
+		name       string
+		stateSince time.Time
+	}{
+		{"five seconds ago", now.Add(-5 * time.Second)},
+		{"five minutes ago", now.Add(-5 * time.Minute)},
+		{"three hours ago", now.Add(-3 * time.Hour)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b bytes.Buffer
+			PrintStatusWithEnv(&b, StatusReply{
+				DaemonPID:      12953,
+				LoggedIn:       true,
+				URL:            "https://pipescloud.io",
+				AccountName:    "jamesmiles",
+				Current:        "foo",
+				NATSState:      "connected",
+				NATSStateSince: &tt.stateSince,
+				NATSStateEntry: "connect",
+			}, "", "", true)
+
+			// "connected" must be wrapped in green (\x1b[32m...\x1b[0m).
+			wantPrefix := "nats: \x1b[32mconnected\x1b[0m ("
+			if got := b.String(); !bytes.Contains([]byte(got), []byte(wantPrefix)) {
+				t.Fatalf("nats line should be green for connect entry\nwant prefix: %q\ngot:\n%q", wantPrefix, got)
+			}
+		})
+	}
+}
+
+// TestPrintStatus_NATSReconnectAmberWhenRecent pins the "just recovered,
+// might flap again" signal: a `reconnect` entry under one minute old
+// renders the state token AMBER. Threshold mirrors typical NATS reconnect
+// backoff windows — anything older than a minute is treated as stable.
+func TestPrintStatus_NATSReconnectAmberWhenRecent(t *testing.T) {
+	now := time.Date(2026, 5, 3, 6, 44, 0, 0, time.UTC)
+	oldTimeNow := timeNow
+	timeNow = func() time.Time { return now }
+	t.Cleanup(func() { timeNow = oldTimeNow })
+
+	stateSince := now.Add(-5 * time.Second)
+	var b bytes.Buffer
+	PrintStatusWithEnv(&b, StatusReply{
+		DaemonPID:      12953,
+		LoggedIn:       true,
+		URL:            "https://pipescloud.io",
+		AccountName:    "jamesmiles",
+		Current:        "foo",
+		NATSState:      "connected",
+		NATSStateSince: &stateSince,
+		NATSStateEntry: "reconnect",
+	}, "", "", true)
+
+	wantPrefix := "nats: \x1b[33mconnected\x1b[0m (5 seconds ago)"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantPrefix)) {
+		t.Fatalf("nats line should be amber for recent reconnect\nwant prefix: %q\ngot:\n%q", wantPrefix, got)
+	}
+}
+
+// TestPrintStatus_NATSReconnectGreenWhenSettled covers the back half of
+// the reconnect-colour rule: a reconnect older than one minute has held
+// long enough that we treat the connection as stable again.
+func TestPrintStatus_NATSReconnectGreenWhenSettled(t *testing.T) {
+	now := time.Date(2026, 5, 3, 6, 44, 0, 0, time.UTC)
+	oldTimeNow := timeNow
+	timeNow = func() time.Time { return now }
+	t.Cleanup(func() { timeNow = oldTimeNow })
+
+	stateSince := now.Add(-1 * time.Minute)
+	var b bytes.Buffer
+	PrintStatusWithEnv(&b, StatusReply{
+		DaemonPID:      12953,
+		LoggedIn:       true,
+		URL:            "https://pipescloud.io",
+		AccountName:    "jamesmiles",
+		Current:        "foo",
+		NATSState:      "connected",
+		NATSStateSince: &stateSince,
+		NATSStateEntry: "reconnect",
+	}, "", "", true)
+
+	wantPrefix := "nats: \x1b[32mconnected\x1b[0m (1 minute ago)"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantPrefix)) {
+		t.Fatalf("nats line should be green for settled reconnect\nwant prefix: %q\ngot:\n%q", wantPrefix, got)
+	}
+}
+
+// TestPrintStatus_NATSDisconnectedStaysRedWithDuration shows that the
+// duration suffix also renders in the unhappy state — "(10 seconds ago)"
+// helps distinguish a transient blip from a sustained outage — but the
+// state token stays RED regardless of age.
+func TestPrintStatus_NATSDisconnectedStaysRedWithDuration(t *testing.T) {
+	now := time.Date(2026, 5, 3, 6, 44, 0, 0, time.UTC)
+	oldTimeNow := timeNow
+	timeNow = func() time.Time { return now }
+	t.Cleanup(func() { timeNow = oldTimeNow })
+
+	stateSince := now.Add(-10 * time.Second)
+	var b bytes.Buffer
+	PrintStatusWithEnv(&b, StatusReply{
+		DaemonPID:      12953,
+		LoggedIn:       true,
+		URL:            "https://pipescloud.io",
+		AccountName:    "jamesmiles",
+		Current:        "foo",
+		NATSState:      "disconnected",
+		NATSStateSince: &stateSince,
+		NATSStateEntry: "disconnect",
+	}, "", "", true)
+
+	wantPrefix := "nats: \x1b[31mdisconnected\x1b[0m (10 seconds ago)"
+	if got := b.String(); !bytes.Contains([]byte(got), []byte(wantPrefix)) {
+		t.Fatalf("nats line should be red with duration for disconnect\nwant prefix: %q\ngot:\n%q", wantPrefix, got)
+	}
+}

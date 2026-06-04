@@ -2,6 +2,6 @@ daemon: logged in (pid=PID), VERSION (latest)
 last token refresh: just now
 server: http://ppz-server:8080
 account: alpha
-nats: connected
+nats: connected (just now)
 current source: -
 exit=0
