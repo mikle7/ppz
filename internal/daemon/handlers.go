@@ -220,17 +220,11 @@ func (d *Daemon) startRefreshLoop(accountID, jwt, seed string, expUnix int64) {
 		// so a transient connect failure during rotation is no worse
 		// than today.
 		OnRefreshed: func(_, _ string, _ int64) {
-			if d.NATSURL == "" {
-				return
-			}
-			newNC, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.recordNATSEvent)
-			if err != nil || newNC == nil {
-				return
-			}
-			d.swapNC("OnRefreshed-callback", newNC)
-			if aid, perr := uuid.Parse(d.State.AccountID()); perr == nil {
-				d.subscribeOrgHeartbeats(aid)
-			}
+			// Proactive post-rotation reconnect, serialized + coalesced
+			// with on-demand ensureNATS callers via rebuildNC/ncMu. The
+			// generation check means whichever path runs first redials and
+			// the other no-ops — no duelling swaps.
+			_ = d.rebuildNC("OnRefreshed-callback")
 		},
 	}
 	// context.Background — refresh loop outlives any single IPC
@@ -325,24 +319,18 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	}
 	d.ensureRefreshLoopFromCreds(creds)
 	if d.Refresh != nil {
-		refreshed, err := d.Refresh.RefreshNowIfDue(ctx, time.Now())
-		if errors.Is(err, ErrUnauthorized) {
-			return cliproto.New(cliproto.EInvalidAPIKey)
-		}
-		if err != nil {
+		// Refresh creds if the JWT is within its rotation window. We do NOT
+		// drop the NC here on rotation: rebuildNC's generation check
+		// (ncExp vs Refresh.JWTExp) redials exactly once afterward and
+		// coalesces concurrent ensureNATS callers + the OnRefreshed
+		// goroutine — the burst-swap-storm fix. (Previously each rotation
+		// did swapNC(nil) here, racing N reconnects.)
+		if _, err := d.Refresh.RefreshNowIfDue(ctx, time.Now()); err != nil {
+			if errors.Is(err, ErrUnauthorized) {
+				return cliproto.New(cliproto.EInvalidAPIKey)
+			}
 			return cliproto.New(cliproto.EServerUnreachable)
 		}
-		if refreshed && d.NC != nil {
-			// Refresh-time creds rotation — drop NC and evict any
-			// live follow conns so the CLI redials against the
-			// post-rotation NATS connection. Same shape as logout /
-			// re-login; centralizing via swapNC makes this
-			// deterministic across every NC-replacement site.
-			d.swapNC("ensureNATS-refresh-due", nil)
-		}
-	}
-	if d.NC != nil && d.NC.IsConnected() {
-		return nil
 	}
 	if d.NATSURL == "" {
 		body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey})
@@ -375,42 +363,15 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 		_ = d.State.SetLogin(*creds, creds.AccountID, creds.AccountName, keyPrefix(creds.APIKey))
 		d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
 	}
-	// If we got here without /auth/exchange (NATSURL was already
-	// known) but the refresh loop never started (e.g. fresh daemon
-	// process post-restart), boot it from the persisted creds. Exp
-	// is unknown — set to a near-past value so the loop fires
-	// immediately and refreshes from the bearer.
+	// If we got here without /auth/exchange (NATSURL was already known) but
+	// the refresh loop never started (e.g. fresh daemon process
+	// post-restart), boot it from the persisted creds.
 	d.ensureRefreshLoopFromCreds(creds)
-	// Did the daemon previously have a connection that was non-functional?
-	// If so, the fresh NC we're about to build represents a recovery —
-	// from the operator's perspective, the daemon "reconnected" to NATS.
-	// Record that signal alongside the nats.go-provided ReconnectHandler
-	// events so `ppz diagnostics` surfaces both reconnect mechanisms.
-	wasDisconnected := d.NC != nil && !d.NC.IsConnected()
-	nc, err := connectNATSWithRefresh(d.NATSURL, d.Refresh, d.recordNATSEvent)
-	if err != nil {
-		return cliproto.New(cliproto.ENATSUnreachable)
-	}
-	// swapNC handles close-old + install-new + evict-follows. Any
-	// existing follows anchored to the prior (disconnected) NC would
-	// otherwise stay on a dead consumer — see the
-	// share-stdin-survives-share-daemon-logout / -relogin pins.
-	d.swapNC("ensureNATS", nc)
-	if wasDisconnected {
-		d.recordNATSEvent(NATSEvent{
-			Type:   "reconnect",
-			At:     time.Now(),
-			Caller: "ensureNATS",
-			NCID:   ncID(nc),
-			JWTExp: d.Refresh.JWTExp(),
-			Reason: "ensureNATS rebuilt connection",
-		})
-	}
-	// Subscribe to all org heartbeats so ppz who is cross-daemon-aware.
-	if aid, err := uuid.Parse(d.State.AccountID()); err == nil {
-		d.subscribeOrgHeartbeats(aid)
-	}
-	return nil
+	// Single serialized rebuild: connects (or no-ops if already current on
+	// this JWT generation), records the reconnect signal, and subscribes
+	// org heartbeats. Coalesces with the OnRefreshed goroutine via ncMu so
+	// a rotation triggers exactly one swap — no burst-swap-storm.
+	return d.rebuildNC("ensureNATS")
 }
 
 func (d *Daemon) ensureRefreshLoopFromCreds(creds *Credentials) {

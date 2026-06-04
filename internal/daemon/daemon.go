@@ -97,21 +97,38 @@ func New(home, sock string) *Daemon {
 // refresh path (OnRefreshed) route through here so a JWT rotation triggers
 // exactly ONE reconnect — not N racing ones (the burst-swap-storm).
 //
-// NOTE (RED): not yet serialized — the ncMu lock lands in the fix commit.
-// Today concurrent callers all observe the stale NC and each dial+swap.
+// Serialized via ncMu with a double-check: the first caller to find the NC
+// stale dials + swaps; everyone else blocks, then re-checks and finds the
+// connection current and no-ops. That collapses the rotation thundering
+// herd into a single reconnect.
 func (d *Daemon) rebuildNC(caller string) error {
+	d.ncMu.Lock()
+	defer d.ncMu.Unlock()
 	if d.NATSURL == "" {
 		return nil // nothing to dial yet (pre-login / pre-bootstrap)
 	}
 	if d.NC != nil && d.NC.IsConnected() && d.ncExp == d.Refresh.JWTExp() {
 		return nil // already connected on the current generation — coalesce
 	}
+	wasDisconnected := d.NC != nil && !d.NC.IsConnected()
 	nc, err := d.dial(d.NATSURL, d.Refresh, d.recordNATSEvent)
 	if err != nil || nc == nil {
 		return cliproto.New(cliproto.ENATSUnreachable)
 	}
-	d.swapNC(caller, nc)
+	d.swapNCLocked(caller, nc)
 	d.ncExp = d.Refresh.JWTExp()
+	// Preserve the recovery signal `ppz diagnostics` surfaces: rebuilding
+	// over a previously non-functional NC reads as a "reconnect".
+	if wasDisconnected {
+		d.recordNATSEvent(NATSEvent{
+			Type:   "reconnect",
+			At:     time.Now(),
+			Caller: caller,
+			NCID:   ncID(nc),
+			JWTExp: d.Refresh.JWTExp(),
+			Reason: "rebuilt connection",
+		})
+	}
 	if aid, perr := uuid.Parse(d.State.AccountID()); perr == nil {
 		d.subscribeOrgHeartbeats(aid)
 	}
@@ -137,7 +154,18 @@ func (d *Daemon) rebuildNC(caller string) error {
 // disconnect+closed pair (from closing the old NC) lands separately
 // with Caller="nats.go" — that's the noise the burst-swap-storm
 // pattern detects.
+// swapNC is the lock-acquiring entry point for standalone NC replacements
+// (handleLogin, watcher) that don't already hold ncMu. Callers inside a
+// ncMu-held critical section (rebuildNC) use swapNCLocked directly.
 func (d *Daemon) swapNC(caller string, newNC *nats.Conn) {
+	d.ncMu.Lock()
+	defer d.ncMu.Unlock()
+	d.swapNCLocked(caller, newNC)
+}
+
+// swapNCLocked performs the actual close-old / install-new / evict-follows
+// swap. The caller MUST hold d.ncMu.
+func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 	oldID := ncID(d.NC)
 	newID := ncID(newNC)
 	if d.NATSEvents != nil {
