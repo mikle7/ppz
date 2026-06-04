@@ -39,6 +39,33 @@ func TestUsage_FitsInCOLUMNS80(t *testing.T) {
 	}
 }
 
+// TestUsage_ExpandsAtCOLUMNS160: at a wide terminal the descriptions must
+// actually grow.  If every line still fits within 100 columns the reflowing
+// pass is a no-op and we have not fixed the narrow-layout bug.
+func TestUsage_ExpandsAtCOLUMNS160(t *testing.T) {
+	t.Setenv("COLUMNS", "160")
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	usage(w)
+	_ = w.Close()
+	out, _ := io.ReadAll(r)
+	_ = r.Close()
+
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	longEnough := 0
+	for _, line := range lines {
+		if len([]rune(strings.TrimRight(line, " \t"))) > 100 {
+			longEnough++
+		}
+	}
+	if longEnough == 0 {
+		t.Errorf("COLUMNS=160 but no output line exceeds 100 runes — descriptions did not expand to use available terminal width")
+	}
+}
+
 // TestUsage_FitsInCOLUMNS100 (RED): same contract at a half-16"
 // macbook target. The current static block contains a small number
 // of 100+ char lines (notably the multi-flag agent harness rows).

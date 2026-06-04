@@ -93,38 +93,39 @@ func usage(w *os.File) {
 }
 
 // wrapUsageText reflows the static usage block to fit `width` columns.
-// Each line is wrapped at word boundaries; when a line carries a
-// verb-signature followed by a 2+ space gap before its description
-// (the canonical usage layout), the wrap preserves that gap and aligns
-// every continuation line under the description column. Lines that
-// already fit, lines whose indent alone exceeds the budget, and lines
-// containing no internal break points are left untouched.
+// It runs two passes:
+//
+//  1. Normalize: join paragraph lines so the wrap pass can reflow them at
+//     the actual terminal width. Two join cases:
+//
+//     Case A (inline desc): verb line has a 2+ space gap at descCol.
+//     Subsequent lines at indent==descCol with no internal gap are pure
+//     description prose — join them into the verb line.
+//
+//     Case B (deep run): consecutive lines at the same deep indent (≥10)
+//     with no internal gap are description prose for a verb whose signature
+//     was too long to share the line — join them together.
+//
+//     Sub-items that are indented more than the active descCol/runIndent are
+//     left on their own lines so structured blocks (e.g. flag tables) are
+//     preserved.
+//
+//  2. Wrap: each logical line is word-wrapped at width, preserving the
+//     verb-signature column and re-indenting continuation runs under the
+//     description column.
 func wrapUsageText(text string, width int) string {
 	if width <= 0 {
 		return text
 	}
-	out := make([]string, 0, 256)
-	for _, line := range strings.Split(text, "\n") {
-		if len([]rune(line)) <= width {
-			out = append(out, line)
-			continue
-		}
-		// Detect the description column: leading-indent, then non-
-		// whitespace (the verb signature), then 2+ spaces. Anything
-		// past the gap is the description. Lines without a gap (pure
-		// continuation, or solo verb signature) get descCol = leading
-		// indent so wrap just preserves the indent.
-		leadingIndent := 0
+
+	// findDescCol returns (leadingIndent, descCol) for a line.
+	// descCol is the column after the first 2+ space gap past the verb
+	// signature, or leadingIndent when no such gap exists.
+	findDescCol := func(line string) (leadingIndent, descCol int) {
 		for leadingIndent < len(line) && line[leadingIndent] == ' ' {
 			leadingIndent++
 		}
-		// Scan past the verb signature looking for the first 2+ space
-		// gap — that's the description column. Single spaces inside
-		// the verb signature (e.g. "ppz status") are part of the verb,
-		// not the gap. Pure continuation lines and solo verb lines
-		// won't have such a gap; we fall back to leadingIndent.
-		descCol := leadingIndent
-		descStart := leadingIndent
+		descCol = leadingIndent
 		for i := leadingIndent; i < len(line); {
 			if line[i] != ' ' {
 				i++
@@ -136,20 +137,74 @@ func wrapUsageText(text string, width int) string {
 			}
 			if j-i >= 2 {
 				descCol = j
-				descStart = j
 				break
 			}
 			i = j
 		}
+		return
+	}
+
+	// Pass 1: normalize.
+	raw := strings.Split(text, "\n")
+	joined := make([]string, 0, len(raw))
+	pending := ""
+	pendingDescCol := 0 // active descCol for Case A
+	runIndent := 0      // active indent for Case B
+
+	flushPending := func() {
+		if pending != "" {
+			joined = append(joined, pending)
+			pending = ""
+		}
+		pendingDescCol = 0
+		runIndent = 0
+	}
+
+	for _, line := range raw {
+		if line == "" {
+			flushPending()
+			joined = append(joined, "")
+			continue
+		}
+		indent, dc := findDescCol(line)
+
+		// Case A: continuation at the active description column.
+		if pendingDescCol > 0 && indent == pendingDescCol && dc == indent {
+			pending += " " + strings.TrimLeft(line, " ")
+			continue
+		}
+		// Case B: continuation within a deep same-indent run.
+		if runIndent > 0 && indent == runIndent && dc == indent {
+			pending += " " + strings.TrimLeft(line, " ")
+			continue
+		}
+
+		flushPending()
+		pending = line
+		switch {
+		case dc > indent:
+			pendingDescCol = dc
+		case indent >= 10 && dc == indent:
+			runIndent = indent
+		}
+	}
+	flushPending()
+
+	// Pass 2: word-wrap each logical line.
+	out := make([]string, 0, len(joined))
+	for _, line := range joined {
+		if len([]rune(line)) <= width {
+			out = append(out, line)
+			continue
+		}
+		_, descCol := findDescCol(line)
+		descStart := descCol
 		contentBudget := width - descCol
-		if contentBudget <= 4 { // description indent so deep that wrapping can't help
+		if contentBudget <= 4 {
 			out = append(out, line)
 			continue
 		}
 		contPrefix := strings.Repeat(" ", descCol)
-		// Everything left of descStart is the verb signature + alignment
-		// gap (or just the leading indent for pure continuation lines).
-		// Preserved verbatim so column alignment stays intact.
 		firstPrefix := line[:descStart]
 		words := strings.Fields(line[descStart:])
 		if len(words) == 0 {
