@@ -548,6 +548,9 @@ func (d *Daemon) handleConnect(ctx context.Context, conn net.Conn, params json.R
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
+	// Same invariant as handleSwitch/handleCreate: adopting the handle as
+	// the session's current subscribes its inbox. Idempotent.
+	_ = d.Subs.Add(req.Session, req.Handle+".inbox")
 	writeIPC(conn, cliproto.ConnectReply{Handle: req.Handle})
 }
 
@@ -749,6 +752,11 @@ func (d *Daemon) handleSwitch(ctx context.Context, conn net.Conn, params json.Ra
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
 	}
+	// Adopting H as this session's current means the session now operates
+	// as H — surface H's inbox in its subs so a plain `ppz subs ls/wait`
+	// works after `ppz set handle` (mirrors source create; see
+	// handleCreate). Idempotent.
+	_ = d.Subs.Add(req.Session, req.Handle+".inbox")
 	writeIPC(conn, cliproto.SwitchReply{Handle: req.Handle})
 }
 

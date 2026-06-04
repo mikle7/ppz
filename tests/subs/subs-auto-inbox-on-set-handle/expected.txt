@@ -1,0 +1,2 @@
+james.inbox
+exit=0
