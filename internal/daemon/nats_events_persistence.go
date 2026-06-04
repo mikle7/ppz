@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -202,6 +203,30 @@ func readNATSEventLogFile(path string) []NATSEvent {
 	return out
 }
 
+// countLogLines counts the non-empty lines in a jsonl file without
+// unmarshaling them — used for the "X older events on disk" hint, which
+// only needs an approximate count and runs on every `ppz diagnostics`.
+// A malformed tail line from a writer crash is counted; the hint is an
+// estimate, not an exact parseable-event count. Returns 0 on open
+// failure.
+func countLogLines(path string) int {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	n := 0
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		if len(scanner.Bytes()) > 0 {
+			n++
+		}
+	}
+	_ = scanner.Err()
+	return n
+}
+
 // natsEventLogPaths returns every existing log file under $PPZ_HOME,
 // active first, then rotated generations from newest (.1) to oldest.
 // Used by the bundle command to include all generations in the
@@ -224,17 +249,38 @@ func natsEventLogPaths(home string) []string {
 	return out
 }
 
-// loadNATSEventLogTail is the daemon's startup hook: reseeds the
-// in-memory ring with up to natsEventLogTailEntries events from the
-// active file. Called from Daemon.Run after the lifecycle log is
-// loaded, so the ring contains both prior-process lifecycle events
-// and prior-process connection events in their original chronological
-// order.
-func (d *Daemon) loadNATSEventLogTail() {
+// reseedRingFromDisk is the daemon's startup hook: it primes the
+// in-memory ring from the two on-disk logs so a fresh process's
+// `ppz diagnostics` shows context from before the restart.
+//
+// Lifecycle events (daemon_start / daemon_stop) are persisted to BOTH
+// the lifecycle log and nats-events.jsonl — the former is a small
+// bounded log a fresh daemon can always reseed from, the latter unifies
+// the --since history. Loading both naively double-counts every
+// lifecycle event, so we merge the two sources, dedup by identity, and
+// replay in chronological order.
+//
+// The lifecycle log is still read separately rather than trusting
+// nats-events.jsonl alone, so the first daemon after an upgrade from a
+// pre-Phase-0 binary — which wrote lifecycle events ONLY to the
+// lifecycle log — still surfaces the prior daemon's stop event.
+func (d *Daemon) reseedRingFromDisk() {
 	if d.NATSEvents == nil || d.Home == "" {
 		return
 	}
-	for _, ev := range tailNATSEventLog(d.Home, natsEventLogTailEntries) {
+	merged := append(loadLifecycleLog(d.Home), tailNATSEventLog(d.Home, natsEventLogTailEntries)...)
+	sort.SliceStable(merged, func(i, j int) bool { return merged[i].At.Before(merged[j].At) })
+	seen := make(map[string]struct{}, len(merged))
+	for _, ev := range merged {
+		// A lifecycle event's two on-disk copies are marshaled from the
+		// same in-memory value, so (Type, At, Reason) is a stable
+		// identity for dedup. Normalize to UTC so the key is independent
+		// of the location pointer JSON unmarshal attaches.
+		key := ev.Type + "\x00" + ev.At.UTC().Format(time.RFC3339Nano) + "\x00" + ev.Reason
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
 		d.NATSEvents.Append(ev)
 	}
 }
