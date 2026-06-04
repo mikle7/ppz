@@ -8,6 +8,7 @@ import (
 )
 
 func TestUsageMentionsInboxAliases(t *testing.T) {
+	t.Setenv("COLUMNS", "10000") // wide enough that no phrase is broken across lines
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
