@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bufio"
 	"errors"
 	"net"
 	"os"
@@ -106,5 +107,68 @@ func TestCall_DoesNotHangWhenDaemonAcceptsButNeverReplies(t *testing.T) {
 		}
 	case <-time.After(ceiling):
 		t.Fatalf("ppz send hung: daemon.Call did not return within %s when the daemon accepted but never replied (no read deadline on the IPC connection)", ceiling)
+	}
+}
+
+// TestCallWait_BlocksPastTimeout pins the Call→CallWait wiring contract:
+// the blocking-wait verbs (IPCListWatch, IPCSubsWait) must use CallWait,
+// which sets NO read deadline, so a daemon that legitimately holds the
+// connection open until a NATS event arrives (well past ipcCallTimeout)
+// is waited on rather than aborted with E_DAEMON_TIMEOUT.
+//
+// The fake daemon accepts, then replies only after replyDelay — longer
+// than the (tiny) ipcCallTimeout pinned here. Call() would time out;
+// CallWait() must instead receive the reply. A regression that pointed
+// ls --watch / subs wait back at Call (or that made CallWait honor the
+// deadline) fails here.
+func TestCallWait_BlocksPastTimeout(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "ppz-ipc-wait-")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "daemon.sock")
+
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen fake daemon: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	const replyDelay = 200 * time.Millisecond
+	go func() {
+		conn, aErr := ln.Accept()
+		if aErr != nil {
+			return
+		}
+		defer conn.Close()
+		// Drain the request line, then stall past the deadline before
+		// sending a valid empty reply.
+		_, _ = bufio.NewReader(conn).ReadBytes('\n')
+		time.Sleep(replyDelay)
+		_, _ = conn.Write([]byte(`{"result":{}}` + "\n"))
+	}()
+
+	// Deadline far below the daemon's reply delay: a deadline-bound Call
+	// would fire E_DAEMON_TIMEOUT well before the reply lands.
+	prev := ipcCallTimeout
+	ipcCallTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { ipcCallTimeout = prev })
+	const ceiling = 5 * time.Second
+
+	done := make(chan error, 1)
+	go func() {
+		var reply cliproto.ListReply
+		done <- CallWait(sock, cliproto.IPCSubsWait,
+			cliproto.SubsWaitRequest{Session: "sid-1"}, &reply)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("CallWait returned %v; it must block past ipcCallTimeout (%s) and receive the delayed reply, not time out", err, ipcCallTimeout)
+		}
+	case <-time.After(ceiling):
+		t.Fatalf("CallWait did not return within %s even though the daemon replied after %s", ceiling, replyDelay)
 	}
 }
