@@ -43,6 +43,43 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "releasing $TAG"
 
+      # Tell goreleaser to compute the changelog against the previous
+      # *released* tag, not the previous git tag. auto-tag.yml mints a
+      # tag on every merge but we only publish some of them — without
+      # this, commits under skipped tags fall off the changelog (e.g.
+      # v0.40.2 only showed #102 because v0.40.0/v0.40.1 were tagged
+      # but never released, so goreleaser's default `git describe`
+      # picked v0.40.1 as "previous" and dropped #100 and #101).
+      #
+      # We intersect (ancestors-of-TAG) with (released tags) and pick
+      # the highest semver. Using --merged keeps us robust against
+      # backfilled releases on side branches; using sort -V keeps us
+      # robust against releases that were published out of order.
+      # If no prior release exists, leave the env var empty —
+      # goreleaser falls back to its default in that case.
+      - name: Resolve previous released tag
+        id: prev
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git tag --merged "$TAG" --list 'v*' \
+            | grep -vxF "$TAG" \
+            | sort -u > /tmp/ancestor-tags
+          gh release list --limit 200 --exclude-drafts \
+            --json tagName --jq '.[].tagName' \
+            | sort -u > /tmp/released-tags
+          PREV=$(comm -12 /tmp/ancestor-tags /tmp/released-tags \
+            | sort -V -r \
+            | head -n 1 || true)
+          if [ -n "$PREV" ]; then
+            echo "changelog will span ${PREV}..${TAG}"
+          else
+            echo "no prior released tag found; using goreleaser default"
+          fi
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+
       - name: Check out tag
         run: git checkout "${{ steps.ref.outputs.tag }}"
 
@@ -58,6 +95,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Empty string = unset for goreleaser; it falls back to its
+          # default `git describe`-based previous-tag detection.
+          GORELEASER_PREVIOUS_TAG: ${{ steps.prev.outputs.prev }}
 
       - name: Publish update manifest
         env:
