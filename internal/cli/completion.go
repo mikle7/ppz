@@ -70,9 +70,15 @@ func cmdCompletion(args []string) error {
 // shell to display when the user hits tab on `ppz <tab>` — keep
 // alphabetical so it scans easily; "completion" / "__complete" are
 // intentionally omitted (operator-internal, not for everyday use).
+//
+// Add every new top-level verb here. TestComplete_TopLevel_IncludesNewVerbs
+// guards against regressions — adding a `case "foo":` in root.go without
+// touching this list fails CI.
 var topLevelVerbs = []string{
+	"agent",
 	"command",
 	"daemon",
+	"diagnostics",
 	"get",
 	"login",
 	"ls",
@@ -83,16 +89,26 @@ var topLevelVerbs = []string{
 	"set",
 	"source",
 	"status",
+	"subs",
 	"terminal",
 	"unset",
 	"upgrade",
 	"version",
+	"who",
 }
 
+// subverbs maps a grouped top-level verb to its second-positional
+// completions. A verb absent from this map either takes no subverb
+// (e.g. status, ls, version) or takes only flags (e.g. diagnostics,
+// who) — in both cases the dispatcher falls through to the
+// target/handle logic or quietly emits nothing, which is the desired
+// behaviour for flag-only verbs.
 var subverbs = map[string][]string{
-	"daemon":   {"start", "stop", "login", "logout"},
+	"agent":    {"create"},
+	"daemon":   {"start", "stop", "restart", "login", "logout"},
 	"pipe":     {"create", "destroy"},
 	"source":   {"create", "destroy"},
+	"subs":     {"ls", "add", "rm", "wait", "read"},
 	"terminal": {"create", "share", "watch", "read"},
 	"set":      {"handle", "namespace"},
 	"unset":    {"handle", "namespace"},
@@ -115,6 +131,32 @@ var terminalHandleSubverbs = map[string]bool{
 	"share": true,
 	"watch": true,
 	"read":  true,
+}
+
+// pipeSubverbsTakingTargets: subverbs of `ppz pipe` whose first
+// positional is an existing <handle>.<pipe> — currently just destroy.
+// `create` is excluded (it names a NEW pipe, no existing target to
+// complete against).
+var pipeSubverbsTakingTargets = map[string]bool{
+	"destroy": true,
+}
+
+// sourceSubverbsTakingPatterns: subverbs of `ppz source` whose first
+// positional is a glob pattern over both handles AND <handle>.<pipe>
+// (see usage doc — bare matches sources, dotted matches pipes). The
+// completion offers both vocabularies so the user can pick a real name
+// before adding glob chars.
+var sourceSubverbsTakingPatterns = map[string]bool{
+	"destroy": true,
+}
+
+// subsSubverbsTakingTargets: subverbs of `ppz subs` that accept a
+// repeating <target> argument list. `add`/`rm` per the user-confirmed
+// design (#1 — same vocabulary as send/read). `wait`/`read`/`ls` take
+// no positionals.
+var subsSubverbsTakingTargets = map[string]bool{
+	"add": true,
+	"rm":  true,
 }
 
 // cmdComplete is the hidden completion engine. The shell script invokes
@@ -172,6 +214,28 @@ func cmdComplete(args []string) error {
 		return nil
 	}
 
+	// `pipe destroy <target>` — single target slot.
+	if verb == "pipe" && len(prior) == 2 && pipeSubverbsTakingTargets[prior[1]] {
+		emitTargets(cur)
+		return nil
+	}
+
+	// `source destroy <pattern>` — patterns over handles AND
+	// handle.pipe (usage doc, locked decision #21). Emit both
+	// vocabularies — user can extend with glob chars after picking.
+	if verb == "source" && len(prior) == 2 && sourceSubverbsTakingPatterns[prior[1]] {
+		emitHandlesAndTargets(cur)
+		return nil
+	}
+
+	// `subs {add|rm} <target>...` — variadic. Every positional after
+	// the subverb is a target slot (the daemon dedupes, so suggesting
+	// already-typed targets again is harmless and matches send/read).
+	if verb == "subs" && len(prior) >= 2 && subsSubverbsTakingTargets[prior[1]] {
+		emitTargets(cur)
+		return nil
+	}
+
 	// Anything else — no completion. Quietly succeed.
 	return nil
 }
@@ -185,16 +249,63 @@ func emitMatching(candidates []string, cur string) {
 	}
 }
 
-// listSourcesForCompletion talks to the daemon. Errors are swallowed —
-// completion must never fail loudly, and "daemon's down so suggest
-// nothing" is the right fallback.
-func listSourcesForCompletion() []cliproto.Source {
-	var reply cliproto.ListReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCList,
-		cliproto.ListRequest{Session: sessionID()}, &reply); err != nil {
-		return nil
+// listSourcesForCompletion is a package-level seam — tests overwrite
+// it with a canned snapshot. Production points it at the daemon (see
+// listSourcesForCompletionLive). Errors are swallowed: completion
+// must never fail loudly, and "daemon's down so suggest nothing" is
+// the right fallback.
+var listSourcesForCompletion = listSourcesForCompletionLive
+
+// listSourcesForCompletionLive prefers IPCComplete (the lean cache-
+// served verb) over IPCList for the tab hot path. IPCList does two
+// HTTP RTTs and N JetStream calls per pipe just to learn names — too
+// slow to run on every keystroke. IPCComplete answers from the
+// daemon's in-memory cache.
+//
+// We fall back to IPCList on E_PROTOCOL "unknown method" so a newer
+// CLI talking to a not-yet-restarted older daemon still completes
+// (slowly) instead of going silent.
+func listSourcesForCompletionLive() []cliproto.Source {
+	var cr cliproto.CompleteReply
+	err := daemon.Call(ipcSocket(), cliproto.IPCComplete,
+		cliproto.CompleteRequest{Session: sessionID()}, &cr)
+	if err == nil {
+		return completeReplyToSources(cr)
 	}
-	return reply.Sources
+	// Pre-IPCComplete daemons return E_PROTOCOL "unknown method".
+	// Fall back to the heavy verb so completion still works during
+	// rolling restarts. Any other error (daemon down, timeout) gives
+	// up silently.
+	if e, ok := err.(*cliproto.Error); ok && e.Code == "E_PROTOCOL" {
+		var lr cliproto.ListReply
+		if err := daemon.Call(ipcSocket(), cliproto.IPCList,
+			cliproto.ListRequest{Session: sessionID()}, &lr); err != nil {
+			return nil
+		}
+		return lr.Sources
+	}
+	return nil
+}
+
+// completeReplyToSources reshapes the lean CompleteReply into the
+// []cliproto.Source the emit* helpers already consume. The reverse
+// adapter keeps callers identical regardless of which daemon verb
+// answered.
+//
+// cr.Stale is intentionally discarded — from the shell's point of
+// view "daemon hasn't populated its cache yet" and "daemon has no
+// sources" both render the same: zero suggestions. Surfacing
+// staleness to the user mid-keystroke would be noise.
+func completeReplyToSources(cr cliproto.CompleteReply) []cliproto.Source {
+	out := make([]cliproto.Source, 0, len(cr.Sources))
+	for _, s := range cr.Sources {
+		src := cliproto.Source{Handle: s.Handle}
+		for _, p := range s.Pipes {
+			src.PipeInfos = append(src.PipeInfos, cliproto.PipeInfo{Pipe: p})
+		}
+		out = append(out, src)
+	}
+	return out
 }
 
 // emitHandles prints handles from the daemon's known sources.
@@ -215,6 +326,28 @@ func emitHandles(cur string) {
 // daemon knows about.
 func emitTargets(cur string) {
 	for _, s := range listSourcesForCompletion() {
+		for _, p := range s.PipeInfos {
+			t := s.Handle + "." + p.Pipe
+			if strings.HasPrefix(t, cur) {
+				fmt.Println(t)
+			}
+		}
+	}
+}
+
+// emitHandlesAndTargets prints both bare handles AND <handle>.<pipe>
+// — used for `source destroy <pattern>` where both forms are valid
+// (bare → match sources, dotted → match pipes). Deduped on handle so
+// each handle appears once; pipes are listed in their daemon order.
+func emitHandlesAndTargets(cur string) {
+	seen := map[string]bool{}
+	for _, s := range listSourcesForCompletion() {
+		if !seen[s.Handle] {
+			seen[s.Handle] = true
+			if strings.HasPrefix(s.Handle, cur) {
+				fmt.Println(s.Handle)
+			}
+		}
 		for _, p := range s.PipeInfos {
 			t := s.Handle + "." + p.Pipe
 			if strings.HasPrefix(t, cur) {

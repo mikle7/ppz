@@ -73,6 +73,16 @@ type Daemon struct {
 	// dial builds a fresh NATS connection; injectable so tests can
 	// substitute a stub. Defaults to connectNATSWithRefresh.
 	dial func(url string, r *RefreshLoop, store func(NATSEvent)) (*nats.Conn, error)
+
+	// completionWarmMu serialises cold-cache warming inside
+	// handleComplete. Without it, N concurrent tab presses on a fresh
+	// daemon all read CompletionSnapshot()=false and race to fire
+	// GET /api/v1/sources. The lock is only contended on the very
+	// first call(s); steady-state tabs see a warm cache and skip the
+	// lock entirely. A sync.Mutex (over sync.Once) is deliberate: if
+	// the first probe fails (server unreachable), the next caller
+	// retries, where Once.Do would lock the cache cold forever.
+	completionWarmMu sync.Mutex
 }
 
 func New(home, sock string) *Daemon {

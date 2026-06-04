@@ -62,6 +62,14 @@ type State struct {
 	// manifold-aware subject + stream name for the resolved handle.
 	handleManifold   map[string]string
 	pipesLoaded      bool
+	// Completion cache backing IPCComplete. Populated by
+	// refreshSourceCache after every real list/ls; read on the
+	// shell-tab hot path. completionLoaded distinguishes "no
+	// sources" (empty slice, loaded=true) from "cold daemon"
+	// (loaded=false) so the client surfaces stale-empty differently
+	// from genuine-empty.
+	completionSources []cliproto.CompleteSource
+	completionLoaded  bool
 	// loginCheck caches the daemon's last server-touching call result.
 	// Empty means "no observation yet" (fresh daemon). LoginCheckOK on
 	// successful 2xx; LoginCheckInvalid on 401 / E_INVALID_API_KEY.
@@ -291,6 +299,48 @@ func (s *State) ResetSources(handles []string, manifolds map[string]string) {
 		s.handleManifold[h] = m
 	}
 	s.pipesLoaded = true
+}
+
+// SetCompletionSnapshot replaces the in-memory completion cache. Called
+// from refreshSourceCache after every server-touching list — the
+// completion verb (handleComplete) reads from it on the hot tab path so
+// it never has to hit the network. Sources are stored verbatim; pipe
+// lists are expected to already be merged (server-known + auto-pipes).
+func (s *State) SetCompletionSnapshot(sources []cliproto.CompleteSource) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Defensive copy — the caller may mutate the slice afterwards.
+	cp := make([]cliproto.CompleteSource, len(sources))
+	for i, src := range sources {
+		cp[i] = cliproto.CompleteSource{Handle: src.Handle}
+		if len(src.Pipes) > 0 {
+			cp[i].Pipes = append([]string(nil), src.Pipes...)
+		}
+	}
+	s.completionSources = cp
+	s.completionLoaded = true
+}
+
+// CompletionSnapshot returns the cached source/pipe vocabulary used by
+// IPCComplete. The boolean is false when the snapshot has never been
+// populated (cold daemon) — the handler returns Stale=true so the CLI
+// can render the "no suggestions yet" empty state instead of treating
+// it as a real "no sources".
+func (s *State) CompletionSnapshot() ([]cliproto.CompleteSource, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.completionLoaded {
+		return nil, false
+	}
+	// Return a defensive copy so callers can't mutate the cache.
+	cp := make([]cliproto.CompleteSource, len(s.completionSources))
+	for i, src := range s.completionSources {
+		cp[i] = cliproto.CompleteSource{Handle: src.Handle}
+		if len(src.Pipes) > 0 {
+			cp[i].Pipes = append([]string(nil), src.Pipes...)
+		}
+	}
+	return cp, true
 }
 
 // HandleManifold returns the cached manifold for a known source handle,

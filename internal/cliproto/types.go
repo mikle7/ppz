@@ -51,6 +51,16 @@ const (
 	IPCSubsAdd    = "SubsAdd"
 	IPCSubsRemove = "SubsRemove"
 	IPCSubsWait   = "SubsWait"
+
+	// Complete is the lean read-only verb behind `ppz __complete`. It
+	// returns the same handle / pipe-name vocabulary IPCList would, but
+	// served from an in-memory cache populated by previous real list
+	// calls — no NATS, no JetStream, and at most one cheap HTTP probe
+	// on a cold daemon. The point is that every shell tab press hit
+	// IPCList (handlers.go:1131) and paid two HTTP round-trips + N
+	// JetStream calls per pipe just to read names. IPCComplete strips
+	// that to "what names exist".
+	IPCComplete = "Complete"
 )
 
 // Source kinds, mirrored from internal/db so non-db callers can use them.
@@ -532,6 +542,34 @@ type CreateSourceReply struct {
 
 type ListSourcesReply struct {
 	Sources []Source `json:"sources"`
+}
+
+// CompleteRequest is the body for IPCComplete. Session is included for
+// parity with ListRequest — the completion cache is account-wide, but
+// the request shape is symmetric so future per-session filtering (e.g.
+// "only show pipes I'm subscribed to") drops in without a wire break.
+type CompleteRequest struct {
+	Session string `json:"session,omitempty"`
+}
+
+// CompleteSource is a CompleteReply row — just enough for the CLI's
+// emit* helpers to produce <handle> and <handle>.<pipe> candidates.
+// Pipes includes both server-known user pipes AND the auto-provisioned
+// set (derived from Kind), pre-merged so the CLI doesn't replicate
+// pipesForKind.
+type CompleteSource struct {
+	Handle string   `json:"handle"`
+	Pipes  []string `json:"pipes,omitempty"`
+}
+
+// CompleteReply is the IPCComplete result. Stale=true means the daemon
+// has never populated its completion cache (cold daemon, no list /
+// status call has happened yet) and is returning whatever it has —
+// possibly an empty list. Clients render the empty case as "no
+// suggestions", same as a network error.
+type CompleteReply struct {
+	Sources []CompleteSource `json:"sources"`
+	Stale   bool             `json:"stale,omitempty"`
 }
 
 // PipeCreateRequest is the input to `ppz pipe create <name>` — and the body
