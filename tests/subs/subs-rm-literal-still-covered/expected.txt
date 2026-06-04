@@ -1,0 +1,7 @@
+--- rm the literal while pattern still covers it ---
+removed: test-1 (still matched by pattern 'test-%' — remove the pattern to stop watching it)
+rc=0
+--- test-1 still present, now via the pattern ---
+test-% - - - - -
+└─ test-1 0 0 - - foo
+exit=0

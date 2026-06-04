@@ -132,6 +132,11 @@ func cmdSubsRm(args []string) error {
 	// are unchanged; this just narrates the result.
 	for _, o := range reply.Outcomes {
 		switch {
+		case o.Removed && o.CoveredByPattern != "":
+			// The literal sub was removed, but the pipe re-expands under a
+			// surviving pattern — say so, or this re-creates the very "I
+			// removed it and it came back" confusion the feature kills.
+			fmt.Printf("removed: %s (still matched by pattern '%s' — remove the pattern to stop watching it)\n", o.Target, o.CoveredByPattern)
 		case o.Removed:
 			fmt.Printf("removed: %s\n", o.Target)
 		case o.CoveredByPattern != "":

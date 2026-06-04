@@ -671,7 +671,8 @@ func writeSubsTable(w io.Writer, rows []subsRow) {
 	}
 	headers := []string{"NAMESPACE", "PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "CREATOR"}
 	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3]), len(headers[4]), len(headers[5])}
-	creatorMax := len(headers[6])
+	// CREATOR is the trailing column, printed with a bare %s, so it needs no
+	// width tracking (nothing follows it to align against).
 	grow := func(i, l int) {
 		if l > widths[i] {
 			widths[i] = l
@@ -687,9 +688,6 @@ func writeSubsTable(w io.Writer, rows []subsRow) {
 		grow(3, len(r.buffered))
 		grow(4, len(r.last))
 		grow(5, len(r.payload))
-		if l := len(r.creator); l > creatorMax {
-			creatorMax = l
-		}
 	}
 	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
 		widths[0], headers[0], widths[1], headers[1], widths[2], headers[2],

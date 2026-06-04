@@ -57,22 +57,29 @@ func (d *Daemon) handleSubsRemove(_ context.Context, conn net.Conn, params json.
 			}
 		}
 	}
-	// Snapshot the stored set BEFORE removal so we can report, per target,
-	// whether it was actually a stored subject (Removed) or merely an
-	// expanded match of a stored pattern (CoveredByPattern). Removal itself
-	// is unchanged: exact-string-match, idempotent.
+	// Snapshot the stored set BEFORE removal so we know which targets were
+	// actually stored subjects (Removed). Removal itself is unchanged:
+	// exact-string-match, idempotent.
 	before := d.Subs.List(req.Session)
 	inStore := make(map[string]bool, len(before))
-	var patterns []string
 	for _, s := range before {
 		inStore[s] = true
-		if cliproto.IsGlobPattern(s) {
-			patterns = append(patterns, s)
-		}
 	}
 	if err := d.Subs.Remove(req.Session, req.Targets...); err != nil {
 		writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return
+	}
+	// Coverage is judged against the patterns STILL present after removal, so
+	// (a) a removed literal that re-expands under a surviving pattern gets a
+	// "still matched by" hint rather than a falsely reassuring bare "removed",
+	// and (b) a pattern removed in this same call no longer claims to cover
+	// anything.
+	after := d.Subs.List(req.Session)
+	var remainingPatterns []string
+	for _, s := range after {
+		if cliproto.IsGlobPattern(s) {
+			remainingPatterns = append(remainingPatterns, s)
+		}
 	}
 	var outcomes []cliproto.SubsRemoveOutcome
 	for _, raw := range req.Targets {
@@ -80,20 +87,20 @@ func (d *Daemon) handleSubsRemove(_ context.Context, conn net.Conn, params json.
 		if t == "" {
 			continue
 		}
-		switch {
-		case inStore[t]:
-			outcomes = append(outcomes, cliproto.SubsRemoveOutcome{Target: t, Removed: true})
-		default:
-			outcomes = append(outcomes, cliproto.SubsRemoveOutcome{Target: t, CoveredByPattern: firstCoveringPattern(t, patterns)})
-		}
+		outcomes = append(outcomes, cliproto.SubsRemoveOutcome{
+			Target:           t,
+			Removed:          inStore[t],
+			CoveredByPattern: firstCoveringPattern(t, remainingPatterns),
+		})
 	}
-	writeIPC(conn, cliproto.SubsRemoveReply{Subs: d.Subs.List(req.Session), Outcomes: outcomes})
+	writeIPC(conn, cliproto.SubsRemoveReply{Subs: after, Outcomes: outcomes})
 }
 
-// firstCoveringPattern returns the first stored pattern (in the order given,
-// which is sorted) that matches target via the same %→* / filepath.Match
-// semantics as matchAnyTarget. Empty string if none — used to explain that a
-// removed-nothing target is actually surfaced by a pattern, not its own sub.
+// firstCoveringPattern returns the first pattern (in the order given, which
+// is sorted) that matches target via the same %→* / filepath.Match semantics
+// as matchAnyTarget. Empty string if none — used by `subs rm` feedback to
+// explain that a target is (still) surfaced by a pattern: either it was never
+// its own sub, or its literal sub was removed but the pattern re-expands it.
 func firstCoveringPattern(target string, patterns []string) string {
 	for _, p := range patterns {
 		g := strings.ReplaceAll(p, "%", "*")
