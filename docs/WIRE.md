@@ -274,7 +274,7 @@ daemon: logged in (pid=PID), <daemon_version> (<state>)
 last token refresh: <relative time|->
 server: <URL>
 org: <org_name_or_id>
-nats: <connected|disconnected|connecting|unknown>
+nats: <connected|disconnected|connecting|unknown> [(N <unit> ago)]
 current source: <handle>
 ```
 `<state>` is one of three values (since v0.31.9):
@@ -297,6 +297,16 @@ NATS server. The state vocabulary is fixed (`connected` /
 terse — per-event detail (drop counts, timestamps, error reasons)
 lives in `ppz diagnostics` instead, so a noisy connection history doesn't
 churn `ppz status` output.
+
+A `(N <unit> ago)` suffix may follow the state token when the daemon
+can anchor the current state to a transition event in its in-memory
+ring. Absence of the suffix means the ring has no matching event
+(fresh daemon, or the transition aged out) — the prefix `nats: <state>`
+is the only part of the line consumers should depend on. The state
+token colours encode stability (since v0.37.4): a clean first-connect
+or a reconnect that has held for ≥1 minute is green; a reconnect under
+1 minute old is amber (signalling a recent flap that may recur);
+disconnected / unknown stay red.
 
 ### `ppz login URL -apikey K`
 ```

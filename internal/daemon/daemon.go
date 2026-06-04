@@ -110,24 +110,11 @@ func (d *Daemon) rebuildNC(caller string) error {
 	if d.NC != nil && d.NC.IsConnected() && d.ncExp == d.Refresh.JWTExp() {
 		return nil // already connected on the current generation — coalesce
 	}
-	wasDisconnected := d.NC != nil && !d.NC.IsConnected()
 	nc, err := d.dial(d.NATSURL, d.Refresh, d.recordNATSEvent)
 	if err != nil || nc == nil {
 		return cliproto.New(cliproto.ENATSUnreachable)
 	}
-	d.swapNCLocked(caller, nc) // stamps d.ncExp to the current generation
-	// Preserve the recovery signal `ppz diagnostics` surfaces: rebuilding
-	// over a previously non-functional NC reads as a "reconnect".
-	if wasDisconnected {
-		d.recordNATSEvent(NATSEvent{
-			Type:   "reconnect",
-			At:     time.Now(),
-			Caller: caller,
-			NCID:   ncID(nc),
-			JWTExp: d.Refresh.JWTExp(),
-			Reason: "rebuilt connection",
-		})
-	}
+	d.swapNCLocked(caller, nc) // stamps d.ncExp and emits any transition event
 	if aid, perr := uuid.Parse(d.State.AccountID()); perr == nil {
 		d.subscribeOrgHeartbeats(aid)
 	}
@@ -164,9 +151,30 @@ func (d *Daemon) swapNC(caller string, newNC *nats.Conn) {
 
 // swapNCLocked performs the actual close-old / install-new / evict-follows
 // swap. The caller MUST hold d.ncMu.
+//
+// Emits up to two events: a "swap" capturing the pointer transition for
+// burst-swap-storm detection, plus — when the swap actually represents a
+// connectivity transition — a "connect" or "reconnect" anchoring the
+// `ppz status` / `ppz diagnostics` state-since reading. The transition
+// classification:
+//
+//   - old==nil, new!=nil → "connect"   (initial / post-logout login)
+//   - old disconnected, new!=nil → "reconnect" (recovery)
+//   - old healthy, new!=nil → no anchor event (routine JWT-refresh swap)
+//   - new==nil → no anchor event (logout / teardown)
+//
+// nats.go never fires a ConnectHandler in our setup, so the daemon is
+// the sole emitter of "connect" — centralising it here means every
+// caller (handleLogin, rebuildNC, watcher) gets it for free without
+// having to remember the classification.
 func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
-	oldID := ncID(d.NC)
+	oldNC := d.NC
+	oldID := ncID(oldNC)
 	newID := ncID(newNC)
+	// Capture connectivity BEFORE Close() — IsConnected() flips to false
+	// once we close the old conn, so we'd misclassify a routine JWT-
+	// refresh swap (healthy → healthy) as a "reconnect" without this.
+	oldWasConnected := oldNC != nil && oldNC.IsConnected()
 	if d.NATSEvents != nil {
 		d.recordNATSEvent(NATSEvent{
 			Type:   "swap",
@@ -180,8 +188,8 @@ func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 	if d.Follows != nil {
 		d.Follows.closeAll()
 	}
-	if d.NC != nil && d.NC != newNC {
-		d.NC.Close()
+	if oldNC != nil && oldNC != newNC {
+		oldNC.Close()
 	}
 	d.NC = newNC
 	// Stamp the JWT generation this connection was dialed against so the
@@ -194,6 +202,28 @@ func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 		d.ncExp = d.Refresh.JWTExp()
 	} else {
 		d.ncExp = 0
+	}
+	if d.NATSEvents != nil && newNC != nil {
+		switch {
+		case oldNC == nil:
+			d.recordNATSEvent(NATSEvent{
+				Type:   "connect",
+				At:     time.Now(),
+				Caller: caller,
+				NCID:   newID,
+				JWTExp: d.Refresh.JWTExp(),
+				Reason: "initial connection",
+			})
+		case !oldWasConnected:
+			d.recordNATSEvent(NATSEvent{
+				Type:   "reconnect",
+				At:     time.Now(),
+				Caller: caller,
+				NCID:   newID,
+				JWTExp: d.Refresh.JWTExp(),
+				Reason: "rebuilt connection",
+			})
+		}
 	}
 }
 

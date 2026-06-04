@@ -130,6 +130,18 @@ func (d *Daemon) ipcStatus(ctx context.Context, conn net.Conn, params json.RawMe
 		DaemonVersion: version.Version,
 	}
 	reply.NATSState = natsStateString(d.NC)
+	// State-since + entry-type from the most recent matching transition
+	// in the in-memory event ring. Powers the "(N <unit> ago)" suffix on
+	// the `ppz status` `nats:` line and the green/amber/red colouring —
+	// see cliproto.formatNATSLine. Nil when the ring has no matching
+	// event (fresh daemon, or the transition aged out).
+	if d.NATSEvents != nil {
+		since, entry := stateSinceFrom(reply.NATSState, d.NATSEvents.Snapshot())
+		if !since.IsZero() {
+			reply.NATSStateSince = &since
+			reply.NATSStateEntry = entry
+		}
+	}
 	if creds, ok := d.State.Credentials(); ok {
 		reply.LoggedIn = true
 		reply.URL = creds.URL
