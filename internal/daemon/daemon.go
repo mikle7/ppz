@@ -9,10 +9,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
 // Daemon is the singleton process per $PPZ_HOME.
@@ -56,6 +60,19 @@ type Daemon struct {
 	// consumers go silent and the CLI needs to redial against the
 	// new NC. See follow_registry.go.
 	Follows *followRegistry
+
+	// ncMu serializes every NC rebuild/swap so the refresh goroutine
+	// (OnRefreshed) and any number of concurrent ensureNATS callers
+	// coalesce into a single reconnect per JWT rotation instead of
+	// racing — the burst-swap-storm fix (see rebuildNC).
+	ncMu sync.Mutex
+	// ncExp is the JWT exp d.NC was dialed against. A mismatch with the
+	// live Refresh.JWTExp() means creds rotated and NC must be rebuilt;
+	// matching means a concurrent caller already did it (coalesce).
+	ncExp int64
+	// dial builds a fresh NATS connection; injectable so tests can
+	// substitute a stub. Defaults to connectNATSWithRefresh.
+	dial func(url string, r *RefreshLoop, store func(NATSEvent)) (*nats.Conn, error)
 }
 
 func New(home, sock string) *Daemon {
@@ -69,7 +86,53 @@ func New(home, sock string) *Daemon {
 		NATSEvents: newNATSEventRing(natsEventRingCap),
 		Heartbeats: NewHeartbeatCache(),
 		Follows:    newFollowRegistry(),
+		dial:       connectNATSWithRefresh,
 	}
+}
+
+// rebuildNC ensures d.NC is connected with the current JWT generation:
+// if the connection is missing, disconnected, or was dialed against an
+// older JWT exp than the live Refresh, it dials a fresh connection and
+// swaps it in. Both the on-demand path (ensureNATS) and the proactive
+// refresh path (OnRefreshed) route through here so a JWT rotation triggers
+// exactly ONE reconnect — not N racing ones (the burst-swap-storm).
+//
+// Serialized via ncMu with a double-check: the first caller to find the NC
+// stale dials + swaps; everyone else blocks, then re-checks and finds the
+// connection current and no-ops. That collapses the rotation thundering
+// herd into a single reconnect.
+func (d *Daemon) rebuildNC(caller string) error {
+	d.ncMu.Lock()
+	defer d.ncMu.Unlock()
+	if d.NATSURL == "" {
+		return nil // nothing to dial yet (pre-login / pre-bootstrap)
+	}
+	if d.NC != nil && d.NC.IsConnected() && d.ncExp == d.Refresh.JWTExp() {
+		return nil // already connected on the current generation — coalesce
+	}
+	wasDisconnected := d.NC != nil && !d.NC.IsConnected()
+	nc, err := d.dial(d.NATSURL, d.Refresh, d.recordNATSEvent)
+	if err != nil || nc == nil {
+		return cliproto.New(cliproto.ENATSUnreachable)
+	}
+	d.swapNCLocked(caller, nc)
+	d.ncExp = d.Refresh.JWTExp()
+	// Preserve the recovery signal `ppz diagnostics` surfaces: rebuilding
+	// over a previously non-functional NC reads as a "reconnect".
+	if wasDisconnected {
+		d.recordNATSEvent(NATSEvent{
+			Type:   "reconnect",
+			At:     time.Now(),
+			Caller: caller,
+			NCID:   ncID(nc),
+			JWTExp: d.Refresh.JWTExp(),
+			Reason: "rebuilt connection",
+		})
+	}
+	if aid, perr := uuid.Parse(d.State.AccountID()); perr == nil {
+		d.subscribeOrgHeartbeats(aid)
+	}
+	return nil
 }
 
 // swapNC replaces d.NC, first evicting every live follow conn so the
@@ -91,7 +154,18 @@ func New(home, sock string) *Daemon {
 // disconnect+closed pair (from closing the old NC) lands separately
 // with Caller="nats.go" — that's the noise the burst-swap-storm
 // pattern detects.
+// swapNC is the lock-acquiring entry point for standalone NC replacements
+// (handleLogin, watcher) that don't already hold ncMu. Callers inside a
+// ncMu-held critical section (rebuildNC) use swapNCLocked directly.
 func (d *Daemon) swapNC(caller string, newNC *nats.Conn) {
+	d.ncMu.Lock()
+	defer d.ncMu.Unlock()
+	d.swapNCLocked(caller, newNC)
+}
+
+// swapNCLocked performs the actual close-old / install-new / evict-follows
+// swap. The caller MUST hold d.ncMu.
+func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 	oldID := ncID(d.NC)
 	newID := ncID(newNC)
 	if d.NATSEvents != nil {
