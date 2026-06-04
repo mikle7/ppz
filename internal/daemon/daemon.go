@@ -115,8 +115,7 @@ func (d *Daemon) rebuildNC(caller string) error {
 	if err != nil || nc == nil {
 		return cliproto.New(cliproto.ENATSUnreachable)
 	}
-	d.swapNCLocked(caller, nc)
-	d.ncExp = d.Refresh.JWTExp()
+	d.swapNCLocked(caller, nc) // stamps d.ncExp to the current generation
 	// Preserve the recovery signal `ppz diagnostics` surfaces: rebuilding
 	// over a previously non-functional NC reads as a "reconnect".
 	if wasDisconnected {
@@ -185,6 +184,17 @@ func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 		d.NC.Close()
 	}
 	d.NC = newNC
+	// Stamp the JWT generation this connection was dialed against so the
+	// rebuildNC double-check (ncExp vs Refresh.JWTExp) is accurate for EVERY
+	// swap path — handleLogin and the watcher included, not just rebuildNC.
+	// Without this, the first ensureNATS after login sees ncExp=0 != JWTExp
+	// and does a redundant reconnect on a healthy connection. A nil swap
+	// (creds gone) clears the generation.
+	if newNC != nil {
+		d.ncExp = d.Refresh.JWTExp()
+	} else {
+		d.ncExp = 0
+	}
 }
 
 // recordNATSEvent is the single sink for connection-state events: it
