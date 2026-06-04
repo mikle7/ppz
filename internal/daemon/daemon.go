@@ -9,10 +9,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
 // Daemon is the singleton process per $PPZ_HOME.
@@ -56,6 +60,19 @@ type Daemon struct {
 	// consumers go silent and the CLI needs to redial against the
 	// new NC. See follow_registry.go.
 	Follows *followRegistry
+
+	// ncMu serializes every NC rebuild/swap so the refresh goroutine
+	// (OnRefreshed) and any number of concurrent ensureNATS callers
+	// coalesce into a single reconnect per JWT rotation instead of
+	// racing — the burst-swap-storm fix (see rebuildNC).
+	ncMu sync.Mutex
+	// ncExp is the JWT exp d.NC was dialed against. A mismatch with the
+	// live Refresh.JWTExp() means creds rotated and NC must be rebuilt;
+	// matching means a concurrent caller already did it (coalesce).
+	ncExp int64
+	// dial builds a fresh NATS connection; injectable so tests can
+	// substitute a stub. Defaults to connectNATSWithRefresh.
+	dial func(url string, r *RefreshLoop, store func(NATSEvent)) (*nats.Conn, error)
 }
 
 func New(home, sock string) *Daemon {
@@ -69,7 +86,36 @@ func New(home, sock string) *Daemon {
 		NATSEvents: newNATSEventRing(natsEventRingCap),
 		Heartbeats: NewHeartbeatCache(),
 		Follows:    newFollowRegistry(),
+		dial:       connectNATSWithRefresh,
 	}
+}
+
+// rebuildNC ensures d.NC is connected with the current JWT generation:
+// if the connection is missing, disconnected, or was dialed against an
+// older JWT exp than the live Refresh, it dials a fresh connection and
+// swaps it in. Both the on-demand path (ensureNATS) and the proactive
+// refresh path (OnRefreshed) route through here so a JWT rotation triggers
+// exactly ONE reconnect — not N racing ones (the burst-swap-storm).
+//
+// NOTE (RED): not yet serialized — the ncMu lock lands in the fix commit.
+// Today concurrent callers all observe the stale NC and each dial+swap.
+func (d *Daemon) rebuildNC(caller string) error {
+	if d.NATSURL == "" {
+		return nil // nothing to dial yet (pre-login / pre-bootstrap)
+	}
+	if d.NC != nil && d.NC.IsConnected() && d.ncExp == d.Refresh.JWTExp() {
+		return nil // already connected on the current generation — coalesce
+	}
+	nc, err := d.dial(d.NATSURL, d.Refresh, d.recordNATSEvent)
+	if err != nil || nc == nil {
+		return cliproto.New(cliproto.ENATSUnreachable)
+	}
+	d.swapNC(caller, nc)
+	d.ncExp = d.Refresh.JWTExp()
+	if aid, perr := uuid.Parse(d.State.AccountID()); perr == nil {
+		d.subscribeOrgHeartbeats(aid)
+	}
+	return nil
 }
 
 // swapNC replaces d.NC, first evicting every live follow conn so the
