@@ -1,0 +1,12 @@
+--- (a) rm a stored pattern -> confirms removal ---
+removed: test-%
+rc=0
+--- (b) rm an expanded match (not stored) -> no-op + pattern hint ---
+nothing removed: test-1 is covered by pattern 'test-%' — remove the pattern to stop watching it
+rc=0
+--- pattern survives (b) ---
+pattern-rows=1
+--- (c) rm a never-subscribed subject -> no-op + says so ---
+nothing removed: no subscription matching 'nonexistent'
+rc=0
+exit=0

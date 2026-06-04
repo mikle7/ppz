@@ -1,0 +1,4 @@
+--- subs ls: zero-match pattern still shown ---
+ghost-% - - - - -
+└─ (no matches)
+exit=0
