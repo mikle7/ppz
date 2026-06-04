@@ -131,7 +131,7 @@ func cmdSubsWait(args []string) error {
 		return err
 	}
 	var reply cliproto.ListReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCSubsWait,
+	if err := daemon.CallWait(ipcSocket(), cliproto.IPCSubsWait,
 		cliproto.SubsWaitRequest{Session: sessionID()}, &reply); err != nil {
 		return err
 	}

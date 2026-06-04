@@ -257,3 +257,34 @@ func Call(sock, method string, params, result any) error {
 	raw, _ := json.Marshal(resp.Result)
 	return json.Unmarshal(raw, result)
 }
+
+// CallWait is like Call but sets no read deadline. Use it for methods that
+// legitimately block until a NATS event arrives (IPCListWatch, IPCSubsWait).
+// The daemon's clientGone goroutine cleans up when the connection drops
+// (e.g. process killed via SIGINT), so the daemon never leaks.
+func CallWait(sock, method string, params, result any) error {
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return cliproto.New(cliproto.EDaemonNotRunning)
+	}
+	defer conn.Close()
+	enc := json.NewEncoder(conn)
+	enc.SetEscapeHTML(false)
+	body, _ := json.Marshal(params)
+	if err := enc.Encode(ipcRequest{Method: method, Params: body}); err != nil {
+		return err
+	}
+	dec := json.NewDecoder(conn)
+	var resp ipcResponse
+	if err := dec.Decode(&resp); err != nil {
+		return fmt.Errorf("ipc decode: %w", err)
+	}
+	if resp.Error != nil {
+		return resp.Error
+	}
+	if result == nil {
+		return nil
+	}
+	raw, _ := json.Marshal(resp.Result)
+	return json.Unmarshal(raw, result)
+}
