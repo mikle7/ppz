@@ -27,7 +27,7 @@ ppz_a source create alex >/dev/null
 
 WATCH_OUT=/tmp/ls-watch-recreate.out
 rm -f "$WATCH_OUT"
-ppz_a ls --watch alex > "$WATCH_OUT" 2>&1 &
+ppz_a ls --watch 'alex.*' > "$WATCH_OUT" 2>&1 &
 WPID=$!
 # Let the daemon register its NATS subscription before the trigger send.
 sleep 0.4

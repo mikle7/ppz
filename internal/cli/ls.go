@@ -2,7 +2,9 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 	"github.com/pipescloud/ppz/internal/daemon"
@@ -22,11 +24,18 @@ import (
 //	          message on a matching pipe, then print the snapshot and
 //	          exit. Level-triggered: if unread > 0 already, returns
 //	          immediately.
-//	PATTERN…  optional glob(s) matched against handle, pipe, or
-//	          `<handle>.<pipe>`; multiple OR-combine; no pattern means
-//	          every pipe. Works for both the plain snapshot and
-//	          --watch — `ppz ls clancy%` filters the table the same
-//	          way `ls clancy*` would on the filesystem.
+//	PATTERN…  optional glob(s) matched against the full `<handle>.<pipe>`
+//	          target (uncollared: the bare/dotted pipe path); multiple
+//	          OR-combine; no pattern means every pipe. Works for both the
+//	          plain snapshot and --watch — `ppz ls clancy%` filters the
+//	          table the same way `ls clancy*` would on the filesystem.
+//
+//	          Full-name matching: `ls room` lists only the uncollared
+//	          `room`; use `ls '*.room'` for a collared `<handle>.room`,
+//	          and `ls 'alice.*'` to list a whole handle's pipes. A
+//	          fully-specified literal that matches no pipe warns and
+//	          returns nothing (`ls Mus` vs `ls Mus*`); a glob is the
+//	          speculative form and never warns.
 //
 //	          Wildcards: `*` (standard glob, must be quoted in zsh:
 //	          `'agent-*'`) or `%` (SQL-LIKE-style alias, passes through
@@ -48,15 +57,25 @@ func cmdLs(args []string) error {
 	}
 	patterns := fs.Args()
 
-	var reply cliproto.ListReply
+	// Snapshot first. It's the non-watch output, and for both modes the
+	// basis for the literal-miss warning: a fully-specified literal target
+	// that matches no current pipe is almost always a typo or stale
+	// handle-watch muscle-memory, so we warn and steer to the glob form
+	// (`ls Mus` vs `ls Mus*`). For --watch this preflight lets us warn
+	// before the watch blocks — a warning, not an error, so pre-arming a
+	// watch on a not-yet-existent pipe still works.
+	var snap cliproto.ListReply
+	if err := daemon.Call(ipcSocket(), cliproto.IPCList,
+		cliproto.ListRequest{Session: sessionID(), Patterns: patterns}, &snap); err != nil {
+		return err
+	}
+	warnLiteralMisses(patterns, snap)
+
+	reply := snap
 	if *watch {
+		reply = cliproto.ListReply{}
 		req := cliproto.ListWatchRequest{Session: sessionID(), Patterns: patterns}
 		if err := daemon.Call(ipcSocket(), cliproto.IPCListWatch, req, &reply); err != nil {
-			return err
-		}
-	} else {
-		req := cliproto.ListRequest{Session: sessionID(), Patterns: patterns}
-		if err := daemon.Call(ipcSocket(), cliproto.IPCList, req, &reply); err != nil {
 			return err
 		}
 	}
@@ -68,4 +87,33 @@ func cmdLs(args []string) error {
 	}
 	maybeNotifyUpdate()
 	return nil
+}
+
+// warnLiteralMisses emits a stderr warning for each fully-specified literal
+// pattern (no glob metacharacters) that matched no row in the snapshot,
+// steering the user to the glob form. Glob patterns are speculative — they
+// may legitimately match nothing now — and never warn.
+func warnLiteralMisses(patterns []string, reply cliproto.ListReply) {
+	if len(patterns) == 0 {
+		return
+	}
+	matched := map[string]bool{}
+	for _, s := range reply.Sources {
+		for _, p := range s.PipeInfos {
+			matched[s.Handle+"."+p.Pipe] = true
+		}
+	}
+	for _, u := range reply.UncollaredPipes {
+		matched[cliproto.FormatPipePath(u.Manifold, "", u.Name)] = true
+	}
+	for _, raw := range patterns {
+		if strings.ContainsAny(raw, "*?[%") {
+			continue // glob: speculative, may match nothing without warning
+		}
+		if !matched[raw] {
+			fmt.Fprintf(os.Stderr,
+				"ppz ls: no pipe matches %q — use a glob like %q to match speculatively\n",
+				raw, raw+"%")
+		}
+	}
 }
