@@ -18,8 +18,11 @@ import (
 
 // cmdDaemonGroup dispatches `ppz daemon <subverb>` to start/stop/restart/login/logout.
 func cmdDaemonGroup(args []string) error {
+	if groupHelp("daemon", args) {
+		return nil
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz daemon {start|stop|restart|login|logout} [...]")
+		printHelp(os.Stderr, "daemon")
 		os.Exit(2)
 	}
 	switch args[0] {

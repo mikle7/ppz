@@ -29,7 +29,7 @@ import (
 // caller's own inbox is auto-subscribed at source/terminal/agent create.
 func cmdSubsGroup(args []string) error {
 	if len(args) == 0 {
-		subsUsage(os.Stderr)
+		printHelp(os.Stderr, "subs")
 		os.Exit(2)
 	}
 	verb, rest := args[0], args[1:]
@@ -45,24 +45,13 @@ func cmdSubsGroup(args []string) error {
 	case "read":
 		return cmdSubsRead(rest)
 	case "-h", "--help", "help":
-		subsUsage(os.Stdout)
+		printHelp(os.Stdout, "subs")
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "ppz subs: unknown verb %q\n", verb)
-	subsUsage(os.Stderr)
+	printHelp(os.Stderr, "subs")
 	os.Exit(2)
 	return nil
-}
-
-func subsUsage(w *os.File) {
-	fmt.Fprintln(w, `usage: ppz subs {ls|add|rm|wait|read}
-  ppz subs ls [--json|--iso]          print the subscription set
-  ppz subs add <target>...           subscribe (idempotent)
-  ppz subs rm [--force] <target>...  unsubscribe (own inbox guarded)
-  ppz subs wait [--json|--iso]       block until a subscribed pipe has unread,
-                                     then print only the unread row(s)
-  ppz subs read [--json|--raw|--tty|--bare]
-                                     read each subscribed pipe with unread`)
 }
 
 // cmdSubsLs renders the full subscription set as the same table `ppz ls`

@@ -32,6 +32,10 @@ import (
 //
 // Auto-starts the daemon if it isn't running.
 func cmdDaemonLogin(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "login")
+		return nil
+	}
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ppz login URL [-apikey K]")
 		os.Exit(2)

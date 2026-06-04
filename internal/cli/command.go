@@ -31,6 +31,10 @@ import (
 //	                     scripted against the old behaviour)
 //	--none               no trailing sequence — sends instruction only
 func cmdCommand(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "command")
+		return nil
+	}
 	// Go's flag package stops at the first non-flag argument, so we
 	// pre-separate flags from positional args to support any ordering.
 	fs := flag.NewFlagSet("command", flag.ContinueOnError)

@@ -52,6 +52,10 @@ var (
 // line gains an ` ack=requested` token to remind the operator that the
 // flag took effect.
 func cmdSend(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "send")
+		return nil
+	}
 	fs := flag.NewFlagSet("send", flag.ContinueOnError)
 	fs.SetOutput(sendErr)
 	subject := fs.String("subject", "", "envelope-level subject; renders as `[subject] payload` in tabular read")

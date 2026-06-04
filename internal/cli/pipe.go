@@ -16,8 +16,11 @@ import (
 
 // cmdPipeGroup dispatches `ppz pipe <subverb>` to create / destroy.
 func cmdPipeGroup(args []string) error {
+	if groupHelp("pipe", args) {
+		return nil
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz pipe {create|destroy} <name> [...]")
+		printHelp(os.Stderr, "pipe")
 		os.Exit(2)
 	}
 	switch args[0] {

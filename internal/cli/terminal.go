@@ -40,8 +40,11 @@ import (
 //	                      default output mode. Use this for capturable
 //	                      text snapshots (agents, pipes, scripts).
 func cmdTerminal(args []string) error {
+	if groupHelp("terminal", args) {
+		return nil
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz terminal {create|share|watch|read} <handle> [...]")
+		printHelp(os.Stderr, "terminal")
 		os.Exit(2)
 	}
 	switch args[0] {

@@ -30,6 +30,10 @@ import (
 //	--json:  pretty-printed JSON array, no colour, includes the derived
 //	         status alongside the verbatim heartbeat payload.
 func cmdWho(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "who")
+		return nil
+	}
 	fs := flag.NewFlagSet("who", flag.ContinueOnError)
 	fs.SetOutput(devNull{})
 	asJSON := fs.Bool("json", false, "emit JSON instead of a table")

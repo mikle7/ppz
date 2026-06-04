@@ -31,8 +31,11 @@ import (
 //                                 covered by `ppz pipe destroy
 //                                 --recursive`.
 func cmdSourceGroup(args []string) error {
+	if groupHelp("source", args) {
+		return nil
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source {create|destroy} ...")
+		printHelp(os.Stderr, "source")
 		os.Exit(2)
 	}
 	switch args[0] {

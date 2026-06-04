@@ -42,6 +42,10 @@ import (
 // `--tail` keeps streaming new messages until SIGINT, advancing the
 // cursor as live messages arrive so the unread count stays truthful.
 func cmdRead(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "read")
+		return nil
+	}
 	fs := flag.NewFlagSet("read", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "emit JSON envelopes instead of payload text")
 	follow := fs.Bool("tail", false, "drain unread messages then keep streaming live until SIGINT")

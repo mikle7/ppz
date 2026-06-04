@@ -50,6 +50,10 @@ compdef _ppz ppz
 
 // cmdCompletion handles `ppz completion <shell>`.
 func cmdCompletion(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "completion")
+		return nil
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: ppz completion <bash|zsh>")
 		os.Exit(2)
