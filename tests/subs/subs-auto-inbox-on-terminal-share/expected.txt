@@ -1,2 +1,4 @@
+--- agentx session ---
 agentx.inbox
+--- operator session (no leak) ---
 exit=0

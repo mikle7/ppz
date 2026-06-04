@@ -1,0 +1,5 @@
+--- creating session (desk → became foo) ---
+foo.inbox
+--- handle session (foo) ---
+foo.inbox
+exit=0

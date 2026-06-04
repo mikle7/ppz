@@ -524,11 +524,10 @@ func (d *Daemon) handleCreate(ctx context.Context, conn net.Conn, params json.Ra
 	}
 	d.State.RememberSource(reply.Handle, reply.Manifold)
 	// Auto-subscribe the new handle to its own inbox, keyed under the
-	// HANDLE (not the creating shell's session) — the subscription belongs
-	// to the agent, so it's visible to every subprocess inside
-	// `ppz terminal share <handle>` (PPZ_SESSION=<handle>) but never leaks
-	// into the operator's personal subs list. Idempotent; one hook covers
-	// source create, terminal share, and agent create — all route here.
+	// HANDLE — visible to every subprocess inside `ppz terminal share
+	// <handle>` / `ppz agent create <handle>` (PPZ_SESSION=<handle>).
+	// Idempotent; one hook covers source create, terminal share, and agent
+	// create — all route here.
 	_ = d.Subs.Add(reply.Handle, reply.Handle+".inbox")
 	// PTY sources don't become the daemon's "current" — the user retains
 	// their existing current message source so `ppz send` keeps working
@@ -538,6 +537,13 @@ func (d *Daemon) handleCreate(ctx context.Context, conn net.Conn, params json.Ra
 			writeIPCErr(conn, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 			return
 		}
+		// `source create` makes the CREATING session operate as the handle
+		// (current set above), so surface its inbox in that session's subs
+		// too — a plain `ppz subs ls/wait` from the shell that ran
+		// `source create` then just works. The pty paths above deliberately
+		// skip this: the operator stays themselves, so the agent's inbox
+		// must not leak into the operator's personal subs list.
+		_ = d.Subs.Add(req.Session, reply.Handle+".inbox")
 	}
 	writeIPC(conn, cliproto.CreateReply{Handle: reply.Handle, Manifold: reply.Manifold, Subject: reply.Subject})
 }
