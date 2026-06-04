@@ -89,16 +89,24 @@ func detectBurstSwapStorm(events []NATSEvent) []PatternHit {
 			i++
 			continue
 		}
-		// Scan forward greedily — every swap within burstSwapWindow of
-		// the cluster's first event extends the cluster.
+		// Scan forward through all events within burstSwapWindow,
+		// counting only swaps. Non-swap events (e.g. disconnect/closed
+		// emitted by nats.go during NC teardown) are skipped rather
+		// than terminating the cluster scan — an interleaved disconnect
+		// between two rapid swaps must not split the cluster below the
+		// burstSwapMin threshold.
 		start := i
 		end := i
-		for end+1 < len(events) &&
-			events[end+1].Type == "swap" &&
-			events[end+1].At.Sub(events[start].At) <= burstSwapWindow {
-			end++
+		count := 1
+		for j := i + 1; j < len(events); j++ {
+			if events[j].At.Sub(events[start].At) > burstSwapWindow {
+				break
+			}
+			if events[j].Type == "swap" {
+				count++
+				end = j
+			}
 		}
-		count := end - start + 1
 		if count >= burstSwapMin {
 			window := events[end].At.Sub(events[start].At)
 			callers := uniqueCallers(events[start : end+1])

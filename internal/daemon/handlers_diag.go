@@ -140,12 +140,14 @@ func stateEntryTypes(state string) []string {
 // countNATSEventLog returns the line count of the active jsonl. Used
 // for the "X older events on disk" hint in CLI output. Reads the
 // file rather than maintaining a counter so a daemon that crashed
-// mid-write reports the truth, not a stale cached value.
+// mid-write reports the truth, not a stale cached value. Counts
+// non-empty lines instead of unmarshaling each one — this runs on
+// every `ppz diagnostics` and the active file can be up to 10 MB.
 func countNATSEventLog(home string) int {
 	if home == "" {
 		return 0
 	}
-	return len(readNATSEventLogFile(natsEventLogActivePath(home)))
+	return countLogLines(natsEventLogActivePath(home))
 }
 
 // natsEventLogActivePath returns the active file path, factored out
