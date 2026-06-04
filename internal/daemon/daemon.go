@@ -269,12 +269,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// shows the burst that prompted the operator to restart it).
 	// Then record our own start; the stop counterpart fires on
 	// shutdown below.
-	if d.NATSEvents != nil {
-		for _, ev := range loadLifecycleLog(d.Home) {
-			d.NATSEvents.Append(ev)
-		}
-	}
-	d.loadNATSEventLogTail()
+	d.reseedRingFromDisk()
 	d.recordDaemonLifecycle("daemon_start", "")
 	defer d.recordDaemonLifecycle("daemon_stop", "graceful")
 

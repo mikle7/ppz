@@ -14,6 +14,7 @@ package daemon
 // helpers without an awkward shim.
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -144,5 +145,76 @@ func TestReadNATSEventLogFile_SkipsMalformedLines(t *testing.T) {
 	got := readNATSEventLogFile(path)
 	if len(got) != 2 {
 		t.Errorf("readNATSEventLogFile: got %d valid events, want 2 (malformed line skipped)", len(got))
+	}
+}
+
+// TestScanNATSEventLog_StitchesGenerations pins the cross-generation
+// behaviour the package comment promises: scanNATSEventLog reads the
+// rotated files (.2 oldest, then .1) before the active file so the
+// merged result stays chronological across a rotation boundary. The
+// generations are written directly rather than via the 10 MB rotation
+// threshold so the test stays fast.
+func TestScanNATSEventLog_StitchesGenerations(t *testing.T) {
+	home := t.TempDir()
+	base := time.Now().Truncate(time.Second).Add(-time.Hour)
+	writeEvent := func(file string, idx int) {
+		ev := NATSEvent{V: NATSEventSchemaVersion, Type: "swap", At: base.Add(time.Duration(idx) * time.Minute), Caller: "gen"}
+		line, err := json.Marshal(ev)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		f, err := os.OpenFile(filepath.Join(home, file), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatalf("open %s: %v", file, err)
+		}
+		if _, err := f.Write(append(line, '\n')); err != nil {
+			t.Fatalf("write %s: %v", file, err)
+		}
+		f.Close()
+	}
+	// Layout mirrors a real rotation: .2 is oldest, active is newest.
+	writeEvent(natsEventLogFile+".2", 0)
+	writeEvent(natsEventLogFile+".2", 1)
+	writeEvent(natsEventLogFile+".1", 2)
+	writeEvent(natsEventLogFile+".1", 3)
+	writeEvent(natsEventLogFile, 4)
+	writeEvent(natsEventLogFile, 5)
+
+	got := scanNATSEventLog(home, base) // since == base → every event
+	if len(got) != 6 {
+		t.Fatalf("scanNATSEventLog across generations: got %d events, want 6", len(got))
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i].At.Before(got[i-1].At) {
+			t.Errorf("events not chronological across generations at index %d: %s before %s",
+				i, got[i].At, got[i-1].At)
+		}
+	}
+}
+
+// TestReseedRingFromDisk_NoDuplicateLifecycleEvents pins that a fresh
+// daemon's ring does not double-count prior-process lifecycle events.
+// recordDaemonLifecycle persists each event to BOTH the lifecycle log
+// AND nats-events.jsonl (so --since returns a unified history), so a
+// startup reseed that naively reads both sources lists every
+// daemon_start / daemon_stop twice.
+func TestReseedRingFromDisk_NoDuplicateLifecycleEvents(t *testing.T) {
+	home := t.TempDir()
+
+	// First daemon: a start/stop cycle, persisted to disk.
+	d1 := &Daemon{Home: home, NATSEvents: newNATSEventRing(natsEventRingCap)}
+	d1.recordDaemonLifecycle("daemon_start", "")
+	d1.recordDaemonLifecycle("daemon_stop", "graceful")
+
+	// Second daemon: reseed its ring from disk the way Daemon.Run does.
+	d2 := &Daemon{Home: home, NATSEvents: newNATSEventRing(natsEventRingCap)}
+	d2.reseedRingFromDisk()
+
+	counts := map[string]int{}
+	for _, ev := range d2.NATSEvents.Snapshot() {
+		counts[ev.Type]++
+	}
+	if counts["daemon_start"] != 1 || counts["daemon_stop"] != 1 {
+		t.Errorf("lifecycle events duplicated on reseed: got %+v, want each exactly 1", counts)
 	}
 }

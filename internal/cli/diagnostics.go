@@ -222,9 +222,7 @@ func writeBundle(reply cliproto.DiagReply) error {
 	}
 	defer f.Close()
 	gz := gzip.NewWriter(f)
-	defer gz.Close()
 	tw := tar.NewWriter(gz)
-	defer tw.Close()
 
 	h := home()
 	// Every persisted log + state file. Missing inputs are skipped
@@ -267,6 +265,20 @@ func writeBundle(reply cliproto.DiagReply) error {
 	manifest.WriteString("  + platform.txt\n")
 
 	_ = addBytesToTar(tw, "MANIFEST", []byte(manifest.String()))
+
+	// Flush in order: tar → gzip → file. Any buffered data that hasn't
+	// been written to disk yet is flushed here; a Close error means the
+	// archive on disk is incomplete/corrupt, so remove it rather than
+	// printing a path the user will trust.
+	if err := tw.Close(); err != nil {
+		_ = gz.Close()
+		_ = os.Remove(dest)
+		return fmt.Errorf("bundle tar flush: %w", err)
+	}
+	if err := gz.Close(); err != nil {
+		_ = os.Remove(dest)
+		return fmt.Errorf("bundle gzip flush: %w", err)
+	}
 
 	fmt.Println(dest)
 	return nil
