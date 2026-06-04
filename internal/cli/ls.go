@@ -75,7 +75,7 @@ func cmdLs(args []string) error {
 	if *watch {
 		reply = cliproto.ListReply{}
 		req := cliproto.ListWatchRequest{Session: sessionID(), Patterns: patterns}
-		if err := daemon.Call(ipcSocket(), cliproto.IPCListWatch, req, &reply); err != nil {
+		if err := daemon.CallWait(ipcSocket(), cliproto.IPCListWatch, req, &reply); err != nil {
 			return err
 		}
 	}

@@ -219,20 +219,41 @@ func (d *Daemon) ipcSubscribe(ctx context.Context, conn net.Conn, params json.Ra
 var ipcCallTimeout = 30 * time.Second
 
 // Call sends one request to the daemon over a fresh connection and decodes
-// either result or error.
+// either result or error, bounded by ipcCallTimeout (PPZ_IPC_TIMEOUT
+// overrides). For request/response verbs that must always terminate.
 func Call(sock, method string, params, result any) error {
-	conn, err := net.Dial("unix", sock)
-	if err != nil {
-		return cliproto.New(cliproto.EDaemonNotRunning)
-	}
-	defer conn.Close()
 	timeout := ipcCallTimeout
 	if v := os.Getenv("PPZ_IPC_TIMEOUT"); v != "" {
 		if d, perr := time.ParseDuration(v); perr == nil && d > 0 {
 			timeout = d
 		}
 	}
-	_ = conn.SetDeadline(time.Now().Add(timeout))
+	return call(sock, method, params, result, timeout)
+}
+
+// CallWait is like Call but sets no read deadline (timeout 0), for the
+// verbs that legitimately hold the connection open until a NATS event
+// arrives (IPCListWatch, IPCSubsWait). The daemon's clientGone goroutine
+// cleans up when the connection drops (e.g. process killed via SIGINT),
+// so the daemon never leaks. PPZ_IPC_TIMEOUT is intentionally NOT honored
+// here — a blocking wait has no meaningful deadline.
+func CallWait(sock, method string, params, result any) error {
+	return call(sock, method, params, result, 0)
+}
+
+// call is the shared IPC client body. When timeout > 0 it bounds the
+// read with a connection deadline and classifies a client-side timeout
+// as EDaemonTimeout; when timeout == 0 it blocks indefinitely (a
+// deadline can't fire, so the Timeout() classification is skipped).
+func call(sock, method string, params, result any, timeout time.Duration) error {
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return cliproto.New(cliproto.EDaemonNotRunning)
+	}
+	defer conn.Close()
+	if timeout > 0 {
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+	}
 	enc := json.NewEncoder(conn)
 	enc.SetEscapeHTML(false)
 	body, _ := json.Marshal(params)
@@ -242,9 +263,11 @@ func Call(sock, method string, params, result any) error {
 	dec := json.NewDecoder(conn)
 	var resp ipcResponse
 	if err := dec.Decode(&resp); err != nil {
-		var nerr net.Error
-		if errors.As(err, &nerr) && nerr.Timeout() {
-			return cliproto.New(cliproto.EDaemonTimeout)
+		if timeout > 0 {
+			var nerr net.Error
+			if errors.As(err, &nerr) && nerr.Timeout() {
+				return cliproto.New(cliproto.EDaemonTimeout)
+			}
 		}
 		return fmt.Errorf("ipc decode: %w", err)
 	}
