@@ -1,0 +1,4 @@
+--- subs ls --json: flat rows carry matched_by ---
+{"pipe":"test-1","matched_by":["test-%"]}
+{"pipe":"test-2","matched_by":["test-%"]}
+exit=0

@@ -1,5 +1,6 @@
 --- after add ---
 alice.inbox
+removed: alice.inbox
 rm-rc=0
 --- after rm ---
 exit=0

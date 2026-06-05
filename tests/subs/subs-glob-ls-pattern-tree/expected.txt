@@ -1,0 +1,6 @@
+--- subs ls: pattern parent + matched children ---
+test-% - - - - -
+├─ test-1 0 0 - - foo
+├─ test-2 0 0 - - foo
+└─ test-3 0 0 - - foo
+exit=0

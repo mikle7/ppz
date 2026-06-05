@@ -394,6 +394,10 @@ type PipeInfo struct {
 	Preview   string     `json:"preview,omitempty"`    // truncated to 60 bytes for table view
 	Payload   string     `json:"payload,omitempty"`    // full untruncated payload for `ls --json`
 	CreatedBy string     `json:"created_by,omitempty"` // username; empty → inherit Source.CreatedBy
+	// MatchedBy is the `subs ls` attribution: the subscribed subject(s) that
+	// surfaced this pipe — the pattern(s) and/or literal that matched it.
+	// Set only on the subs snapshot path; empty (omitted) for plain `ppz ls`.
+	MatchedBy []string `json:"matched_by,omitempty"`
 }
 
 // Source carries the source-level fields ppz ls renders. CreatedBy is the
@@ -446,6 +450,11 @@ type ListReply struct {
 	// NULL. Walking sources alone misses them. The daemon enriches each
 	// row with JetStream stats the same way it does PipeInfos.
 	UncollaredPipes []UncollaredPipe `json:"uncollared_pipes,omitempty"`
+	// Subscriptions is the verbatim subscription set for the session, set
+	// only by the subs snapshot path. The CLI needs it to render pattern
+	// subscriptions as parent rows — including a pattern that currently
+	// matches nothing, which has no pipe row of its own. Omitted for `ppz ls`.
+	Subscriptions []string `json:"subscriptions,omitempty"`
 }
 
 // UncollaredPipe is the wire projection of a sourceless pipe row + its
@@ -669,6 +678,21 @@ type SubsAddReply struct {
 
 type SubsRemoveReply struct {
 	Subs []string `json:"subs"`
+	// Outcomes is per-target feedback so a no-op `rm` is never silent: one
+	// entry per requested target, in request order. Removed → it was a stored
+	// subject and is gone. CoveredByPattern set → the target wasn't itself a
+	// subscription but a stored PATTERN matches it (the "I rm'd the row I see
+	// and it came back" case). Neither → it was never subscribed.
+	Outcomes []SubsRemoveOutcome `json:"outcomes,omitempty"`
+}
+
+// SubsRemoveOutcome reports what happened to one `subs rm` target. Removal
+// semantics are unchanged (exact-string-match, idempotent) — this only
+// describes the result for user feedback.
+type SubsRemoveOutcome struct {
+	Target           string `json:"target"`
+	Removed          bool   `json:"removed"`
+	CoveredByPattern string `json:"covered_by_pattern,omitempty"`
 }
 
 type SubsWaitRequest struct {

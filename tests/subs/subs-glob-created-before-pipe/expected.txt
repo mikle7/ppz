@@ -1,4 +1,7 @@
 --- before any matching pipe ---
+room-%.inbox - - - - -
+└─ (no matches)
 --- after matching pipe added ---
-room-a.inbox
+room-%.inbox - - - - -
+└─ room-a.inbox 0 0 - - foo
 exit=0

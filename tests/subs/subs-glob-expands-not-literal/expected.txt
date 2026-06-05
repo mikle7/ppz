@@ -1,3 +1,4 @@
-room-a.inbox
-room-b.inbox
+room-%.inbox - - - - -
+├─ room-a.inbox 0 0 - - foo
+└─ room-b.inbox 0 0 - - foo
 exit=0

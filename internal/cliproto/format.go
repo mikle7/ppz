@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 )
@@ -494,6 +495,211 @@ func PrintListJSONWithUncollared(w io.Writer, sources []Source, uncollared []Unc
 		}
 		line, _ := json.Marshal(obj)
 		fmt.Fprintln(w, string(line))
+	}
+}
+
+// IsGlobPattern reports whether a subscription subject is a glob/pattern
+// (expands at read-time) rather than a concrete subject. Covers
+// filepath.Match metacharacters (`*`, `?`, `[`) plus `%`, the SQL-LIKE
+// alias the daemon's matchAnyTarget rewrites to `*`. Shared by the daemon
+// (snapshot) and the CLI (tree render) so the two agree on what a pattern is.
+func IsGlobPattern(s string) bool {
+	return strings.ContainsAny(s, "*?[%")
+}
+
+// subsRow is one rendered line of the `subs ls` tree. A pattern PARENT and a
+// pipe row both fill all columns; a note row (e.g. the `(no matches)` leaf)
+// occupies only NAMESPACE+PIPE so it renders clean with no trailing dashes.
+type subsRow struct {
+	namespace string
+	pipe      string // includes the `├─ ` / `└─ ` tree glyph for child rows
+	unread    string
+	buffered  string
+	last      string
+	payload   string
+	creator   string
+	note      bool
+}
+
+// PrintSubsList renders `ppz subs ls` as a tree. A glob/pattern subscription
+// (e.g. `test-%`) is a PARENT row; the pipes it currently matches render as
+// indented children beneath it, so attribution is visible — you can see which
+// pattern surfaced which pipe. A pattern matching nothing still shows, with a
+// `(no matches)` leaf, rather than vanishing. A literal subscription (a
+// concrete `<handle>.<pipe>` or uncollared pipe) renders as a plain top-level
+// row, exactly as `ppz ls` would.
+//
+// Columns match `ppz ls` (NAMESPACE … CREATOR) so users don't learn two
+// formats; a parent/pattern row carries `-` in the stat columns since it is a
+// subscription, not a pipe.
+//
+// Overlap (a pipe matched by more than one subscription) is rendered once,
+// under the first subscription in sorted order that matched it; the full
+// match set is always available in `--json`'s matched_by. Subscriptions
+// arrive pre-sorted, which also fixes the top-level render order.
+func PrintSubsList(w io.Writer, sources []Source, uncollared []UncollaredPipe, subscriptions []string, iso bool) {
+	now := timeNow()
+
+	// Flatten every surfaced pipe into a row keyed by its full target, with
+	// the subscriptions that matched it carried alongside for grouping.
+	type pipeRow struct {
+		target    string
+		matchedBy []string
+		cells     subsRow
+		claimed   bool
+	}
+	var rows []*pipeRow
+	add := func(target, ns, pipeCol string, info PipeInfo, sourceCreatedBy string) {
+		rows = append(rows, &pipeRow{
+			target:    target,
+			matchedBy: info.MatchedBy,
+			cells: subsRow{
+				namespace: ns,
+				pipe:      pipeCol,
+				unread:    fmt.Sprintf("%d", info.Unread),
+				buffered:  fmt.Sprintf("%d", info.Total),
+				last:      lastColumn(info.LastAt, now, iso),
+				payload:   payloadColumn(info.Preview),
+				creator:   humanColumn(info.CreatedBy, sourceCreatedBy),
+			},
+		})
+	}
+	for _, s := range sources {
+		for _, p := range s.PipeInfos {
+			add(s.Handle+"."+p.Pipe, namespaceColumn(s.Manifold), FormatPipePath("", s.Handle, p.Pipe), p, s.CreatedBy)
+		}
+	}
+	for _, p := range uncollared {
+		add(FormatPipePath(p.Manifold, "", p.Name), namespaceColumn(p.Manifold), FormatPipePath("", "", p.Name), p.Info, "")
+	}
+	byTarget := make(map[string]*pipeRow, len(rows))
+	for _, r := range rows {
+		byTarget[r.target] = r
+	}
+
+	var out []subsRow
+	for _, subj := range subscriptions {
+		if IsGlobPattern(subj) {
+			out = append(out, subsRow{namespace: "-", pipe: subj, unread: "-", buffered: "-", last: "-", payload: "-", creator: "-"})
+			var kids []*pipeRow
+			for _, r := range rows {
+				if !r.claimed && containsString(r.matchedBy, subj) {
+					kids = append(kids, r)
+				}
+			}
+			sort.Slice(kids, func(i, j int) bool { return kids[i].target < kids[j].target })
+			if len(kids) == 0 {
+				out = append(out, subsRow{namespace: "-", pipe: "└─ (no matches)", note: true})
+				continue
+			}
+			for i, k := range kids {
+				k.claimed = true
+				glyph := "├─ "
+				if i == len(kids)-1 {
+					glyph = "└─ "
+				}
+				row := k.cells
+				row.pipe = glyph + k.cells.pipe
+				out = append(out, row)
+			}
+			continue
+		}
+		// Literal subscription → its own concrete row. subsSnapshot always
+		// emits a row (real or synthetic zero-row) for a literal, so this is
+		// present unless an earlier pattern already claimed the same pipe.
+		if r := byTarget[subj]; r != nil && !r.claimed {
+			r.claimed = true
+			out = append(out, r.cells)
+		}
+	}
+	writeSubsTable(w, out)
+}
+
+// PrintSubsListJSON is the `subs ls --json` variant: FLAT, one object per
+// matched pipe (same base shape as `ls --watch --json`), each row carrying
+// `matched_by` — the subscription(s) that surfaced it. The tree is a
+// human-presentation concern only; JSON consumers get attribution as a field.
+func PrintSubsListJSON(w io.Writer, sources []Source, uncollared []UncollaredPipe) {
+	emit := func(namespace, handle, pipe string, info PipeInfo, creator string) {
+		obj := map[string]any{
+			"namespace":  namespace,
+			"handle":     handle,
+			"pipe":       pipe,
+			"total":      info.Total,
+			"unread":     info.Unread,
+			"payload":    info.Payload,
+			"creator":    creator,
+			"matched_by": info.MatchedBy,
+		}
+		if info.LastAt != nil {
+			obj["last_at"] = info.LastAt.UTC().Format(time.RFC3339)
+		} else {
+			obj["last_at"] = nil
+		}
+		line, _ := json.Marshal(obj)
+		fmt.Fprintln(w, string(line))
+	}
+	for _, s := range sources {
+		for _, p := range s.PipeInfos {
+			emit(s.Manifold, s.Handle, p.Pipe, p, humanColumn(p.CreatedBy, s.CreatedBy))
+		}
+	}
+	for _, p := range uncollared {
+		emit(p.Manifold, "", p.Name, p.Info, p.Info.CreatedBy)
+	}
+}
+
+func containsString(ss []string, want string) bool {
+	for _, s := range ss {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
+// writeSubsTable prints the `subs ls` tree with the same 7 columns as
+// `ppz ls`. Kept separate from writeListTable because subs rows need string
+// cells (a parent/pattern row shows `-` not `0` in UNREAD/BUFFERED, and child
+// rows carry a tree glyph) that the numeric, byte-pinned ls table can't
+// express. Column widths are sized to content; the elastic-PAYLOAD / LAST
+// anti-drift tuning of `ppz ls` is intentionally omitted — the subs view is
+// small and its output is whitespace-normalized in tests.
+func writeSubsTable(w io.Writer, rows []subsRow) {
+	if len(rows) == 0 {
+		return
+	}
+	headers := []string{"NAMESPACE", "PIPE", "UNREAD", "BUFFERED", "LAST", "PAYLOAD", "CREATOR"}
+	widths := []int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3]), len(headers[4]), len(headers[5])}
+	// CREATOR is the trailing column, printed with a bare %s, so it needs no
+	// width tracking (nothing follows it to align against).
+	grow := func(i, l int) {
+		if l > widths[i] {
+			widths[i] = l
+		}
+	}
+	for _, r := range rows {
+		grow(0, len(r.namespace))
+		grow(1, len(r.pipe))
+		if r.note {
+			continue
+		}
+		grow(2, len(r.unread))
+		grow(3, len(r.buffered))
+		grow(4, len(r.last))
+		grow(5, len(r.payload))
+	}
+	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
+		widths[0], headers[0], widths[1], headers[1], widths[2], headers[2],
+		widths[3], headers[3], widths[4], headers[4], widths[5], headers[5], headers[6])
+	for _, r := range rows {
+		if r.note {
+			fmt.Fprintf(w, "%-*s  %s\n", widths[0], r.namespace, r.pipe)
+			continue
+		}
+		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
+			widths[0], r.namespace, widths[1], r.pipe, widths[2], r.unread,
+			widths[3], r.buffered, widths[4], r.last, widths[5], r.payload, r.creator)
 	}
 }
 
