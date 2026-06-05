@@ -6,7 +6,7 @@
 # Bug: forwardInboxAlerts (terminal.go) opens one IPC connection at
 # share-start and has no redial loop. After the daemon stops, the
 # scanner returns EOF and the goroutine exits — forever. New .inbox
-# messages never reach the pump, so the "Please run 'ppz read inbox'"
+# messages never reach the pump, so the "Please run 'ppz subs read'"
 # alert never fires for the rest of the session, even though the share
 # itself recovers (forwardStdin already has a redial loop).
 #
@@ -54,8 +54,8 @@ wait_for 50 "ppz_s ls 2>/dev/null | grep -q '^share-inbox.stdout'"
 # Pre-recycle: one .inbox publish → after idle timer, alert fires →
 # alert text round-trips through cat → lands on .stdout.
 ppz_b send share-inbox.inbox "msg-1" >/dev/null
-wait_for 50 "ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -q \"Please run 'ppz read inbox'\""
-ALERT_COUNT_PRE=$(ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -o "Please run 'ppz read inbox'" | wc -l)
+wait_for 50 "ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -q \"Please run 'ppz subs read'\""
+ALERT_COUNT_PRE=$(ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -o "Please run 'ppz subs read'" | wc -l)
 echo "first_alert_count: $ALERT_COUNT_PRE"
 
 # Recycle daemon: stop + start + login. Same shape as the stdin
@@ -68,6 +68,6 @@ ppz_s daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 # write. Without forwardInboxAlerts redialling, the pump never sees
 # msg-2 → no second alert → count stays at $ALERT_COUNT_PRE.
 ppz_b send share-inbox.inbox "msg-2" >/dev/null
-wait_for 60 "[ \"\$(ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -c \"Please run 'ppz read inbox'\")\" -gt $ALERT_COUNT_PRE ]"
-ALERT_COUNT_POST=$(ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -o "Please run 'ppz read inbox'" | wc -l)
+wait_for 60 "[ \"\$(ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -c \"Please run 'ppz subs read'\")\" -gt $ALERT_COUNT_PRE ]"
+ALERT_COUNT_POST=$(ppz_s reread share-inbox.stdout --raw 2>/dev/null | grep -o "Please run 'ppz subs read'" | wc -l)
 [[ "$ALERT_COUNT_POST" -gt "$ALERT_COUNT_PRE" ]] && echo "alert_fired_again: yes" || echo "alert_fired_again: no"
