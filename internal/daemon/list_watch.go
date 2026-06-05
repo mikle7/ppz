@@ -54,8 +54,13 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 	// just observed as caught-up. NATS sub buffers in the client; we
 	// drain into a 1-slot wakeup channel which is enough for "tell me
 	// when something happened" semantics.
+	//
+	// armWatch registers the sub with d.Watches so a swapNCLocked rearms
+	// it onto the new conn — without that, a JWT-refresh swap (~10min
+	// cadence in production) silently kills the sub anchored to oldNC
+	// and the wakeup never fires until the CLI's IPC deadline trips.
 	wakeup := make(chan struct{}, 1)
-	sub, err := d.NC.Subscribe(accountID.String()+".>", func(msg *nats.Msg) {
+	cb := func(msg *nats.Msg) {
 		// Subjects are ambiguous between collared and uncollared shapes
 		// at certain part counts (see parseSubjectInterpretations).
 		// We test every plausible (handle, pipe) split — waking on a
@@ -70,12 +75,13 @@ func (d *Daemon) handleListWatch(ctx context.Context, conn net.Conn, params json
 				return
 			}
 		}
-	})
-	if err != nil {
-		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+	}
+	entry, ipcErr := d.armWatch(accountID.String()+".>", cb)
+	if ipcErr != nil {
+		writeIPCErr(conn, ipcErr)
 		return
 	}
-	defer sub.Unsubscribe()
+	defer d.Watches.remove(entry)
 
 	// Initial snapshot.
 	reply, e := d.buildFilteredList(ctx, accountID, req.Session, req.Patterns)
