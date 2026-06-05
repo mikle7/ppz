@@ -26,21 +26,18 @@ func cmdSet(args []string) error {
 		return nil
 	}
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz set <key> <value>")
-		os.Exit(2)
+		usageExit("set")
 	}
 	key := args[0]
 	switch key {
 	case "handle":
 		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "usage: ppz set handle HANDLE")
-			os.Exit(2)
+			usageExit("set")
 		}
 		return setHandle(args[1])
 	case "namespace":
 		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "usage: ppz set namespace PATH")
-			os.Exit(2)
+			usageExit("set")
 		}
 		return setNamespace(args[1])
 	}
@@ -61,8 +58,7 @@ func cmdUnset(args []string) error {
 		return nil
 	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz unset <key>")
-		os.Exit(2)
+		usageExit("unset")
 	}
 	key := args[0]
 	switch key {
@@ -86,8 +82,7 @@ func cmdGet(args []string) error {
 		return nil
 	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz get <key>")
-		os.Exit(2)
+		usageExit("get")
 	}
 	key := args[0]
 	switch key {

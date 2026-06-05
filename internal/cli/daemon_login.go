@@ -37,8 +37,7 @@ func cmdDaemonLogin(args []string) error {
 		return nil
 	}
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz login URL [-apikey K]")
-		os.Exit(2)
+		usageExit("login")
 	}
 	url := normaliseLoginURL(args[0])
 	rest := args[1:]

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -57,8 +56,7 @@ func cmdCommand(args []string) error {
 	}
 
 	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz command <handle> [instruction] [--claude|--cr|--crlf|--newline|--none]")
-		os.Exit(2)
+		usageExit("command")
 	}
 	handle := rest[0]
 	var instruction string

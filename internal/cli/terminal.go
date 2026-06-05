@@ -75,8 +75,7 @@ func cmdTerminal(args []string) error {
 // so we issue a follow-up IPCSwitch from the client side.
 func cmdTerminalCreate(args []string) error {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz terminal create HANDLE")
-		os.Exit(2)
+		usageExit("terminal create")
 	}
 	handle := args[0]
 	var reply cliproto.CreateReply
@@ -152,15 +151,13 @@ func cmdTerminalRead(args []string) error {
 			continue
 		}
 		if handle != "" {
-			fmt.Fprintln(os.Stderr, "usage: ppz terminal read <handle> [reread-flags]")
-			os.Exit(2)
+			usageExit("terminal read")
 		}
 		handle = a
 	}
 
 	if handle == "" {
-		fmt.Fprintln(os.Stderr, "usage: ppz terminal read <handle> [reread-flags]")
-		os.Exit(2)
+		usageExit("terminal read")
 	}
 	if strings.Contains(handle, ".") {
 		// Don't accept "handle.pipe" — terminal read is .stdout-only.
@@ -849,8 +846,7 @@ func streamForwardInboxAlertsOnce(ctx context.Context, handle string, pump *term
 //   - No SIGWINCH propagation back to the source.
 func cmdTerminalView(args []string) error {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz terminal watch <handle>")
-		os.Exit(2)
+		usageExit("terminal watch")
 	}
 	handle := args[0]
 	if handle == "" || strings.Contains(handle, ".") {

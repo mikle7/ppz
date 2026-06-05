@@ -2,7 +2,6 @@ package cli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"time"
 )
@@ -42,8 +41,7 @@ func cmdReread(args []string) error {
 	bare := fs.Bool("bare", false, "force legacy payload-only output (script-stable opt-out from the v0.23 tabular default on inbox-shaped pipes)")
 	target, flagArgs, err := splitReadArgs(args, true)
 	if err != nil || target == "" {
-		fmt.Fprintln(os.Stderr, "usage: ppz reread <handle>.<pipe> [-l N --skip N --since DUR --json --tty --raw --bare]")
-		os.Exit(2)
+		usageExit("reread")
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		return err

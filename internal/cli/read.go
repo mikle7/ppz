@@ -54,9 +54,7 @@ func cmdRead(args []string) error {
 	bare := fs.Bool("bare", false, "force legacy payload-only output (script-stable opt-out from the v0.23 tabular default on inbox-shaped pipes)")
 	target, flagArgs, err := splitReadArgs(args, false)
 	if err != nil || target == "" {
-		fmt.Fprintln(os.Stderr, "usage: ppz read <handle>.<pipe> [--tail --json --tty --raw --bare]")
-		fmt.Fprintln(os.Stderr, "  (filter flags -l/--skip/--since live on `ppz reread`)")
-		os.Exit(2)
+		usageExit("read")
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		return err

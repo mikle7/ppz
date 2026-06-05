@@ -156,6 +156,15 @@ func printHelp(w io.Writer, key string) {
 	fmt.Fprintln(w, wrapUsageText(body, cliproto.TerminalWidth()))
 }
 
+// usageExit prints a command's help body — which leads with its own `usage:`
+// line — to stderr, then exits 2. It's the bad-args counterpart to
+// `ppz <verb> --help`, which prints the identical body to stdout and exits 0:
+// one source of truth (helpTopics), two exit codes.
+func usageExit(key string) {
+	printHelp(os.Stderr, key)
+	os.Exit(2)
+}
+
 // groupHelp handles help requests for a command group dispatcher. It prints
 // and returns true for:
 //

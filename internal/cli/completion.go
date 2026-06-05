@@ -55,8 +55,7 @@ func cmdCompletion(args []string) error {
 		return nil
 	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz completion <bash|zsh>")
-		os.Exit(2)
+		usageExit("completion")
 	}
 	switch args[0] {
 	case "bash":
