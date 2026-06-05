@@ -1,0 +1,2 @@
+alert_fired_for_room: yes
+exit=0
