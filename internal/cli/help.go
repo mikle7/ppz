@@ -45,6 +45,9 @@ type helpGroup struct {
 // Keep every leading verb in sync with completion.go's topLevelVerbs /
 // subverbs — TestHelpGroups_CoverTopLevelVerbs enforces it.
 var topLevelGroups = []helpGroup{
+	{"GETTING STARTED", []helpRow{
+		{"ppz login URL", "log in to a server (e.g. ppz login pipescloud.io)"},
+	}},
 	{"MESSAGING", []helpRow{
 		{"ppz status", "daemon state, current handle, last token refresh"},
 		{"ppz ls [--watch] [PATTERN]", "list handles × pipes; --watch blocks until unread"},
@@ -65,11 +68,10 @@ var topLevelGroups = []helpGroup{
 		{"ppz terminal watch H", "follow H.stdout live in a TUI"},
 		{"ppz terminal read H", "render H.stdout (reread with --tty default)"},
 	}},
-	{"SETUP", []helpRow{
+	{"DAEMON", []helpRow{
 		{"ppz daemon start", "start the local daemon"},
 		{"ppz daemon stop", "stop the local daemon (idempotent)"},
 		{"ppz daemon restart", "stop + start (use after 'ppz upgrade')"},
-		{"ppz login URL -apikey K", "log in (shortcut for 'ppz daemon login')"},
 		{"ppz daemon logout", "clear the stored credential"},
 	}},
 	{"DAEMON STATE", []helpRow{
@@ -321,13 +323,13 @@ Create a pty-backed source NAME and run an AI harness in it. Default: --claude -
 	// ---- Setup -----------------------------------------------------------
 	"daemon": `usage: ppz daemon {start|stop|restart|login|logout} ...
 
-  ppz daemon start                start the local daemon
-  ppz daemon stop                 stop the local daemon (idempotent)
-  ppz daemon restart              stop + start
-  ppz daemon login URL -apikey K  log the daemon into a server
-  ppz daemon logout               clear the stored credential
+  ppz daemon start            start the local daemon
+  ppz daemon stop             stop the local daemon (idempotent)
+  ppz daemon restart          stop + start
+  ppz daemon login URL        log the daemon into a server (browser device flow)
+  ppz daemon logout           clear the stored credential
 
-'ppz login URL -apikey K' is a top-level shortcut for 'ppz daemon login'.`,
+'ppz login URL' is a top-level shortcut for 'ppz daemon login'.`,
 
 	"daemon start": `usage: ppz daemon start [--foreground]
 
@@ -341,17 +343,24 @@ Stop the local daemon. Idempotent — succeeds even if it isn't running.`,
 
 Stop then start the local daemon. Use after 'ppz upgrade' when 'ppz status' reports the daemon out of sync with the CLI.`,
 
-	"daemon login": `usage: ppz daemon login URL -apikey K
+	"daemon login": `usage: ppz daemon login URL [-apikey K] [-no-open]
 
-Log the daemon into a server with an API key. 'ppz login URL -apikey K' is the top-level shortcut.`,
+Log the daemon into a server. By default runs the browser device flow — just give the URL. 'ppz login URL' is the top-level shortcut. See 'ppz login --help' for the flags.`,
 
 	"daemon logout": `usage: ppz daemon logout
 
 Clear the stored credential.`,
 
-	"login": `usage: ppz login URL -apikey K
+	"login": `usage: ppz login URL [-apikey K] [-no-open]
 
-Top-level shortcut for 'ppz daemon login' — matches the gh/kubectl/az login muscle memory. Logs the daemon into a server with an API key.`,
+Log in to a server. By default this runs the browser device flow — just give the URL:
+
+    ppz login pipescloud.io
+
+Top-level shortcut for 'ppz daemon login' (matches the gh/kubectl/az login muscle memory).
+
+  -apikey K   skip the browser flow and authenticate with an API key instead.
+  -no-open    device flow: don't auto-open the browser (print the URL to visit).`,
 
 	// ---- Daemon state ----------------------------------------------------
 	"set": `usage: ppz set {handle HANDLE | namespace PATH}
