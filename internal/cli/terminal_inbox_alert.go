@@ -10,7 +10,7 @@ import (
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
-const terminalInboxAlertMessage = "Please run 'ppz read inbox' and action messages\n"
+const terminalInboxAlertMessage = "Please run 'ppz subs read' and action messages\n"
 
 type terminalInboxAlertConfig struct {
 	IdleAfter time.Duration
