@@ -6,46 +6,44 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
-const terminalInboxAlertMessage = "Please run 'ppz subs read' and action messages\n"
+const terminalSubsAlertMessage = "Please run 'ppz subs read' and action messages\n"
 
-type terminalInboxAlertConfig struct {
+type terminalSubsAlertConfig struct {
 	IdleAfter time.Duration
 	Cooldown  time.Duration
 	Message   string
 	// Harness identifies which agent harness the wrapped PTY is
 	// running (one of "claude" / "copilot" / "codex" / "agy" /
 	// "pi", or empty for non-agent shares). Used by
-	// submitInputForHarness to pick the right submit-key byte
+	// submitAlertToPTY to pick the right submit-key byte
 	// sequence — claude reads `\x1b[13u` (kitty keyboard protocol
 	// Enter), other harnesses' REPLs treat that escape as literal
 	// bytes and need a plain `\r` to submit.
 	Harness string
 }
 
-type terminalInboxAlertStateMachine struct {
+type terminalSubsAlertStateMachine struct {
 	mu            sync.Mutex
-	cfg           terminalInboxAlertConfig
+	cfg           terminalSubsAlertConfig
 	pending       bool
 	pendingSince  time.Time
 	lastUserInput time.Time
 	lastAlert     time.Time
 }
 
-func newTerminalInboxAlertStateMachine(cfg terminalInboxAlertConfig) *terminalInboxAlertStateMachine {
+func newTerminalSubsAlertStateMachine(cfg terminalSubsAlertConfig) *terminalSubsAlertStateMachine {
 	if cfg.IdleAfter <= 0 {
 		cfg.IdleAfter = 15 * time.Second
 	}
 	if cfg.Message == "" {
-		cfg.Message = terminalInboxAlertMessage
+		cfg.Message = terminalSubsAlertMessage
 	}
-	return &terminalInboxAlertStateMachine{cfg: cfg}
+	return &terminalSubsAlertStateMachine{cfg: cfg}
 }
 
-func (s *terminalInboxAlertStateMachine) ObserveUserInput(now time.Time, input []byte) {
+func (s *terminalSubsAlertStateMachine) ObserveUserInput(now time.Time, input []byte) {
 	if len(input) == 0 {
 		return
 	}
@@ -54,7 +52,12 @@ func (s *terminalInboxAlertStateMachine) ObserveUserInput(now time.Time, input [
 	s.lastUserInput = now
 }
 
-func (s *terminalInboxAlertStateMachine) ObserveInboxUnread(now time.Time) {
+// ObserveSubsUnread flips the pending bit (idempotent on repeat
+// observations within a single pending window). The first call
+// after a clear stamps pendingSince so the idle-after gate can
+// measure how long the unread has been outstanding without user
+// input.
+func (s *terminalSubsAlertStateMachine) ObserveSubsUnread(now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.pending {
@@ -63,7 +66,7 @@ func (s *terminalInboxAlertStateMachine) ObserveInboxUnread(now time.Time) {
 	s.pending = true
 }
 
-func (s *terminalInboxAlertStateMachine) ReadyAlert(now time.Time) string {
+func (s *terminalSubsAlertStateMachine) ReadyAlert(now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.ready(now) {
@@ -74,7 +77,7 @@ func (s *terminalInboxAlertStateMachine) ReadyAlert(now time.Time) string {
 	return s.cfg.Message
 }
 
-func (s *terminalInboxAlertStateMachine) ready(now time.Time) bool {
+func (s *terminalSubsAlertStateMachine) ready(now time.Time) bool {
 	if !s.pending {
 		return false
 	}
@@ -90,22 +93,22 @@ func (s *terminalInboxAlertStateMachine) ready(now time.Time) bool {
 	return true
 }
 
-type terminalInboxAlertPump struct {
+type terminalSubsAlertPump struct {
 	mu     sync.Mutex
-	sm     *terminalInboxAlertStateMachine
+	sm     *terminalSubsAlertStateMachine
 	pty    io.Writer
 	write  func(string)
 	alert  bool
 	buffer []byte
 }
 
-func newTerminalInboxAlertPump(cfg terminalInboxAlertConfig, pty io.Writer) *terminalInboxAlertPump {
+func newTerminalSubsAlertPump(cfg terminalSubsAlertConfig, pty io.Writer) *terminalSubsAlertPump {
 	if cfg.Message == "" {
-		cfg.Message = terminalInboxAlertMessage
+		cfg.Message = terminalSubsAlertMessage
 	}
 	harness := cfg.Harness
-	return &terminalInboxAlertPump{
-		sm:  newTerminalInboxAlertStateMachine(cfg),
+	return &terminalSubsAlertPump{
+		sm:  newTerminalSubsAlertStateMachine(cfg),
 		pty: pty,
 		write: func(message string) {
 			_ = submitAlertToPTY(pty, harness, message, time.Sleep)
@@ -113,8 +116,8 @@ func newTerminalInboxAlertPump(cfg terminalInboxAlertConfig, pty io.Writer) *ter
 	}
 }
 
-func newTerminalInboxAlertPumpForPTY(cfg terminalInboxAlertConfig, pty *os.File) *terminalInboxAlertPump {
-	pump := newTerminalInboxAlertPump(cfg, pty)
+func newTerminalSubsAlertPumpForPTY(cfg terminalSubsAlertConfig, pty *os.File) *terminalSubsAlertPump {
+	pump := newTerminalSubsAlertPump(cfg, pty)
 	harness := cfg.Harness
 	pump.write = func(message string) {
 		restore := setPTYInputEcho(pty.Fd(), false)
@@ -124,15 +127,20 @@ func newTerminalInboxAlertPumpForPTY(cfg terminalInboxAlertConfig, pty *os.File)
 	return pump
 }
 
-func (p *terminalInboxAlertPump) ObserveUserInput(now time.Time, input []byte) {
+func (p *terminalSubsAlertPump) ObserveUserInput(now time.Time, input []byte) {
 	p.sm.ObserveUserInput(now, input)
 }
 
-func (p *terminalInboxAlertPump) ObserveInboxMessage(now time.Time, msg cliproto.ReadMessage) {
-	p.sm.ObserveInboxUnread(now)
+// ObserveSubsUnread is the source-side handle the forwardSubsAlerts
+// loop calls each time SubsWait returns a reply with unread rows.
+// The pump only needs to know "something is unread" — the row
+// detail is for the agent's subsequent `ppz subs read`, not for
+// the alert text — so this takes only `now`.
+func (p *terminalSubsAlertPump) ObserveSubsUnread(now time.Time) {
+	p.sm.ObserveSubsUnread(now)
 }
 
-func (p *terminalInboxAlertPump) Flush(now time.Time) bool {
+func (p *terminalSubsAlertPump) Flush(now time.Time) bool {
 	alert := p.sm.ReadyAlert(now)
 	if alert == "" {
 		return false
@@ -178,13 +186,13 @@ func submitAlertToPTY(w io.Writer, harness, message string, sleep func(time.Dura
 	return err
 }
 
-func (p *terminalInboxAlertPump) BeginAlertMode(now time.Time) {
+func (p *terminalSubsAlertPump) BeginAlertMode(now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.alert = true
 }
 
-func (p *terminalInboxAlertPump) EndAlertMode(now time.Time) {
+func (p *terminalSubsAlertPump) EndAlertMode(now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.alert = false
@@ -194,7 +202,7 @@ func (p *terminalInboxAlertPump) EndAlertMode(now time.Time) {
 	}
 }
 
-func (p *terminalInboxAlertPump) ForwardUserInput(now time.Time, input []byte) bool {
+func (p *terminalSubsAlertPump) ForwardUserInput(now time.Time, input []byte) bool {
 	if len(input) == 0 {
 		return true
 	}

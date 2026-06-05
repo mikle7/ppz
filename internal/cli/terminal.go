@@ -339,12 +339,17 @@ func cmdTerminalShare(args []string) error {
 	// the alert pump within the harness 30s ceiling. Production
 	// defaults (15s idle, 30s cooldown) stand unless explicitly
 	// overridden; the env names are intentionally test-flavored.
+	// TODO(naming): legacy "INBOX" name preserved across the rename to
+	// SubsAlert; the operator-facing names are undocumented and only
+	// referenced by the two share-inbox-alerts-survives-* e2e
+	// fixtures, so renaming would force a coupled fixture change
+	// without benefit. Worth a back-compat-friendly rename pass later.
 	idleAfter := envDurationMS("PPZ_TERMINAL_INBOX_IDLE_MS", 15*time.Second)
 	cooldown := envDurationMS("PPZ_TERMINAL_INBOX_COOLDOWN_MS", 30*time.Second)
-	inboxAlerts := newTerminalInboxAlertPumpForPTY(terminalInboxAlertConfig{
+	subsAlerts := newTerminalSubsAlertPumpForPTY(terminalSubsAlertConfig{
 		IdleAfter: idleAfter,
 		Cooldown:  cooldown,
-		Message:   terminalInboxAlertMessage,
+		Message:   terminalSubsAlertMessage,
 		// PPZ_AGENT_HARNESS is exported into this process's env by
 		// setAgentEnv (agent.go) when the share is launched via
 		// `ppz agent create --<harness>`; standalone `ppz terminal
@@ -356,7 +361,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		flushInboxAlerts(ctx, inboxAlerts)
+		flushSubsAlerts(ctx, subsAlerts)
 	}()
 
 	// Local stdin → PTY master with a control-response filter. The local
@@ -379,12 +384,12 @@ func cmdTerminalShare(args []string) error {
 				filtered, p := filterControlResponses(input)
 				pending = p
 				if len(filtered) > 0 {
-					inboxAlerts.ForwardUserInput(time.Now(), filtered)
+					subsAlerts.ForwardUserInput(time.Now(), filtered)
 				}
 			}
 			if err != nil {
 				if len(pending) > 0 {
-					inboxAlerts.ForwardUserInput(time.Now(), pending)
+					subsAlerts.ForwardUserInput(time.Now(), pending)
 				}
 				return
 			}
@@ -410,7 +415,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		forwardInboxAlerts(ctx, handle, inboxAlerts)
+		forwardSubsAlerts(ctx, handle, subsAlerts)
 	}()
 
 	// Heartbeat ticker: publishes <handle>.heartbeat every
@@ -451,7 +456,7 @@ func cmdTerminalShare(args []string) error {
 	return nil
 }
 
-func flushInboxAlerts(ctx context.Context, pump *terminalInboxAlertPump) {
+func flushSubsAlerts(ctx context.Context, pump *terminalSubsAlertPump) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -753,11 +758,11 @@ func (r *seenIDRing) add(id string) {
 	r.idx = (r.idx + 1) % r.cap
 }
 
-// forwardInboxAlerts blocks on `ppz subs wait` repeatedly and feeds
+// forwardSubsAlerts blocks on `ppz subs wait` repeatedly and feeds
 // each level-triggered wakeup with unread rows to the alert pump.
 // Resilient to daemon-NC swaps (logout, re-login, refresh-time
 // rotation) by the same outer-redial pattern as forwardStdin: on
-// any IPC error, fall out of streamForwardInboxAlertsOnce, wait
+// any IPC error, fall out of streamForwardSubsAlertsOnce, wait
 // 250ms, and reconnect.
 //
 // Without the wait/redial, a single daemon recycle silently
@@ -778,12 +783,12 @@ func (r *seenIDRing) add(id string) {
 // repeated "unread" observations into a single alert per cooldown
 // window. forwardStdin still uses seenIDRing for its own
 // per-message Follow path; the type stays.
-func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxAlertPump) {
+func forwardSubsAlerts(ctx context.Context, handle string, pump *terminalSubsAlertPump) {
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		streamForwardInboxAlertsOnce(ctx, handle, pump)
+		streamForwardSubsAlertsOnce(ctx, handle, pump)
 		if ctx.Err() != nil {
 			return
 		}
@@ -795,7 +800,7 @@ func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxA
 	}
 }
 
-// streamForwardInboxAlertsOnce runs the SubsWait/observe loop on a
+// streamForwardSubsAlertsOnce runs the SubsWait/observe loop on a
 // single IPC connection until it errors (daemon stop, NC swap), at
 // which point it returns so the outer redial loop can reconnect.
 //
@@ -812,7 +817,7 @@ func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxA
 // runs `ppz subs read` and clears the cursor. False-positive empty
 // wakeups (a documented `subs wait` behaviour) are silently
 // re-armed without flipping pending.
-func streamForwardInboxAlertsOnce(ctx context.Context, handle string, pump *terminalInboxAlertPump) {
+func streamForwardSubsAlertsOnce(ctx context.Context, handle string, pump *terminalSubsAlertPump) {
 	for {
 		if ctx.Err() != nil {
 			return
@@ -823,7 +828,7 @@ func streamForwardInboxAlertsOnce(ctx context.Context, handle string, pump *term
 			return
 		}
 		if subsReplyHasUnread(reply) {
-			pump.ObserveInboxMessage(time.Now(), cliproto.ReadMessage{})
+			pump.ObserveSubsUnread(time.Now())
 		}
 		select {
 		case <-ctx.Done():
