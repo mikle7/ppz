@@ -127,17 +127,23 @@ func renderTopLevel() string {
 	return b.String()
 }
 
-// wantsHelp reports whether args is asking for help: a -h / --help / help
-// token appearing before any "--" terminator. Stopping at "--" lets
-// passthrough verbs forward help flags to the wrapped command —
-// `ppz command H -- --help` and `ppz terminal share H -- cmd --help` must
-// reach the command, not print ppz's help.
+// wantsHelp reports whether args is asking for help: a -h / --help flag
+// appearing before any "--" terminator. Stopping at "--" lets passthrough
+// verbs forward help flags to the wrapped command — `ppz command H -- --help`
+// and `ppz terminal share H -- cmd --help` must reach the command, not print
+// ppz's help.
+//
+// It deliberately does NOT match the bare word "help": for a payload/handle-
+// bearing verb that would swallow real input (`ppz send alice help` must send
+// the message "help"; `ppz command H help` must type "help"). The bare-word
+// form is served by top-level `ppz help <verb>` (root.go) and by group
+// dispatchers, where the token sits in a fixed subverb slot, not a payload.
 func wantsHelp(args []string) bool {
 	for _, a := range args {
 		if a == "--" {
 			return false
 		}
-		if a == "-h" || a == "--help" || a == "help" {
+		if a == "-h" || a == "--help" {
 			return true
 		}
 	}

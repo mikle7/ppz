@@ -73,10 +73,14 @@ func TestWantsHelp(t *testing.T) {
 	}{
 		{[]string{"--help"}, true},
 		{[]string{"-h"}, true},
-		{[]string{"help"}, true},
 		{[]string{"foo", "--help"}, true},
 		{nil, false},
 		{[]string{"foo", "bar"}, false},
+		// The bare word "help" is NOT a help request at the leaf level — it's
+		// a legitimate payload/handle/instruction and must pass through.
+		{[]string{"help"}, false},          // e.g. send to a handle named "help"
+		{[]string{"alice", "help"}, false}, // ppz send alice help → send "help"
+		{[]string{"H", "help"}, false},     // ppz command H help → type "help"
 		{[]string{"H", "--", "--help"}, false},        // ppz command H -- --help
 		{[]string{"H", "--", "cmd", "--help"}, false}, // ppz terminal share H -- cmd --help
 	}
