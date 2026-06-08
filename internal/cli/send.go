@@ -52,6 +52,10 @@ var (
 // line gains an ` ack=requested` token to remind the operator that the
 // flag took effect.
 func cmdSend(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "send")
+		return nil
+	}
 	fs := flag.NewFlagSet("send", flag.ContinueOnError)
 	fs.SetOutput(sendErr)
 	subject := fs.String("subject", "", "envelope-level subject; renders as `[subject] payload` in tabular read")
@@ -59,14 +63,14 @@ func cmdSend(args []string) error {
 	requestAck := fs.Bool("request-ack", false, "ask the recipient's daemon to auto-emit ack:read on cursor advance (best-effort, non-blocking)")
 	target, payload, flagArgs, err := splitSendArgs(args)
 	if err != nil {
-		fmt.Fprintln(sendErr, "usage: ppz send <handle>[.<pipe>] <payload> [--subject S] [--in-reply-to ID] [--request-ack]")
+		printHelp(sendErr, "send")
 		os.Exit(2)
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		os.Exit(2)
 	}
 	if target == "" || payload == "" {
-		fmt.Fprintln(sendErr, "usage: ppz send <handle>[.<pipe>] <payload> [--subject S] [--in-reply-to ID] [--request-ack]")
+		printHelp(sendErr, "send")
 		os.Exit(2)
 	}
 

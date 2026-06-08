@@ -42,6 +42,10 @@ import (
 // `--tail` keeps streaming new messages until SIGINT, advancing the
 // cursor as live messages arrive so the unread count stays truthful.
 func cmdRead(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "read")
+		return nil
+	}
 	fs := flag.NewFlagSet("read", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "emit JSON envelopes instead of payload text")
 	follow := fs.Bool("tail", false, "drain unread messages then keep streaming live until SIGINT")
@@ -50,9 +54,7 @@ func cmdRead(args []string) error {
 	bare := fs.Bool("bare", false, "force legacy payload-only output (script-stable opt-out from the v0.23 tabular default on inbox-shaped pipes)")
 	target, flagArgs, err := splitReadArgs(args, false)
 	if err != nil || target == "" {
-		fmt.Fprintln(os.Stderr, "usage: ppz read <handle>.<pipe> [--tail --json --tty --raw --bare]")
-		fmt.Fprintln(os.Stderr, "  (filter flags -l/--skip/--since live on `ppz reread`)")
-		os.Exit(2)
+		usageExit("read")
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		return err

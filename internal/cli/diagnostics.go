@@ -42,6 +42,10 @@ import (
 //	                   the path; the operator attaches it to a bug
 //	                   report.
 func cmdDiagnostics(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "diagnostics")
+		return nil
+	}
 	var (
 		asJSON   bool
 		bundle   bool

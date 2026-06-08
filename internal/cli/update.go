@@ -144,9 +144,12 @@ func fetchUpdateManifest(ctx context.Context) (updateManifest, error) {
 }
 
 func cmdUpgrade(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "upgrade")
+		return nil
+	}
 	if len(args) != 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz upgrade")
-		os.Exit(2)
+		usageExit("upgrade")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

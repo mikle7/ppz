@@ -13,8 +13,11 @@ import (
 // exists; the verb is grouped so we can grow it (destroy, list, etc.)
 // without re-shaping the CLI surface.
 func cmdAgentGroup(args []string) error {
+	if groupHelp("agent", args) {
+		return nil
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz agent create <name> [<prompt>] [flags...]")
+		printHelp(os.Stderr, "agent")
 		os.Exit(2)
 	}
 	switch args[0] {

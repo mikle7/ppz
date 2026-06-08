@@ -16,8 +16,11 @@ import (
 
 // cmdPipeGroup dispatches `ppz pipe <subverb>` to create / destroy.
 func cmdPipeGroup(args []string) error {
+	if groupHelp("pipe", args) {
+		return nil
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz pipe {create|destroy} <name> [...]")
+		printHelp(os.Stderr, "pipe")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -51,8 +54,7 @@ func cmdPipeCreate(args []string) error {
 		return err
 	}
 	if target == "" {
-		fmt.Fprintln(os.Stderr, "usage: ppz pipe create [<handle>.]<name> [--ttl=DUR --max-msgs=N --max-bytes=B]")
-		os.Exit(2)
+		usageExit("pipe create")
 	}
 
 	handle, name, err := splitHandleName(target)
@@ -105,9 +107,7 @@ func cmdPipeDestroy(args []string) error {
 	}
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz pipe destroy [<handle>.]<name>")
-		fmt.Fprintln(os.Stderr, "       ppz pipe destroy --recursive HANDLE")
-		os.Exit(2)
+		usageExit("pipe destroy")
 	}
 
 	if *recursive {

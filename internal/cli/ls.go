@@ -44,6 +44,10 @@ import (
 // --json and --iso are mutually exclusive — JSON mode always emits ISO
 // timestamps, so --iso would be a no-op tag.
 func cmdLs(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "ls")
+		return nil
+	}
 	fs := flag.NewFlagSet("ls", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "emit one JSON object per row (agent-friendly, full payload)")
 	iso := fs.Bool("iso", false, "render last-message column as RFC3339 timestamp instead of relative duration")

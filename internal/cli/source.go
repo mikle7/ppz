@@ -31,8 +31,11 @@ import (
 //                                 covered by `ppz pipe destroy
 //                                 --recursive`.
 func cmdSourceGroup(args []string) error {
+	if groupHelp("source", args) {
+		return nil
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source {create|destroy} ...")
+		printHelp(os.Stderr, "source")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -53,8 +56,7 @@ func cmdSourceGroup(args []string) error {
 // which provision richer pipe bundles.
 func cmdSourceCreate(args []string) error {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source create HANDLE")
-		os.Exit(2)
+		usageExit("source create")
 	}
 	var reply cliproto.CreateReply
 	if err := daemon.Call(ipcSocket(), cliproto.IPCCreate,
@@ -79,8 +81,7 @@ func cmdSourceCreate(args []string) error {
 // continues, and the command exits non-zero if any operation failed.
 func cmdSourceDestroy(args []string) error {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz source destroy PATTERN")
-		os.Exit(2)
+		usageExit("source destroy")
 	}
 	pattern := args[0]
 

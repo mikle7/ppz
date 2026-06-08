@@ -11,7 +11,10 @@ import (
 // the daemon or the server — entirely local, useful for diagnosing which
 // binary is on PATH.
 func cmdVersion(args []string) error {
-	_ = args
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "version")
+		return nil
+	}
 	fmt.Fprintf(os.Stdout, "ppz %s (%s)\n", version.Version, version.BuildSHA)
 	maybeNotifyUpdate()
 	return nil

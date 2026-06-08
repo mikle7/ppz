@@ -21,22 +21,23 @@ import (
 //
 // Locked decision #20 in OSS-PIPESCLOUD-ARCHITECTURE-SPLIT.md.
 func cmdSet(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "set")
+		return nil
+	}
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz set <key> <value>")
-		os.Exit(2)
+		usageExit("set")
 	}
 	key := args[0]
 	switch key {
 	case "handle":
 		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "usage: ppz set handle HANDLE")
-			os.Exit(2)
+			usageExit("set")
 		}
 		return setHandle(args[1])
 	case "namespace":
 		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "usage: ppz set namespace PATH")
-			os.Exit(2)
+			usageExit("set")
 		}
 		return setNamespace(args[1])
 	}
@@ -52,9 +53,12 @@ func cmdSet(args []string) error {
 //	ppz unset handle       — clear the daemon's current handle
 //	                         (was `ppz source clear` pre-Phase 1)
 func cmdUnset(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "unset")
+		return nil
+	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz unset <key>")
-		os.Exit(2)
+		usageExit("unset")
 	}
 	key := args[0]
 	switch key {
@@ -73,9 +77,12 @@ func cmdUnset(args []string) error {
 // Returns the value to stdout (single-line, no trailing whitespace
 // beyond \n) so callers can capture with $(ppz get handle).
 func cmdGet(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "get")
+		return nil
+	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ppz get <key>")
-		os.Exit(2)
+		usageExit("get")
 	}
 	key := args[0]
 	switch key {

@@ -22,6 +22,10 @@ func useColor() bool {
 }
 
 func cmdStatus(args []string) error {
+	if wantsHelp(args) {
+		printHelp(os.Stdout, "status")
+		return nil
+	}
 	var st cliproto.StatusReply
 	err := daemon.Call(ipcSocket(), cliproto.IPCStatus,
 		cliproto.StatusRequest{Session: sessionID()}, &st)
