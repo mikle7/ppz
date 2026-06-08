@@ -61,6 +61,15 @@ type Daemon struct {
 	// new NC. See follow_registry.go.
 	Follows *followRegistry
 
+	// Watches tracks live core-NATS subs from handleSubsWait and
+	// handleListWatch. Used by swapNCLocked to re-arm them on the new
+	// NC when the connection is replaced — without this, oldNC.Close()
+	// silently invalidates the sub, the wakeup chan never fires, and
+	// the handler hangs until its 30s IPC deadline (the silent-loss
+	// bug surfaced by the post-rotation-auth-violation diagnostics
+	// where ~80 NC swaps in 12h compounded). See watch_registry.go.
+	Watches *watchRegistry
+
 	// ncMu serializes every NC rebuild/swap so the refresh goroutine
 	// (OnRefreshed) and any number of concurrent ensureNATS callers
 	// coalesce into a single reconnect per JWT rotation instead of
@@ -96,6 +105,7 @@ func New(home, sock string) *Daemon {
 		NATSEvents: newNATSEventRing(natsEventRingCap),
 		Heartbeats: NewHeartbeatCache(),
 		Follows:    newFollowRegistry(),
+		Watches:    newWatchRegistry(),
 		dial:       connectNATSWithRefresh,
 	}
 }
@@ -198,10 +208,47 @@ func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 	if d.Follows != nil {
 		d.Follows.closeAll()
 	}
+	// Install newNC BEFORE rearming watches and closing oldNC: any
+	// handler racing with this swap that captures d.NC under ncMu
+	// after we release it must see the new conn, not a transient nil.
+	// (We hold ncMu here, so no concurrent reader can interleave; the
+	// ordering matters only for the rearmAll loop below, which itself
+	// re-Subscribes on newNC.)
+	d.NC = newNC
+	// Rearm wait/watch core-NATS subs on the new conn before closing
+	// the old one. For the duration of rearmAll each entry has a sub
+	// on BOTH conns, so a message arriving mid-swap is observed
+	// regardless of which conn the server delivers on — no message-
+	// arrival gap. Failure-mode is fail-soft (see watch_registry.go);
+	// nil-safe so the swap path stays functional when tests construct
+	// a Daemon literal without Watches.
+	if d.Watches != nil {
+		d.Watches.rearmAll(newNC, func(reason string) {
+			if d.NATSEvents != nil {
+				d.recordNATSEvent(NATSEvent{
+					Type:   "warn",
+					At:     time.Now(),
+					Caller: "rearmWatches/" + caller,
+					NCID:   newID,
+					JWTExp: d.Refresh.JWTExp(),
+					Reason: reason,
+				})
+			}
+		})
+		// Flush newNC so the server has acked our SUBs BEFORE we close
+		// oldNC. Without this, the "live sub on both conns" guarantee
+		// only holds client-side: the server can process oldNC's close
+		// before newNC's still-buffered SUBs, dropping any publish that
+		// lands in the sliver — the same silent-loss failure mode, just
+		// rarer. The deadline is a defence against a wedged newNC; on
+		// timeout we proceed (the close fires anyway, fail-soft).
+		if newNC != nil {
+			_ = newNC.FlushTimeout(2 * time.Second)
+		}
+	}
 	if oldNC != nil && oldNC != newNC {
 		oldNC.Close()
 	}
-	d.NC = newNC
 	// Stamp the JWT generation this connection was dialed against so the
 	// rebuildNC double-check (ncExp vs Refresh.JWTExp) is accurate for EVERY
 	// swap path — handleLogin and the watcher included, not just rebuildNC.

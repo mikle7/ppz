@@ -170,8 +170,13 @@ func (d *Daemon) handleSubsWait(ctx context.Context, conn net.Conn, params json.
 	// handleListWatch) so an arrival between snapshot and subscribe can't
 	// strand the caller. Wake on any publish matching a subscribed subject;
 	// false positives are harmless — the next snapshot decides.
+	//
+	// armWatch registers the sub with d.Watches so a swapNCLocked rearms
+	// it onto the new conn — without that, a JWT-refresh swap (~10min
+	// cadence in production) silently kills the sub anchored to oldNC
+	// and the wakeup never fires until the CLI's IPC deadline trips.
 	wakeup := make(chan struct{}, 1)
-	sub, err := d.NC.Subscribe(accountID.String()+".>", func(msg *nats.Msg) {
+	cb := func(msg *nats.Msg) {
 		for _, iv := range parseSubjectInterpretations(msg.Subject) {
 			if matchAnyTarget(iv.Handle, iv.Pipe, subjects) {
 				select {
@@ -181,12 +186,13 @@ func (d *Daemon) handleSubsWait(ctx context.Context, conn net.Conn, params json.
 				return
 			}
 		}
-	})
-	if err != nil {
-		writeIPCErr(conn, cliproto.New(cliproto.ENATSUnreachable))
+	}
+	entry, e := d.armWatch(accountID.String()+".>", cb)
+	if e != nil {
+		writeIPCErr(conn, e)
 		return
 	}
-	defer sub.Unsubscribe()
+	defer d.Watches.remove(entry)
 
 	reply, e := d.subsSnapshot(ctx, req.Session)
 	if e != nil {
