@@ -2,10 +2,12 @@ package daemon
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,5 +172,76 @@ func TestCallWait_BlocksPastTimeout(t *testing.T) {
 		}
 	case <-time.After(ceiling):
 		t.Fatalf("CallWait did not return within %s even though the daemon replied after %s", ceiling, replyDelay)
+	}
+}
+
+// TestCallWaitCtx_AbortsOnContextCancel pins the ctx-cancel contract
+// CallWaitCtx adds on top of CallWait. The share-side alert pump's
+// SubsWait loop has to unblock when cmdTerminalShare cancels its
+// context (wrapped child exit → wg.Wait() in the share). Without
+// ctx propagation into the IPC client, the in-flight Decode blocks
+// forever and the share process never exits — every terminal e2e
+// fixture that expects clean shutdown then times out at 30s. This
+// test arms a fake daemon that never replies, calls CallWaitCtx
+// with a ctx we cancel after 50ms, and asserts the call returns
+// within 5s (well below the 30s e2e ceiling) with a non-nil error.
+//
+// Strict regression guard: a refactor that points CallWaitCtx back
+// at CallWait (or drops the ctx watcher in the shared call()) makes
+// this hang and the time.After(ceiling) fires.
+func TestCallWaitCtx_AbortsOnContextCancel(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "ppz-ipc-ctx-")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "daemon.sock")
+
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen fake daemon: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	// Fake daemon: accept, drain the request, then HOLD the conn open
+	// without ever sending a reply. CallWaitCtx without ctx hooked up
+	// would block in Decode forever.
+	go func() {
+		conn, aErr := ln.Accept()
+		if aErr != nil {
+			return
+		}
+		defer conn.Close()
+		_, _ = bufio.NewReader(conn).ReadBytes('\n')
+		// Wait for the test's defer to close ln, which doesn't drop
+		// already-accepted conns — so we just block on a sleep here.
+		// The test asserts CallWaitCtx returns before this fires.
+		time.Sleep(10 * time.Second)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	const ceiling = 5 * time.Second
+	done := make(chan error, 1)
+	go func() {
+		var reply cliproto.ListReply
+		done <- CallWaitCtx(ctx, sock, cliproto.IPCSubsWait,
+			cliproto.SubsWaitRequest{Session: "sid-1"}, &reply)
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatalf("CallWaitCtx returned nil after ctx cancel; want a non-nil error so the caller knows to give up")
+		}
+		// The exact error text isn't load-bearing — it's an "ipc decode" wrap of
+		// a closed-conn read. We just verify it's a recognisable IPC failure
+		// (not, e.g., the success path returning a zero-value reply).
+		if !strings.Contains(err.Error(), "ipc") {
+			t.Errorf("CallWaitCtx error after cancel = %q; want it to mention `ipc` so callers can pattern-match the post-cancel failure mode", err.Error())
+		}
+	case <-time.After(ceiling):
+		t.Fatalf("CallWaitCtx did not return within %s after ctx cancel; the conn-close watcher inside call() is wired wrong, the share's wg.Wait() will block forever on shutdown", ceiling)
 	}
 }

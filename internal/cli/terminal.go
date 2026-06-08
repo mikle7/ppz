@@ -823,7 +823,15 @@ func streamForwardSubsAlertsOnce(ctx context.Context, handle string, pump *termi
 			return
 		}
 		var reply cliproto.ListReply
-		if err := daemon.CallWait(ipcSocket(), cliproto.IPCSubsWait,
+		// CallWaitCtx (not CallWait) so the in-flight blocking SubsWait
+		// unblocks when the share's ctx is cancelled. Without ctx
+		// cancellation here, cmd.Wait()→cancel()→wg.Wait() in
+		// cmdTerminalShare blocks forever because this goroutine is
+		// stuck inside a deadline-less IPC Decode — the share process
+		// never exits and every terminal-related e2e fixture that
+		// expects clean shutdown (`wait_for "! kill -0 $SHARE_PID"`)
+		// times out at 30s.
+		if err := daemon.CallWaitCtx(ctx, ipcSocket(), cliproto.IPCSubsWait,
 			cliproto.SubsWaitRequest{Session: handle}, &reply); err != nil {
 			return
 		}
