@@ -150,49 +150,37 @@ func (r *watchRegistry) rearmAll(newNC *nats.Conn, warn func(reason string)) {
 }
 
 // armWatch creates a core-NATS subscription anchored to the daemon's
-// current NC, registers it with d.Watches, and self-heals if a swap
-// landed between the NC capture and the registry add(). Returns the
-// entry — callers MUST defer d.Watches.remove(entry) on handler exit.
+// current NC, registers it with d.Watches, and returns the entry —
+// callers MUST defer d.Watches.remove(entry) on handler exit.
 //
-// The post-add NC recheck closes the only race window remaining after
-// the registry's rearmAll: a swap that lands AFTER we read d.NC but
-// BEFORE we add the entry would otherwise rearm zero entries (we're
-// not in the registry yet) AND leave us anchored to oldNC (which is
-// about to be closed). The recheck detects "NC moved" and resubscribes
-// on the now-current NC via the same swapSub path rearmAll uses.
+// Holds ncMu across the whole operation (capture → Subscribe → add),
+// making it mutually exclusive with swapNCLocked. That collapses the
+// race class an earlier "post-add recheck" version of this function
+// tried to patch: a swap landing between the NC capture and the
+// registry add() left our sub on the about-to-die NC AND outside the
+// registry rearmAll could rescue. The recheck itself could lose a
+// further race against a second swap and strand the entry on a closed
+// conn — see PR review on #115. ncMu is the canonical guard for
+// d.NC; rearmAll already calls nc.Subscribe under it, so this is
+// consistent with the existing invariant.
+//
+// nc.Subscribe is local-only (no daemon callbacks), so holding ncMu
+// for its duration introduces no reentrancy risk and matches the
+// rearmAll pattern.
 //
 // Returns ENATSUnreachable on no-connection or Subscribe failure —
 // the same error class the handlers raised before this refactor.
 func (d *Daemon) armWatch(subject string, cb nats.MsgHandler) (*watchEntry, *cliproto.Error) {
 	d.ncMu.Lock()
-	nc := d.NC
-	d.ncMu.Unlock()
-	if nc == nil {
+	defer d.ncMu.Unlock()
+	if d.NC == nil {
 		return nil, cliproto.New(cliproto.ENATSUnreachable)
 	}
-	sub, err := nc.Subscribe(subject, cb)
+	sub, err := d.NC.Subscribe(subject, cb)
 	if err != nil {
 		return nil, cliproto.New(cliproto.ENATSUnreachable)
 	}
 	entry := &watchEntry{subject: subject, cb: cb, sub: sub}
 	d.Watches.add(entry)
-
-	// Recheck: if a swap landed between our nc capture and add(), our
-	// sub is on the about-to-die NC and rearmAll didn't see us (we
-	// weren't registered yet). Resubscribe on the current NC.
-	d.ncMu.Lock()
-	currentNC := d.NC
-	d.ncMu.Unlock()
-	if currentNC != nil && currentNC != nc {
-		if newSub, rerr := currentNC.Subscribe(subject, cb); rerr == nil {
-			if oldSub := d.Watches.swapSub(entry, newSub); oldSub != nil {
-				_ = oldSub.Unsubscribe()
-			} else {
-				_ = newSub.Unsubscribe()
-			}
-		}
-	}
 	return entry, nil
 }
-
-

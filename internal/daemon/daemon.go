@@ -235,6 +235,16 @@ func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 				})
 			}
 		})
+		// Flush newNC so the server has acked our SUBs BEFORE we close
+		// oldNC. Without this, the "live sub on both conns" guarantee
+		// only holds client-side: the server can process oldNC's close
+		// before newNC's still-buffered SUBs, dropping any publish that
+		// lands in the sliver — the same silent-loss failure mode, just
+		// rarer. The deadline is a defence against a wedged newNC; on
+		// timeout we proceed (the close fires anyway, fail-soft).
+		if newNC != nil {
+			_ = newNC.FlushTimeout(2 * time.Second)
+		}
 	}
 	if oldNC != nil && oldNC != newNC {
 		oldNC.Close()

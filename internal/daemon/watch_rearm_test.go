@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -138,27 +137,30 @@ func TestSwapNC_RearmsArmedWatch_AcrossMultipleSwaps(t *testing.T) {
 	}
 }
 
-// TestArmWatch_Stress_RegisterRacingWithSwap exercises the recheck
-// arm of armWatch under -race: many concurrent armWatch + swap pairs
-// must never leave a handler with a dead sub or trip the race
-// detector. The recheck closes the window where a swap lands between
-// our NC capture and our registry add().
-func TestArmWatch_Stress_RegisterRacingWithSwap(t *testing.T) {
+// TestArmWatch_Stress_NoStrandedWatchesAcrossSwaps stresses the
+// armWatch + swap interaction under -race. Each worker arms a watch
+// then keeps it alive while a swap goroutine rotates the NC, and a
+// final "did-we-see-it" probe asserts EVERY surviving worker observes
+// a publish on the post-storm NC. A single stranded entry — sub
+// anchored to a closed conn after a race between armWatch and swap
+// — would cause that worker's probe to time out, surfacing the
+// silent-loss class the PR aims to close. (An earlier version only
+// checked `fired > 0`, which let a single stranded entry pass.)
+func TestArmWatch_Stress_NoStrandedWatchesAcrossSwaps(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stress test")
 	}
 	d, ncA := newDaemonWithEmbeddedNATS(t)
 	url := ncA.ConnectedUrl()
 
-	var wg sync.WaitGroup
-	var fired int64
-	subj := "TEST.stress.race"
+	const workers = 20
+	subj := "TEST.stress.no.strand"
 
-	// Swap goroutine: continuously rotates the NC.
+	// Phase 1: workers arm + swap goroutine rotates concurrently.
 	stopSwap := make(chan struct{})
-	wg.Add(1)
+	swapDone := make(chan struct{})
 	go func() {
-		defer wg.Done()
+		defer close(swapDone)
 		for {
 			select {
 			case <-stopSwap:
@@ -170,60 +172,80 @@ func TestArmWatch_Stress_RegisterRacingWithSwap(t *testing.T) {
 				return
 			}
 			d.swapNC("stress", nc)
-			time.Sleep(1 * time.Millisecond)
+			time.Sleep(500 * time.Microsecond)
 		}
 	}()
 
-	// Worker goroutines: each arms a watch, waits for a publish, exits.
-	const workers = 20
+	type worker struct {
+		entry *watchEntry
+		ch    chan struct{}
+	}
+	workersList := make([]*worker, workers)
+	var armWG sync.WaitGroup
 	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		armWG.Add(1)
+		go func(i int) {
+			defer armWG.Done()
+			w := &worker{ch: make(chan struct{}, 1)}
 			entry, ipcErr := d.armWatch(subj, func(*nats.Msg) {
-				atomic.AddInt64(&fired, 1)
+				select {
+				case w.ch <- struct{}{}:
+				default:
+				}
 			})
 			if ipcErr != nil {
 				return
 			}
-			defer d.Watches.remove(entry)
-			time.Sleep(50 * time.Millisecond)
-		}()
+			w.entry = entry
+			workersList[i] = w
+		}(i)
+	}
+	armWG.Wait()
+
+	// Let the swap storm run a bit more after the arms complete, so
+	// the rearmAll path is exercised for already-registered entries.
+	time.Sleep(100 * time.Millisecond)
+	close(stopSwap)
+	<-swapDone
+
+	// Phase 2: probe every surviving worker. Publishing on d.NC must
+	// fire every entry's callback. A stranded entry — sub on a closed
+	// pre-swap NC — would never see this publish.
+	d.ncMu.Lock()
+	finalNC := d.NC
+	d.ncMu.Unlock()
+	if finalNC == nil {
+		t.Fatal("d.NC is nil after stress")
+	}
+	if err := finalNC.Publish(subj, []byte("probe")); err != nil {
+		t.Fatalf("probe publish: %v", err)
+	}
+	if err := finalNC.FlushTimeout(2 * time.Second); err != nil {
+		t.Fatalf("probe flush: %v", err)
 	}
 
-	// Publisher goroutine: drives messages on the daemon's current NC
-	// every few ms. Each publish should fire every currently-armed
-	// callback (some workers will be mid-arm, some mid-exit — fired
-	// count is non-deterministic but must be > 0 if rearm works).
-	stopPub := make(chan struct{})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(2 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-stopPub:
-				return
-			case <-ticker.C:
-				d.ncMu.Lock()
-				nc := d.NC
-				d.ncMu.Unlock()
-				if nc != nil {
-					_ = nc.Publish(subj, []byte("x"))
-				}
-			}
+	stranded := 0
+	for i, w := range workersList {
+		if w == nil {
+			continue // armWatch errored — counted separately if needed
 		}
-	}()
+		select {
+		case <-w.ch:
+		case <-time.After(500 * time.Millisecond):
+			stranded++
+			t.Errorf("worker %d stranded: probe publish on post-storm NC did not fire callback", i)
+		}
+	}
 
-	// Let it run.
-	time.Sleep(200 * time.Millisecond)
-	close(stopPub)
-	close(stopSwap)
-	wg.Wait()
+	// Cleanup.
+	for _, w := range workersList {
+		if w != nil && w.entry != nil {
+			d.Watches.remove(w.entry)
+		}
+	}
 
-	if atomic.LoadInt64(&fired) == 0 {
-		t.Fatal("no callback fired across 20 workers and continuous swaps — rearm/recheck path broken")
+	if stranded > 0 {
+		t.Fatalf("%d/%d workers stranded — armWatch lost the race against swapNCLocked", stranded, workers)
 	}
 }
 

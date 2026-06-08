@@ -220,19 +220,8 @@ func TestWatchRegistry_RearmAll_SkipsRemovedEntryWithoutLeak(t *testing.T) {
 	}
 }
 
-// waitForMsg waits for a value on c. Returns nil on receive, an error
-// on timeout. Used by registry tests for level-triggered assertions.
-func waitForMsg[T any](c <-chan T, timeout time.Duration) error {
-	select {
-	case <-c:
-		return nil
-	case <-time.After(timeout):
-		return errors.New("timed out waiting for callback")
-	}
-}
-
-// waitForPayload is waitForMsg specialised to return the payload so
-// the test can disambiguate the source NC by content.
+// waitForPayload returns the next payload on c, or an error on
+// timeout. Lets tests disambiguate which sub fired by content.
 func waitForPayload(c <-chan []byte, timeout time.Duration) ([]byte, error) {
 	select {
 	case b := <-c:
