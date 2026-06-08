@@ -228,7 +228,7 @@ func Call(sock, method string, params, result any) error {
 			timeout = d
 		}
 	}
-	return call(sock, method, params, result, timeout)
+	return call(context.Background(), sock, method, params, result, timeout)
 }
 
 // CallWait is like Call but sets no read deadline (timeout 0), for the
@@ -237,15 +237,40 @@ func Call(sock, method string, params, result any) error {
 // cleans up when the connection drops (e.g. process killed via SIGINT),
 // so the daemon never leaks. PPZ_IPC_TIMEOUT is intentionally NOT honored
 // here — a blocking wait has no meaningful deadline.
+//
+// Callers that need to abort the wait on a context cancellation (e.g.
+// the share-side alert pump goroutine, which has to unblock when the
+// wrapped child exits and cmdTerminalShare cancels its ctx) should use
+// CallWaitCtx instead. CallWait itself has no ctx hook by design: a
+// CLI like `ppz subs wait` blocks forever until SIGINT, and SIGINT
+// closes its stdin/stdout naturally so no extra plumbing is required.
 func CallWait(sock, method string, params, result any) error {
-	return call(sock, method, params, result, 0)
+	return call(context.Background(), sock, method, params, result, 0)
+}
+
+// CallWaitCtx is CallWait + context cancellation: when ctx is done
+// before the daemon replies, the underlying conn is closed which
+// unblocks the in-flight Decode and returns the ctx error wrapped in
+// "ipc decode: ...". Required for in-process callers that share a
+// context lifecycle with a parent goroutine (the share's alert pump
+// loop is the load-bearing case — without ctx hook, the SubsWait
+// goroutine blocks the share's wg.Wait() on shutdown).
+//
+// PPZ_IPC_TIMEOUT is intentionally NOT honored here, same as CallWait.
+func CallWaitCtx(ctx context.Context, sock, method string, params, result any) error {
+	return call(ctx, sock, method, params, result, 0)
 }
 
 // call is the shared IPC client body. When timeout > 0 it bounds the
 // read with a connection deadline and classifies a client-side timeout
 // as EDaemonTimeout; when timeout == 0 it blocks indefinitely (a
 // deadline can't fire, so the Timeout() classification is skipped).
-func call(sock, method string, params, result any, timeout time.Duration) error {
+//
+// ctx is honored independently of timeout: when ctx is cancelled the
+// conn is closed, which surfaces as an "ipc decode" error from
+// Decode. Background() ctx (the legacy callers) is a no-op watcher
+// that never fires.
+func call(ctx context.Context, sock, method string, params, result any, timeout time.Duration) error {
 	conn, err := net.Dial("unix", sock)
 	if err != nil {
 		return cliproto.New(cliproto.EDaemonNotRunning)
@@ -254,6 +279,18 @@ func call(sock, method string, params, result any, timeout time.Duration) error 
 	if timeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(timeout))
 	}
+	// Close conn on ctx cancellation so the Decode below returns.
+	// Background ctx (legacy callers) never fires this; the goroutine
+	// exits via stopCloser when the function returns normally.
+	stopCloser := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stopCloser:
+		}
+	}()
+	defer close(stopCloser)
 	enc := json.NewEncoder(conn)
 	enc.SetEscapeHTML(false)
 	body, _ := json.Marshal(params)

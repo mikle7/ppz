@@ -339,12 +339,17 @@ func cmdTerminalShare(args []string) error {
 	// the alert pump within the harness 30s ceiling. Production
 	// defaults (15s idle, 30s cooldown) stand unless explicitly
 	// overridden; the env names are intentionally test-flavored.
+	// TODO(naming): legacy "INBOX" name preserved across the rename to
+	// SubsAlert; the operator-facing names are undocumented and only
+	// referenced by the two share-inbox-alerts-survives-* e2e
+	// fixtures, so renaming would force a coupled fixture change
+	// without benefit. Worth a back-compat-friendly rename pass later.
 	idleAfter := envDurationMS("PPZ_TERMINAL_INBOX_IDLE_MS", 15*time.Second)
 	cooldown := envDurationMS("PPZ_TERMINAL_INBOX_COOLDOWN_MS", 30*time.Second)
-	inboxAlerts := newTerminalInboxAlertPumpForPTY(terminalInboxAlertConfig{
+	subsAlerts := newTerminalSubsAlertPumpForPTY(terminalSubsAlertConfig{
 		IdleAfter: idleAfter,
 		Cooldown:  cooldown,
-		Message:   terminalInboxAlertMessage,
+		Message:   terminalSubsAlertMessage,
 		// PPZ_AGENT_HARNESS is exported into this process's env by
 		// setAgentEnv (agent.go) when the share is launched via
 		// `ppz agent create --<harness>`; standalone `ppz terminal
@@ -356,7 +361,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		flushInboxAlerts(ctx, inboxAlerts)
+		flushSubsAlerts(ctx, subsAlerts)
 	}()
 
 	// Local stdin → PTY master with a control-response filter. The local
@@ -379,12 +384,12 @@ func cmdTerminalShare(args []string) error {
 				filtered, p := filterControlResponses(input)
 				pending = p
 				if len(filtered) > 0 {
-					inboxAlerts.ForwardUserInput(time.Now(), filtered)
+					subsAlerts.ForwardUserInput(time.Now(), filtered)
 				}
 			}
 			if err != nil {
 				if len(pending) > 0 {
-					inboxAlerts.ForwardUserInput(time.Now(), pending)
+					subsAlerts.ForwardUserInput(time.Now(), pending)
 				}
 				return
 			}
@@ -410,7 +415,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		forwardInboxAlerts(ctx, handle, inboxAlerts)
+		forwardSubsAlerts(ctx, handle, subsAlerts)
 	}()
 
 	// Heartbeat ticker: publishes <handle>.heartbeat every
@@ -451,7 +456,7 @@ func cmdTerminalShare(args []string) error {
 	return nil
 }
 
-func flushInboxAlerts(ctx context.Context, pump *terminalInboxAlertPump) {
+func flushSubsAlerts(ctx context.Context, pump *terminalSubsAlertPump) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -753,22 +758,37 @@ func (r *seenIDRing) add(id string) {
 	r.idx = (r.idx + 1) % r.cap
 }
 
-// forwardInboxAlerts subscribes to <handle>.inbox and feeds every
-// observed message to the alert pump. Resilient to daemon-NC swaps
-// (logout, re-login, refresh-time rotation) by the same shape as
-// forwardStdin: redial in an outer loop whenever the IPC conn drops,
-// dedupe redelivered messages via a seen-ID ring.
+// forwardSubsAlerts blocks on `ppz subs wait` repeatedly and feeds
+// each level-triggered wakeup with unread rows to the alert pump.
+// Resilient to daemon-NC swaps (logout, re-login, refresh-time
+// rotation) by the same outer-redial pattern as forwardStdin: on
+// any IPC error, fall out of streamForwardSubsAlertsOnce, wait
+// 250ms, and reconnect.
 //
-// Without redial, a single daemon recycle silently disables inbox
-// alerts for the rest of the share session. Pinned by
+// Without the wait/redial, a single daemon recycle silently
+// disables alerts for the rest of the share session. Pinned by
 // share-inbox-alerts-survives-share-daemon-restart.
-func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxAlertPump) {
-	seen := newSeenIDRing(1024)
+//
+// Why `subs wait` rather than the old IPC Follow over the inbox
+// channel: the pump only ever cared about "something subscribed is
+// unread", and the old Follow path bound rigidly to <handle>.inbox.
+// `subs wait` blocks on the per-session subscription set as a
+// whole, so a message landing on a subscribed room (any pipe the
+// agent added via `ppz subs add`) fires the alert too. Pinned by
+// share-subs-alerts-fire-for-subscribed-room.
+//
+// The pump's `pending` flag + cooldown handle de-dup; we no longer
+// need a seenIDRing here because subs wait returns row state, not
+// per-message envelopes, and the state machine already coalesces
+// repeated "unread" observations into a single alert per cooldown
+// window. forwardStdin still uses seenIDRing for its own
+// per-message Follow path; the type stays.
+func forwardSubsAlerts(ctx context.Context, handle string, pump *terminalSubsAlertPump) {
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		streamForwardInboxAlertsOnce(ctx, handle, pump, seen)
+		streamForwardSubsAlertsOnce(ctx, handle, pump)
 		if ctx.Err() != nil {
 			return
 		}
@@ -780,49 +800,72 @@ func forwardInboxAlerts(ctx context.Context, handle string, pump *terminalInboxA
 	}
 }
 
-func streamForwardInboxAlertsOnce(ctx context.Context, handle string, pump *terminalInboxAlertPump, seen *seenIDRing) {
-	conn, err := net.Dial("unix", ipcSocket())
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-
-	body, _ := json.Marshal(cliproto.ReadRequest{
-		Handle:    handle,
-		Channel:   "inbox",
-		Follow:    true,
-		NoAdvance: true,
-	})
-	if err := json.NewEncoder(conn).Encode(map[string]any{"method": cliproto.IPCRead, "params": json.RawMessage(body)}); err != nil {
-		return
-	}
-
-	stopCloser := make(chan struct{})
-	go func() {
+// streamForwardSubsAlertsOnce runs the SubsWait/observe loop on a
+// single IPC connection until it errors (daemon stop, NC swap), at
+// which point it returns so the outer redial loop can reconnect.
+//
+// Session: handle — auto-subs are keyed under the handle at
+// handleCreate time, and the wrapped agent's own `subs add` calls
+// inherit PPZ_SESSION=handle from the share env so they live under
+// the same key. The pump runs in the parent process before any
+// child sets PPZ_SESSION, so we pass the session id explicitly.
+//
+// Each successful wakeup with `subsReplyHasUnread(reply)` true
+// flips the pump's pending bit; the 250ms throttle past the
+// observe call keeps us from spinning against a daemon that keeps
+// returning level-triggered "still unread" until the wrapped agent
+// runs `ppz subs read` and clears the cursor. False-positive empty
+// wakeups (a documented `subs wait` behaviour) are silently
+// re-armed without flipping pending.
+func streamForwardSubsAlertsOnce(ctx context.Context, handle string, pump *terminalSubsAlertPump) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		var reply cliproto.ListReply
+		// CallWaitCtx (not CallWait) so the in-flight blocking SubsWait
+		// unblocks when the share's ctx is cancelled. Without ctx
+		// cancellation here, cmd.Wait()→cancel()→wg.Wait() in
+		// cmdTerminalShare blocks forever because this goroutine is
+		// stuck inside a deadline-less IPC Decode — the share process
+		// never exits and every terminal-related e2e fixture that
+		// expects clean shutdown (`wait_for "! kill -0 $SHARE_PID"`)
+		// times out at 30s.
+		if err := daemon.CallWaitCtx(ctx, ipcSocket(), cliproto.IPCSubsWait,
+			cliproto.SubsWaitRequest{Session: handle}, &reply); err != nil {
+			return
+		}
+		if subsReplyHasUnread(reply) {
+			pump.ObserveSubsUnread(time.Now())
+		}
 		select {
 		case <-ctx.Done():
-			_ = conn.Close()
-		case <-stopCloser:
+			return
+		case <-time.After(250 * time.Millisecond):
 		}
-	}()
-	defer close(stopCloser)
-
-	dec := bufio.NewScanner(conn)
-	dec.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for dec.Scan() {
-		var evt cliproto.ReadEvent
-		if err := json.Unmarshal(dec.Bytes(), &evt); err != nil {
-			continue
-		}
-		if evt.Message == nil {
-			continue
-		}
-		if seen.has(evt.Message.ID) {
-			continue
-		}
-		pump.ObserveInboxMessage(time.Now(), *evt.Message)
-		seen.add(evt.Message.ID)
 	}
+}
+
+// subsReplyHasUnread reports whether any row in a ListReply returned
+// by IPCSubsWait carries unread > 0. Guards against the documented
+// false-positive empty wakeup (subs wait can return with no rows,
+// exit 0; observing that as "unread" would re-fire an alert the
+// agent has already actioned). Mirrors the row-walk inside
+// `cmd subs read` / `cmd subs ls`.
+func subsReplyHasUnread(reply cliproto.ListReply) bool {
+	for _, s := range reply.Sources {
+		for _, p := range s.PipeInfos {
+			if p.Unread > 0 {
+				return true
+			}
+		}
+	}
+	for _, u := range reply.UncollaredPipes {
+		if u.Info.Unread > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // cmdTerminalView: ppz terminal watch <handle>

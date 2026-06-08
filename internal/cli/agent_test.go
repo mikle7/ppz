@@ -327,13 +327,14 @@ func TestResolveAgentSpec_NoHandleErrors(t *testing.T) {
 // Default prompt: when neither a positional prompt nor --prompt-file is
 // given, the agent boots with the orientation prompt baked into the
 // binary. We assert on a stable substring rather than the full text so
-// minor wording tweaks don't break the test.
+// minor wording tweaks don't break the test. `ppz subs read` is the
+// post-wake consume verb across every harness since the subs port.
 func TestResolveAgentSpec_DefaultPromptUsedWhenNoneProvided(t *testing.T) {
 	spec, _, err := resolveAgentSpec([]string{"alice"})
 	if err != nil {
 		t.Fatalf("resolveAgentSpec: %v", err)
 	}
-	if !strings.Contains(spec.prompt, "ppz read inbox") {
+	if !strings.Contains(spec.prompt, "ppz subs read") {
 		t.Errorf("default prompt missing expected ppz orientation, got: %q", spec.prompt)
 	}
 }
@@ -346,7 +347,7 @@ func TestResolveAgentSpec_DefaultPromptUsedWhenNoneProvided(t *testing.T) {
 var allHarnesses = []string{"claude", "copilot", "codex", "agy", "pi"}
 
 // backgroundMonitorHarnesses are the harnesses whose prompts wrap the
-// `ppz ls --watch` loop in a detached/background process (claude's
+// `ppz subs wait` loop in a detached/background process (claude's
 // Monitor, copilot's bash detach:true). They share the `sleep 60`
 // throttle invariant that doesn't apply to the codex-family
 // foreground-watch pattern.
@@ -367,17 +368,21 @@ func TestDefaultAgentPrompt_OmitsRemovedBroadcastVerb(t *testing.T) {
 	}
 }
 
-// TestDefaultAgentPrompt_MentionsLsWatch pins `ppz ls --watch` as
+// TestDefaultAgentPrompt_MentionsSubsWait pins `ppz subs wait` as
 // the recommended inbox-awareness primitive. It blocks until any
-// pipe has unread, prints a snapshot, and exits without advancing
-// any cursor — which is what a watch wants. Every harness branch
-// must reference the watch verb so agents have a documented way to
-// idle without busy-looping.
-func TestDefaultAgentPrompt_MentionsLsWatch(t *testing.T) {
+// subscribed pipe has unread, prints only the unread row(s), and
+// exits without advancing any cursor — which is what a watch wants.
+// Every harness branch must reference the verb so agents have a
+// documented way to idle without busy-looping. `ppz subs wait`
+// replaces the older `ppz ls --watch <handle>.inbox` recipe: the
+// per-session subscription set (with the agent's own inbox auto-
+// subscribed at agent-create time) already defines the scope, so
+// the wake verb takes no pattern argument.
+func TestDefaultAgentPrompt_MentionsSubsWait(t *testing.T) {
 	for _, h := range allHarnesses {
 		t.Run(h, func(t *testing.T) {
-			if !strings.Contains(defaultAgentPrompt("test-handle", h), "ppz ls --watch") {
-				t.Errorf("defaultAgentPrompt(%q) should reference `ppz ls --watch` — the non-destructive blocking-watch primitive", h)
+			if !strings.Contains(defaultAgentPrompt("test-handle", h), "ppz subs wait") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz subs wait` — the non-destructive blocking-watch primitive over the subscription set", h)
 			}
 		})
 	}
@@ -438,26 +443,26 @@ func TestDefaultAgentPrompt_SubstitutesHandle(t *testing.T) {
 
 // TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop — the background-
 // Monitor harnesses (claude, copilot) must include a sleep on the
-// success path. `ppz ls --watch` is non-destructive: once a pipe
-// has unread, every immediate re-arm returns immediately with the
-// same snapshot. Without the throttle the loop spins as fast as
-// the daemon can answer, flooding the agent with duplicate events
-// for the same unread state until it runs `ppz read` to clear
-// them. The codex-family prompt uses a foreground watch (no loop),
-// so the throttle does not apply there.
+// success path. `ppz subs wait` is level-triggered: once any
+// subscribed pipe has unread, every immediate re-arm returns
+// immediately with the same snapshot. Without the throttle the
+// loop spins as fast as the daemon can answer, flooding the agent
+// with duplicate events for the same unread state until it runs
+// `ppz subs read` to clear them. The codex-family prompt uses a
+// foreground watch (no loop), so the throttle does not apply there.
 func TestDefaultAgentPrompt_MonitorRecipeThrottlesLoop(t *testing.T) {
 	for _, h := range backgroundMonitorHarnesses {
 		t.Run(h, func(t *testing.T) {
 			prompt := defaultAgentPrompt("eve", h)
 			if !strings.Contains(prompt, "sleep 60") {
-				t.Errorf("defaultAgentPrompt(%q) Monitor recipe must throttle the loop with `sleep 60` so non-destructive ls --watch doesn't spin on persistent unread; got: %q", h, prompt)
+				t.Errorf("defaultAgentPrompt(%q) Monitor recipe must throttle the loop with `sleep 60` so level-triggered subs wait doesn't spin on persistent unread; got: %q", h, prompt)
 			}
 		})
 	}
 }
 
 // TestDefaultAgentPrompt_MonitorRecipePinsSession — every harness
-// branch that recommends `ppz ls --watch` must set
+// branch that recommends `ppz subs wait` must set
 // PPZ_SESSION=<handle> inline on that command. Inheriting the
 // parent shell's PPZ_SESSION is unreliable across harnesses; we
 // observed Claude Code v2.1.143 dropping it on Monitor's bash
@@ -469,28 +474,47 @@ func TestDefaultAgentPrompt_MonitorRecipePinsSession(t *testing.T) {
 	for _, h := range allHarnesses {
 		t.Run(h, func(t *testing.T) {
 			prompt := defaultAgentPrompt("eve", h)
-			if !strings.Contains(prompt, "PPZ_SESSION=eve ppz ls --watch") {
-				t.Errorf("defaultAgentPrompt(%q) recipe should set PPZ_SESSION=<handle> inline so it survives env-strip on subprocesses; got: %q", h, prompt)
+			if !strings.Contains(prompt, "PPZ_SESSION=eve ppz subs wait") {
+				t.Errorf("defaultAgentPrompt(%q) recipe should set PPZ_SESSION=<handle> inline on `ppz subs wait` so it survives env-strip on subprocesses; got: %q", h, prompt)
 			}
 		})
 	}
 }
 
-// TestDefaultAgentPrompt_ScopesWatchToInbox pins the watch recipe to
-// the agent's own inbox. An UNscoped `ppz ls --watch` matches every
-// pipe — including the agent's own `<handle>.heartbeat` and
-// `<handle>.stdout`, which tick constantly — so it wakes on its own
-// noise rather than real messages. Observed with Claude Code: the
-// agent stopped trusting the noisy watch and replaced it with a
-// destructive background `ppz read` loop that drained its inbox.
-// Scoping the watch to `<handle>.inbox` (the daemon matches patterns
-// against handle, pipe, and `handle.pipe`) is what makes the watch
-// trustworthy. Every harness must scope it.
-func TestDefaultAgentPrompt_ScopesWatchToInbox(t *testing.T) {
+// TestDefaultAgentPrompt_WakeRecipeIsUnscoped pins the inverse of
+// the old `ScopesWatchToInbox` invariant. `ppz subs wait` is already
+// scoped by the per-session subscription set (the agent's own
+// `<handle>.inbox` is auto-subscribed; any rooms the agent joined
+// via `ppz subs add` extend the set), so the wake verb takes NO
+// positional pattern argument. A prompt that wrote
+// `ppz subs wait <handle>.inbox` would be syntactically valid but
+// would teach the agent a phantom arg the verb does not accept —
+// and would re-introduce the old "watch wakes on its own noise"
+// failure mode if the agent ever extrapolated to
+// `ppz subs wait <handle>.heartbeat`. Every harness must keep the
+// wake line bare.
+func TestDefaultAgentPrompt_WakeRecipeIsUnscoped(t *testing.T) {
 	for _, h := range allHarnesses {
 		t.Run(h, func(t *testing.T) {
-			if !strings.Contains(defaultAgentPrompt("eve", h), "ppz ls --watch eve.inbox") {
-				t.Errorf("defaultAgentPrompt(%q) should scope the watch to `ppz ls --watch eve.inbox` — an unscoped watch matches every pipe including the agent's own heartbeat/stdout and wakes on noise; got: %q", h, defaultAgentPrompt("eve", h))
+			prompt := defaultAgentPrompt("eve", h)
+			for _, line := range strings.Split(prompt, "\n") {
+				if !strings.Contains(line, "PPZ_SESSION=eve") || !strings.Contains(line, "ppz subs wait") {
+					continue
+				}
+				// Find the `ppz subs wait` token and the first run of
+				// non-space, non-shell-redirect bytes after it on the
+				// same line. The wake verb takes no arg, so the only
+				// non-space tokens immediately after `wait` should be
+				// shell plumbing (`2>/dev/null`, `;`, `&&`, `||`).
+				idx := strings.Index(line, "ppz subs wait")
+				rest := strings.TrimLeft(line[idx+len("ppz subs wait"):], " \t")
+				if rest == "" {
+					continue
+				}
+				if rest[0] == '2' || rest[0] == ';' || rest[0] == '&' || rest[0] == '|' || rest[0] == '`' {
+					continue
+				}
+				t.Errorf("defaultAgentPrompt(%q): `ppz subs wait` must take no pattern argument — the subscription set defines the scope. Found trailing token on line: %q", h, line)
 			}
 		})
 	}
@@ -499,16 +523,114 @@ func TestDefaultAgentPrompt_ScopesWatchToInbox(t *testing.T) {
 // TestDefaultAgentPrompt_BackgroundMonitorForbidsRead pins the
 // never-`ppz read`-in-the-loop warning for the background-Monitor
 // harnesses (claude, copilot). Their Monitor runs detached, so a
-// `ppz read` placed inside it advances the session cursor and
-// consumes messages in the background — the agent's own foreground
-// `ppz read inbox` then comes back empty (the exact symptom reported
-// with Claude Code). The codex-family prompt watches in the
-// foreground and is covered by its own wake-signal guidance.
+// `ppz read` or `ppz subs read` placed inside it advances the
+// session cursor and consumes messages in the background — the
+// agent's own foreground `ppz subs read` then comes back empty
+// (the exact symptom reported with Claude Code on the pre-subs
+// recipe). Both verbs advance cursors, so the warning has to name
+// both. The codex-family prompt watches in the foreground and is
+// covered by its own wake-signal guidance.
 func TestDefaultAgentPrompt_BackgroundMonitorForbidsRead(t *testing.T) {
 	for _, h := range backgroundMonitorHarnesses {
 		t.Run(h, func(t *testing.T) {
-			if !strings.Contains(defaultAgentPrompt("eve", h), "never run `ppz read` inside the loop") {
-				t.Errorf("defaultAgentPrompt(%q) Monitor guidance must warn `never run `+\"`ppz read`\"+` inside the loop` — a background read drains the inbox so foreground reads come back empty; got: %q", h, defaultAgentPrompt("eve", h))
+			prompt := defaultAgentPrompt("eve", h)
+			if !strings.Contains(prompt, "never run `ppz read` inside the loop") {
+				t.Errorf("defaultAgentPrompt(%q) Monitor guidance must warn `never run `+\"`ppz read`\"+` inside the loop` — a background read drains the inbox so foreground reads come back empty; got: %q", h, prompt)
+			}
+			if !strings.Contains(prompt, "never run `ppz subs read` inside the loop") {
+				t.Errorf("defaultAgentPrompt(%q) Monitor guidance must also warn `never run `+\"`ppz subs read`\"+` inside the loop` — `subs read` advances cursors too, so backgrounding it drains every subscribed pipe; got: %q", h, prompt)
+			}
+		})
+	}
+}
+
+// TestDefaultAgentPrompt_MentionsSubsLs pins `ppz subs ls` in the
+// cheat sheet on every harness. Without it the agent has no
+// documented way to inspect the watched set — a discoverability gap
+// that previously caused agents to ask the user "what am I
+// subscribed to?" instead of running the verb themselves.
+func TestDefaultAgentPrompt_MentionsSubsLs(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if !strings.Contains(defaultAgentPrompt("test-handle", h), "ppz subs ls") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz subs ls` so the agent can inspect its current subscription set", h)
+			}
+		})
+	}
+}
+
+// TestDefaultAgentPrompt_MentionsSubsAddRm pins `ppz subs add` and
+// `ppz subs rm` as the verbs an agent uses to self-manage its watched
+// set (join a chat room, leave when done, etc.). Without these in
+// the cheat sheet, the agent has no documented way to extend the
+// scope of its `ppz subs wait` loop beyond the auto-subscribed
+// `<handle>.inbox`. Two assertions so failures pinpoint which row
+// was dropped.
+func TestDefaultAgentPrompt_MentionsSubsAddRm(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			prompt := defaultAgentPrompt("test-handle", h)
+			if !strings.Contains(prompt, "ppz subs add") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz subs add` so the agent can subscribe to rooms it joins", h)
+			}
+			if !strings.Contains(prompt, "ppz subs rm") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz subs rm` so the agent can leave rooms it no longer cares about", h)
+			}
+		})
+	}
+}
+
+// TestDefaultAgentPrompt_MentionsSubsRead pins `ppz subs read` as the
+// post-wake consume verb on every harness. After `ppz subs wait`
+// returns, the agent runs `ppz subs read` to drain every subscribed
+// pipe with unread (banner-separated). Without this in the prompt
+// the agent might fall back to `ppz read inbox` and miss messages
+// that landed on subscribed rooms.
+func TestDefaultAgentPrompt_MentionsSubsRead(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			if !strings.Contains(defaultAgentPrompt("test-handle", h), "ppz subs read") {
+				t.Errorf("defaultAgentPrompt(%q) should reference `ppz subs read` as the post-wake consume verb", h)
+			}
+		})
+	}
+}
+
+// TestDefaultAgentPrompt_HasRoomJoinLeaveWorkedExample pins the
+// worked example (`ppz subs add project-room` /
+// `ppz subs rm project-room`) on every harness. The cheat-sheet
+// rows alone teach the verb signature but not the lifecycle. A
+// concrete pair "to join: add, to leave: rm" makes the lifecycle
+// scan-readable, and pinning the exact `project-room` literal stops
+// a future edit from dropping the example to a generic `<room>`
+// placeholder (which is the same shape as the cheat-sheet usage
+// stub and would carry no extra signal).
+func TestDefaultAgentPrompt_HasRoomJoinLeaveWorkedExample(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			prompt := defaultAgentPrompt("test-handle", h)
+			if !strings.Contains(prompt, "ppz subs add project-room") {
+				t.Errorf("defaultAgentPrompt(%q) should include the `ppz subs add project-room` worked example for joining a room", h)
+			}
+			if !strings.Contains(prompt, "ppz subs rm project-room") {
+				t.Errorf("defaultAgentPrompt(%q) should include the `ppz subs rm project-room` worked example for leaving a room", h)
+			}
+		})
+	}
+}
+
+// TestDefaultAgentPrompt_BackgroundMonitorRunsSubsWait pins the
+// exact Monitor recipe shape on the claude/copilot background-
+// monitor harnesses: a `while true; do PPZ_SESSION=<handle> ppz
+// subs wait …` loop. Stronger than the harness-agnostic
+// `MentionsSubsWait` test — the background-monitor harnesses
+// specifically need the loop wrapper, not a foreground watch.
+func TestDefaultAgentPrompt_BackgroundMonitorRunsSubsWait(t *testing.T) {
+	for _, h := range backgroundMonitorHarnesses {
+		t.Run(h, func(t *testing.T) {
+			prompt := defaultAgentPrompt("eve", h)
+			if !strings.Contains(prompt, "while true; do PPZ_SESSION=eve ppz subs wait") {
+				t.Errorf("defaultAgentPrompt(%q) Monitor recipe must wrap `ppz subs wait` in a `while true; do …` loop with PPZ_SESSION pinned inline; got: %q", h, prompt)
 			}
 		})
 	}
