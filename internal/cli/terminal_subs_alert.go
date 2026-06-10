@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
 const terminalSubsAlertMessage = "Please run 'ppz subs read' and action messages\n"
@@ -22,6 +24,22 @@ type terminalSubsAlertConfig struct {
 	// Enter), other harnesses' REPLs treat that escape as literal
 	// bytes and need a plain `\r` to submit.
 	Harness string
+	// ConfirmUnread is consulted at fire time — after the pending /
+	// idle / cooldown gates have all passed, immediately before the
+	// alert is injected. It must re-sample the live unread level
+	// (production wires a fresh subs snapshot over IPC) and return
+	// whether anything subscribed is still unread. A false return
+	// suppresses the injection AND clears pending: the level is the
+	// source of truth, and a pending bit that disagrees with it is
+	// stale by definition. nil → always fire (tests of unrelated
+	// behaviour skip the wiring).
+	//
+	// This gate exists because `subs wait` only signals the up-edge
+	// (something became unread). The down-edge — the agent ran
+	// `ppz subs read`, cursor advanced, nothing published — produces
+	// no wakeup, so a pending bit armed up to 250ms before the read
+	// survives it and would otherwise fire one final redundant nag.
+	ConfirmUnread func() bool
 }
 
 type terminalSubsAlertStateMachine struct {
@@ -100,6 +118,19 @@ func (s *terminalSubsAlertStateMachine) ready(now time.Time) bool {
 		return false
 	}
 	return true
+}
+
+// confirmSubsUnreadDecision maps a fire-time subs snapshot (reply, err)
+// to "should the pump inject". The production ConfirmUnread wiring
+// calls IPCSubsList and feeds the outcome through here.
+//
+// RED scaffold: error semantics not implemented yet. The contract the
+// tests pin: only a POSITIVE "nothing unread" (err == nil, no unread
+// rows) suppresses the alert; an IPC failure must map to fire-anyway —
+// the nag is at-least-once, and a daemon hiccup at fire time must
+// never silently eat it.
+func confirmSubsUnreadDecision(reply cliproto.ListReply, err error) bool {
+	return subsReplyHasUnread(reply)
 }
 
 type terminalSubsAlertPump struct {

@@ -1,0 +1,4 @@
+first_alert_fired: yes
+subs_read_done: yes
+redundant_alert_after_read: no
+exit=0
