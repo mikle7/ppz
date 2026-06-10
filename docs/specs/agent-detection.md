@@ -25,8 +25,8 @@ applicable parts into ppz's wrapper and heartbeat pipeline, and surfaces the res
 
 Phases 1+2 shipped together: identification feeds the heartbeat, causality feeds
 the state, `ppz who` renders both. Unit + wrapper wiring are in (including a
-real-PTY integration test for the TIOCGPGRP inspector seam); the e2e fixture
-(`share-heartbeat-detects-harness`) remains a follow-on.
+real-PTY integration test for the TIOCGPGRP inspector seam), as is the e2e
+fixture (`share-heartbeat-detects-harness`).
 
 ---
 
@@ -102,7 +102,9 @@ func (t *ActivityTracker) State(now time.Time) State
 // a fake in tests).
 type ForegroundProc struct{ PID int; Comm string; Argv []string }
 type Detection struct{ Harness string; ChildPID int; State State }
-func NewDetector(inspect func() (ForegroundProc, error), start time.Time) *Detector
+func NewDetector(inspect func() (ForegroundProc, error)) *Detector
+// (activity tracking is keyed to identification time — the Poll that
+// first sees a harness — so the detector takes no clock input)
 func (d *Detector) Poll(now time.Time)
 func (d *Detector) ObserveOutput/ObserveInput(now time.Time)
 func (d *Detector) Snapshot(now time.Time) Detection
@@ -243,6 +245,11 @@ logic; e2e pins the wiring).
 
 - Blocked state, per-harness screen patterns, vt10x hardening (phase 3).
 - Model detection (phase 4).
+- Alert submit-key selection still keys off the env-var harness
+  (`terminalSubsAlertConfig.Harness`, terminal.go): a hand-launched claude
+  gets the `\r` fallback instead of kitty Enter. Switching it to live
+  detection needs the pump to re-read the harness at fire time, not
+  construction time.
 - `ppz who --state <state>` filter; distinct colour for blocked.
 - A dedicated `.agentstate` event channel (immediate-beat-on-transition covers
   `ppz who` freshness; revisit if a push consumer appears).

@@ -44,9 +44,11 @@ type Detector struct {
 	tracker  *ActivityTracker
 }
 
-// NewDetector creates a Detector for a PTY whose child spawned at
-// `start`.
-func NewDetector(inspect func() (ForegroundProc, error), start time.Time) *Detector {
+// NewDetector creates a Detector around the given inspector. Activity
+// tracking (and its startup grace) is keyed to identification time —
+// the Poll that first sees a harness — not to PTY spawn time, so the
+// detector needs no clock input of its own.
+func NewDetector(inspect func() (ForegroundProc, error)) *Detector {
 	return &Detector{inspect: inspect}
 }
 

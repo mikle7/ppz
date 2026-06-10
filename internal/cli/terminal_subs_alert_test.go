@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/creack/pty"
+
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
@@ -464,5 +466,39 @@ func TestConfirmSubsUnreadDecision(t *testing.T) {
 	}
 	if !confirmSubsUnreadDecision(cliproto.ListReply{}, errors.New("ipc: connection refused")) {
 		t.Error("decision(zero reply, err) = false, want true (cannot disprove unread → fire)")
+	}
+}
+
+// The ForPTY pump must route every byte it injects into the PTY —
+// alert submissions and buffered user-input flushes alike — through
+// the provided writer, not the raw master file. Production passes
+// harnessInputWriter there so injected bytes taint detection's output
+// causality exactly like local keystrokes; writing to the raw master
+// instead would let the alert's echo read as untainted agent output
+// and flash `ppz who` to working (docs/specs/agent-detection.md).
+// The master fd itself is still needed for echo suppression, which is
+// why the writer is a separate parameter.
+func TestTerminalSubsAlertPumpForPTY_InjectsThroughProvidedWriter(t *testing.T) {
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Skipf("pty open unavailable in this environment: %v", err)
+	}
+	defer ptmx.Close()
+	defer tty.Close()
+
+	var rec bytes.Buffer
+	p := newTerminalSubsAlertPumpForPTY(terminalSubsAlertConfig{Harness: "claude"}, ptmx, &rec)
+
+	p.write("nudge: subs unread")
+	if !strings.Contains(rec.String(), "nudge: subs unread") {
+		t.Errorf("alert submission bypassed the provided writer; writer saw %q", rec.String())
+	}
+
+	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	p.BeginAlertMode(now)
+	p.ForwardUserInput(now, []byte("typed-during-alert"))
+	p.EndAlertMode(now)
+	if !strings.Contains(rec.String(), "typed-during-alert") {
+		t.Errorf("buffered user-input flush bypassed the provided writer; writer saw %q", rec.String())
 	}
 }

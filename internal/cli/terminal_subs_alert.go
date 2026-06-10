@@ -178,13 +178,21 @@ func newTerminalSubsAlertPump(cfg terminalSubsAlertConfig, pty io.Writer) *termi
 	}
 }
 
-func newTerminalSubsAlertPumpForPTY(cfg terminalSubsAlertConfig, pty *os.File) *terminalSubsAlertPump {
-	pump := newTerminalSubsAlertPump(cfg, pty)
+// newTerminalSubsAlertPumpForPTY builds the production pump for a real
+// PTY master. The master file is only used for echo suppression around
+// alert injection; every byte the pump injects — alert submissions and
+// buffered user-input flushes alike — goes through w instead, so the
+// wrapper can interpose harnessInputWriter and injected bytes taint
+// detection causality exactly like local keystrokes. Writing to the
+// raw master would let the alert's echo read as untainted agent output
+// and flash `ppz who` to working (docs/specs/agent-detection.md).
+func newTerminalSubsAlertPumpForPTY(cfg terminalSubsAlertConfig, pty *os.File, w io.Writer) *terminalSubsAlertPump {
+	pump := newTerminalSubsAlertPump(cfg, w)
 	harness := cfg.Harness
 	pump.write = func(message string) {
 		restore := setPTYInputEcho(pty.Fd(), false)
 		defer restore()
-		_ = submitAlertToPTY(pty, harness, message, time.Sleep)
+		_ = submitAlertToPTY(w, harness, message, time.Sleep)
 	}
 	return pump
 }

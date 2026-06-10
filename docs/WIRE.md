@@ -529,3 +529,33 @@ in-memory cache would mask that wipe and cause false-negative unread counts.)
 | `PPZ_TEST_FILTER` | Glob filter for `tests/run.sh`. |
 | `PPZ_NATS_URL` | Override the NATS URL the daemon dials, regardless of what `/auth/exchange` returned. Useful when running daemon outside compose against an in-compose NATS. |
 | `PPZ_CURRENT_HANDLE` | Override the daemon's `current` for one CLI invocation (used by `terminal create` so the wrapped child's `broadcast` targets the wrap's source). |
+
+## 11. Heartbeat (`<handle>.heartbeat`)
+
+`ppz terminal share` (and therefore `ppz agent`) publishes one JSON object
+per beat to the `<handle>.heartbeat` pipe: every `interval_sec` (60s), plus
+an immediate out-of-cycle beat whenever the detected agent state transitions
+(working↔idle, harness appeared/exited). `ppz who` reads the latest beat per
+handle.
+
+All keys are always serialized — predictable wire shape, zero values
+included. Changes are additive: consumers ignore unknown keys, renderers
+show `-` for missing ones. (Source of truth: `HeartbeatPayload`,
+`internal/cli/heartbeat.go`.)
+
+| Key | Meaning |
+|---|---|
+| `ts` | Beat time, RFC 3339 UTC. |
+| `seq` | Per-process monotonic counter, starts at 1; wake-driven and tick-driven beats share it. |
+| `harness` | Canonical harness id (`claude` / `codex` / `copilot` / `agy` / `pi`) or `""`. Live PTY foreground detection wins over the launch-time `PPZ_AGENT_HARNESS` env var (detection tracks the actual foreground; the env var survives the harness exiting back to a shell). |
+| `harness_source` | Which side won: `"detected"` (live foreground detection), `"env"` (`PPZ_AGENT_HARNESS` fallback), `""` (neither). |
+| `agent_state` | `""` / `"idle"` / `"working"` (`"blocked"` reserved for detection phase 3). Byte-causality state of the detected harness; `""` whenever no harness is detected. |
+| `child_pid` | Foreground pid when a harness is detected, else 0. |
+| `model` | `PPZ_AGENT_MODEL` env var, `""` otherwise (detection is phase 4). |
+| `hostname`, `os`, `arch`, `pid`, `ppz_version` | Wrapper host/runtime identity. |
+| `started_at` | Wrapper start time, RFC 3339 UTC. |
+| `interval_sec` | Nominal cadence (60). Liveness derives from beat age vs this: `< 1.5×` online, `< 3×` stale, else offline (`internal/daemon/heartbeat_status.go`). |
+
+`ppz who --json` keeps `status` liveness-only; the table's combined
+`online|working` form is presentation (`CombineHeartbeatStatus`), not wire.
+See `docs/specs/agent-detection.md` for the detection design.

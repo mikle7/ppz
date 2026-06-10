@@ -23,7 +23,7 @@ func (f *fakeInspector) inspect() (ForegroundProc, error) {
 // it: harness name, the foreground pid, and an initial idle state.
 func TestDetector_IdentifiesForegroundHarness(t *testing.T) {
 	ins := &fakeInspector{proc: ForegroundProc{PID: 4242, Comm: "claude", Argv: []string{"claude"}}}
-	d := NewDetector(ins.inspect, detStart)
+	d := NewDetector(ins.inspect)
 
 	d.Poll(detStart.Add(1 * time.Second))
 	snap := d.Snapshot(detStart.Add(1 * time.Second))
@@ -44,7 +44,7 @@ func TestDetector_IdentifiesForegroundHarness(t *testing.T) {
 // the moment the foreground is a plain shell again.
 func TestDetector_ClearsWhenHarnessExitsToShell(t *testing.T) {
 	ins := &fakeInspector{proc: ForegroundProc{PID: 4242, Comm: "claude", Argv: []string{"claude"}}}
-	d := NewDetector(ins.inspect, detStart)
+	d := NewDetector(ins.inspect)
 	d.Poll(detStart.Add(1 * time.Second))
 
 	ins.proc = ForegroundProc{PID: 4000, Comm: "zsh", Argv: []string{"zsh"}}
@@ -61,7 +61,7 @@ func TestDetector_ClearsWhenHarnessExitsToShell(t *testing.T) {
 // successful poll says otherwise.
 func TestDetector_RetainsIdentificationOnInspectError(t *testing.T) {
 	ins := &fakeInspector{proc: ForegroundProc{PID: 4242, Comm: "claude", Argv: []string{"claude"}}}
-	d := NewDetector(ins.inspect, detStart)
+	d := NewDetector(ins.inspect)
 	d.Poll(detStart.Add(1 * time.Second))
 
 	ins.err = errors.New("ps: exit 1")
@@ -77,7 +77,7 @@ func TestDetector_RetainsIdentificationOnInspectError(t *testing.T) {
 // output past the startup grace marks the identified harness working.
 func TestDetector_OutputMarksWorking(t *testing.T) {
 	ins := &fakeInspector{proc: ForegroundProc{PID: 4242, Comm: "claude", Argv: []string{"claude"}}}
-	d := NewDetector(ins.inspect, detStart)
+	d := NewDetector(ins.inspect)
 	d.Poll(detStart.Add(1 * time.Second))
 
 	d.ObserveOutput(detStart.Add(5 * time.Second)) // well past grace
@@ -94,7 +94,7 @@ func TestDetector_OutputMarksWorking(t *testing.T) {
 // standing and read as working.
 func TestDetector_ReidentificationResetsStartupGrace(t *testing.T) {
 	ins := &fakeInspector{proc: ForegroundProc{PID: 4242, Comm: "claude", Argv: []string{"claude"}}}
-	d := NewDetector(ins.inspect, detStart)
+	d := NewDetector(ins.inspect)
 	d.Poll(detStart.Add(1 * time.Second))
 
 	ins.proc = ForegroundProc{PID: 5000, Comm: "codex", Argv: []string{"codex"}}
@@ -105,6 +105,44 @@ func TestDetector_ReidentificationResetsStartupGrace(t *testing.T) {
 
 	if snap.Harness != "codex" {
 		t.Errorf("Harness = %q, want codex", snap.Harness)
+	}
+	if snap.State != StateIdle {
+		t.Errorf("State = %q, want %q (boot output inside fresh grace)", snap.State, StateIdle)
+	}
+}
+
+// An inspect failure before anything was ever identified must leave
+// the detection empty — error-retention preserves a previous
+// identification, it must not invent one.
+func TestDetector_InspectErrorBeforeFirstIdentificationStaysEmpty(t *testing.T) {
+	ins := &fakeInspector{err: errors.New("ps: exit 1")}
+	d := NewDetector(ins.inspect)
+
+	d.Poll(detStart.Add(1 * time.Second))
+
+	if snap := d.Snapshot(detStart.Add(1 * time.Second)); snap != (Detection{}) {
+		t.Errorf("Snapshot = %+v, want zero Detection", snap)
+	}
+}
+
+// The same harness relaunched under a new pid (claude exited and was
+// restarted between polls) is a fresh process: the snapshot carries
+// the new pid and activity tracking restarts, startup grace included —
+// the relaunch's boot output must not inherit the old process's
+// post-grace standing and read as working.
+func TestDetector_SameHarnessNewPIDResetsStartupGrace(t *testing.T) {
+	ins := &fakeInspector{proc: ForegroundProc{PID: 4242, Comm: "claude", Argv: []string{"claude"}}}
+	d := NewDetector(ins.inspect)
+	d.Poll(detStart.Add(1 * time.Second))
+
+	ins.proc = ForegroundProc{PID: 5000, Comm: "claude", Argv: []string{"claude"}}
+	at := detStart.Add(10 * time.Second)
+	d.Poll(at)
+	d.ObserveOutput(at.Add(500 * time.Millisecond)) // relaunch boot noise, inside new grace
+	snap := d.Snapshot(at.Add(700 * time.Millisecond))
+
+	if snap.ChildPID != 5000 {
+		t.Errorf("ChildPID = %d, want 5000 (the relaunched pid)", snap.ChildPID)
 	}
 	if snap.State != StateIdle {
 		t.Errorf("State = %q, want %q (boot output inside fresh grace)", snap.State, StateIdle)

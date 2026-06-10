@@ -146,7 +146,9 @@ func TestRunHeartbeat_DetectionEmptyFallsBackToEnv(t *testing.T) {
 
 	msgs := pub.waitForCount(t, 1)
 	var p HeartbeatPayload
-	_ = json.Unmarshal([]byte(msgs[0].payload), &p)
+	if err := json.Unmarshal([]byte(msgs[0].payload), &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if p.Harness != "claude" {
 		t.Errorf("harness = %q, want claude (env fallback)", p.Harness)
 	}
@@ -187,7 +189,9 @@ func TestRunHeartbeat_NilDetectFallsBackToEnv(t *testing.T) {
 
 	msgs := pub.waitForCount(t, 1)
 	var p HeartbeatPayload
-	_ = json.Unmarshal([]byte(msgs[0].payload), &p)
+	if err := json.Unmarshal([]byte(msgs[0].payload), &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if p.Harness != "claude" || p.HarnessSource != "env" {
 		t.Errorf("harness/source = %q/%q, want claude/env", p.Harness, p.HarnessSource)
 	}
@@ -226,7 +230,9 @@ func TestRunHeartbeat_StateChangeWakeEmitsImmediateBeat(t *testing.T) {
 	msgs := pub.waitForCount(t, 2) // wake beat, no tick sent
 
 	var p HeartbeatPayload
-	_ = json.Unmarshal([]byte(msgs[1].payload), &p)
+	if err := json.Unmarshal([]byte(msgs[1].payload), &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if p.Seq != 2 {
 		t.Errorf("wake beat seq = %d, want 2", p.Seq)
 	}
