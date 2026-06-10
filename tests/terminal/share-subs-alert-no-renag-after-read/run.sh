@@ -62,7 +62,11 @@ ppz_s daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_s terminal share share-norenag -- bash -c 'stty -icanon -echo 2>/dev/null; cat' </dev/null >/dev/null 2>&1 &
 SHARE_PID=$!
 
-wait_for 50 "ppz_s ls 2>/dev/null | grep -q '^share-norenag.stdout'" \
+# No ^ anchor: `ls` rows lead with the NAMESPACE column, so an
+# anchored pipe-path grep never matches (the survives-* fixtures carry
+# the same anchored grep, but unguarded — it silently burns the wait
+# and they recover; here it would hard-exit).
+wait_for 50 "ppz_s ls 2>/dev/null | grep -q 'share-norenag.stdout'" \
   || { echo "share never came up"; exit 1; }
 
 # One message → nag loop starts (one alert per cooldown window while

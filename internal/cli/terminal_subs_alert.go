@@ -84,18 +84,37 @@ func (s *terminalSubsAlertStateMachine) ObserveSubsUnread(now time.Time) {
 	s.pending = true
 }
 
-// ObserveSubsClear cancels any pending alert. Called when subs wait
-// returns an empty reply (unread=0), meaning the agent advanced the
-// cursor via ppz subs read — the message was handled.
-func (s *terminalSubsAlertStateMachine) ObserveSubsClear(now time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.pending = false
-}
-
 func (s *terminalSubsAlertStateMachine) ReadyAlert(now time.Time) string {
 	s.mu.Lock()
+	if !s.ready(now) {
+		s.mu.Unlock()
+		return ""
+	}
+	confirm := s.cfg.ConfirmUnread
+	s.mu.Unlock()
+
+	// Fire-time confirmation runs OUTSIDE the lock: it's an IPC round
+	// trip in production, and ObserveUserInput (called from the stdin
+	// forwarding path) takes the same mutex — holding it here would
+	// stall the user's keystrokes for the duration of the confirm.
+	if confirm != nil && !confirm() {
+		// The level says nothing is unread; the pending bit is stale by
+		// definition — clear it so the next tick doesn't re-confirm
+		// forever. lastAlert is deliberately NOT stamped: nothing was
+		// injected, so a suppressed fire must not push the cooldown out
+		// and delay the next real alert. If a new message arrived
+		// during the confirm, the subs-wait loop's level-triggered
+		// re-arm (≤250ms) re-raises pending.
+		s.mu.Lock()
+		s.pending = false
+		s.mu.Unlock()
+		return ""
+	}
+
+	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Re-check: user input may have arrived while the confirm was in
+	// flight, closing the idle gate (lastUserInput moved past `now`).
 	if !s.ready(now) {
 		return ""
 	}
@@ -124,12 +143,15 @@ func (s *terminalSubsAlertStateMachine) ready(now time.Time) bool {
 // to "should the pump inject". The production ConfirmUnread wiring
 // calls IPCSubsList and feeds the outcome through here.
 //
-// RED scaffold: error semantics not implemented yet. The contract the
-// tests pin: only a POSITIVE "nothing unread" (err == nil, no unread
-// rows) suppresses the alert; an IPC failure must map to fire-anyway —
-// the nag is at-least-once, and a daemon hiccup at fire time must
-// never silently eat it.
+// Only a POSITIVE "nothing unread" (err == nil, no unread rows)
+// suppresses the alert; an IPC failure maps to fire-anyway — the nag
+// is at-least-once, and a daemon hiccup at fire time must never
+// silently eat it. A redundant alert for a just-read message is
+// annoying; a swallowed alert for an unread one loses a message.
 func confirmSubsUnreadDecision(reply cliproto.ListReply, err error) bool {
+	if err != nil {
+		return true
+	}
 	return subsReplyHasUnread(reply)
 }
 
@@ -178,12 +200,6 @@ func (p *terminalSubsAlertPump) ObserveUserInput(now time.Time, input []byte) {
 // the alert text — so this takes only `now`.
 func (p *terminalSubsAlertPump) ObserveSubsUnread(now time.Time) {
 	p.sm.ObserveSubsUnread(now)
-}
-
-// ObserveSubsClear cancels any pending alert. Called when subs wait
-// returns an empty reply, meaning the agent advanced the cursor.
-func (p *terminalSubsAlertPump) ObserveSubsClear(now time.Time) {
-	p.sm.ObserveSubsClear(now)
 }
 
 func (p *terminalSubsAlertPump) Flush(now time.Time) bool {
