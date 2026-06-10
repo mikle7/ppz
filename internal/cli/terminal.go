@@ -23,6 +23,7 @@ import (
 
 	"github.com/pipescloud/ppz/internal/cliproto"
 	"github.com/pipescloud/ppz/internal/daemon"
+	"github.com/pipescloud/ppz/internal/harness"
 	"github.com/pipescloud/ppz/internal/version"
 )
 
@@ -335,6 +336,22 @@ func cmdTerminalShare(args []string) error {
 	}
 
 	var wg sync.WaitGroup
+
+	// Harness detection: identify what's running in the wrapped PTY's
+	// foreground and whether it's working or idle, so heartbeats carry
+	// live agent info even when the harness was launched by hand rather
+	// than via `ppz agent`. The detector is fed by the byte observers
+	// wrapped around the stdout/stdin paths below; the poll goroutine
+	// re-inspects the foreground process and wakes the heartbeat loop
+	// on transitions. See docs/specs/agent-detection.md.
+	det := harness.NewDetector(ptyForegroundInspector(ptmx), time.Now())
+	hbWake := make(chan struct{}, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		runHarnessDetection(ctx, det, time.Now(), hbWake)
+	}()
+
 	// IdleAfter / Cooldown are tunable via env so e2e tests can drive
 	// the alert pump within the harness 30s ceiling. Production
 	// defaults (15s idle, 30s cooldown) stand unless explicitly
@@ -384,11 +401,13 @@ func cmdTerminalShare(args []string) error {
 				filtered, p := filterControlResponses(input)
 				pending = p
 				if len(filtered) > 0 {
+					det.ObserveInput(time.Now())
 					subsAlerts.ForwardUserInput(time.Now(), filtered)
 				}
 			}
 			if err != nil {
 				if len(pending) > 0 {
+					det.ObserveInput(time.Now())
 					subsAlerts.ForwardUserInput(time.Now(), pending)
 				}
 				return
@@ -401,7 +420,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		publishAndDisplayStdout(handle, ptmx, stdout)
+		publishAndDisplayStdout(handle, harnessOutputReader{ptmx, det}, stdout)
 	}()
 
 	// Subscribe to <handle>.stdin → write to PTY master (external `ppz send`
@@ -409,7 +428,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		forwardStdin(ctx, handle, ptmx)
+		forwardStdin(ctx, handle, harnessInputWriter{ptmx, det})
 	}()
 
 	wg.Add(1)
@@ -419,29 +438,32 @@ func cmdTerminalShare(args []string) error {
 	}()
 
 	// Heartbeat ticker: publishes <handle>.heartbeat every
-	// HeartbeatIntervalSec seconds with the agent identity (harness /
-	// model from PPZ_AGENT_* env vars set by `ppz agent create`) plus
-	// host/runtime fields. First beat fires immediately so `ppz who`
-	// shows a freshly-booted agent without waiting for the first
-	// interval. Lives inside the share's ctx so it stops cleanly when
-	// the wrapped child exits.
+	// HeartbeatIntervalSec seconds with the agent identity (live
+	// foreground detection, PPZ_AGENT_* env vars from `ppz agent
+	// create` as fallback) plus host/runtime fields. First beat fires
+	// immediately so `ppz who` shows a freshly-booted agent without
+	// waiting for the first interval; detection state changes wake an
+	// immediate out-of-cycle beat the same way. Lives inside the
+	// share's ctx so it stops cleanly when the wrapped child exits.
 	hbTicker := time.NewTicker(time.Duration(HeartbeatIntervalSec) * time.Second)
 	defer hbTicker.Stop()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		runHeartbeat(ctx, handle, heartbeatDeps{
-			Now:         time.Now,
-			Tick:        hbTicker.C,
-			Publish:     sendStreamLine,
-			GetEnv:      os.Getenv,
-			Hostname:    os.Hostname,
-			OS:          runtime.GOOS,
-			Arch:        runtime.GOARCH,
-			PID:         os.Getpid(),
-			PPZVersion:  version.Version,
-			StartedAt:   time.Now(),
-			IntervalSec: HeartbeatIntervalSec,
+			Now:          time.Now,
+			Tick:         hbTicker.C,
+			Publish:      sendStreamLine,
+			GetEnv:       os.Getenv,
+			Detect:       func() harness.Detection { return det.Snapshot(time.Now()) },
+			StateChanged: hbWake,
+			Hostname:     os.Hostname,
+			OS:           runtime.GOOS,
+			Arch:         runtime.GOARCH,
+			PID:          os.Getpid(),
+			PPZVersion:   version.Version,
+			StartedAt:    time.Now(),
+			IntervalSec:  HeartbeatIntervalSec,
 		})
 	}()
 
@@ -649,7 +671,7 @@ func publishWinsize(handle string, ptmx *os.File) {
 // already written to the PTY by tracking message IDs in a bounded
 // ring. Without dedupe, every reconnect would replay history into
 // the wrapped child.
-func forwardStdin(ctx context.Context, handle string, master *os.File) {
+func forwardStdin(ctx context.Context, handle string, master io.Writer) {
 	seen := newSeenIDRing(1024)
 
 	for {
@@ -671,7 +693,7 @@ func forwardStdin(ctx context.Context, handle string, master *os.File) {
 	}
 }
 
-func streamForwardStdinOnce(ctx context.Context, handle string, master *os.File, seen *seenIDRing) {
+func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer, seen *seenIDRing) {
 	conn, err := net.Dial("unix", ipcSocket())
 	if err != nil {
 		return

@@ -177,7 +177,12 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 	for _, e := range entries {
 		var p HeartbeatPayload
 		_ = json.Unmarshal([]byte(e.Payload), &p)
-		status := daemon.ClassifyHeartbeatStatus(e.ArrivedAt, now, p.IntervalSec)
+		// STATUS shows liveness combined with the beat's agent state
+		// ("online|working"); offline rows drop the state as stale noise.
+		status := daemon.CombineHeartbeatStatus(
+			daemon.ClassifyHeartbeatStatus(e.ArrivedAt, now, p.IntervalSec),
+			p.AgentState,
+		)
 		statuses = append(statuses, status)
 		osArch := p.OS
 		if p.Arch != "" {
@@ -211,7 +216,9 @@ func renderWhoTable(entries []cliproto.WhoEntry, now time.Time, useColor bool) s
 		if rowIdx >= len(lines) {
 			break
 		}
-		prefix := statusAnsiPrefix(status)
+		// Colour keys off the liveness half of a combined status —
+		// "online|working" wraps green end to end.
+		prefix := statusAnsiPrefix(strings.SplitN(status, "|", 2)[0])
 		if prefix == "" {
 			continue
 		}
