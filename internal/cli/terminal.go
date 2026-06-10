@@ -344,12 +344,14 @@ func cmdTerminalShare(args []string) error {
 	// wrapped around the stdout/stdin paths below; the poll goroutine
 	// re-inspects the foreground process and wakes the heartbeat loop
 	// on transitions. See docs/specs/agent-detection.md.
-	det := harness.NewDetector(ptyForegroundInspector(ptmx), time.Now())
+	det := harness.NewDetector(ptyForegroundInspector(ptmx))
 	hbWake := make(chan struct{}, 1)
+	detTicker := time.NewTicker(detectSnapshotInterval)
+	defer detTicker.Stop()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		runHarnessDetection(ctx, det, time.Now(), hbWake)
+		runHarnessDetection(ctx, det, time.Now(), hbWake, detTicker.C)
 	}()
 
 	// IdleAfter / Cooldown are tunable via env so e2e tests can drive
@@ -389,7 +391,11 @@ func cmdTerminalShare(args []string) error {
 				cliproto.SubsListRequest{Session: handle}, &reply)
 			return confirmSubsUnreadDecision(reply, err)
 		},
-	}, ptmx)
+		// The input tee makes injected bytes (alert submissions,
+		// buffered user-input flushes) taint output causality like
+		// local keystrokes — otherwise the alert's echo would read
+		// as agent work and flash `ppz who` to working.
+	}, ptmx, harnessInputWriter{ptmx, det})
 
 	wg.Add(1)
 	go func() {

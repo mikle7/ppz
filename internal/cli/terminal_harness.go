@@ -85,17 +85,18 @@ const (
 // detection snapshot changes (harness appeared/exited, working↔idle),
 // so the heartbeat loop emits an immediate out-of-cycle beat instead of
 // `ppz who` waiting out the 60s tick. The send is non-blocking against
-// a 1-buffered channel: bursts coalesce into one wake.
-func runHarnessDetection(ctx context.Context, det *harness.Detector, started time.Time, wake chan<- struct{}) {
-	ticker := time.NewTicker(detectSnapshotInterval)
-	defer ticker.Stop()
+// a 1-buffered channel: bursts coalesce into one wake. The caller owns
+// the snapshot ticker and passes its channel (production ticks every
+// detectSnapshotInterval; tests inject times directly), same seam as
+// heartbeatDeps.Tick.
+func runHarnessDetection(ctx context.Context, det *harness.Detector, started time.Time, wake chan<- struct{}, tick <-chan time.Time) {
 	var last harness.Detection
 	var lastPoll time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case now := <-ticker.C:
+		case now := <-tick:
 			interval := detectSteadyInterval
 			if now.Sub(started) < detectAcquisitionWindow {
 				interval = detectAcquisitionInterval

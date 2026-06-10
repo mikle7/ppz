@@ -9,7 +9,8 @@
 # foreground inspection → byte-causality state → wake-beat on
 # transition → daemon heartbeat cache → who renderer. The stub's
 # timeline is built around the detection constants: quiet through the
-# 3s startup grace, ~4s of steady output (working), then silence long
+# 3s startup grace, ~6s of steady output (working — long enough that a
+# loaded CI box still catches the row mid-phase), then silence long
 # enough for the 1800ms activity window to lapse (idle).
 . /tests/lib/common.sh
 
@@ -26,7 +27,7 @@ cat > "$stubdir/claude" <<'EOF'
 #!/bin/sh
 sleep 4
 i=0
-while [ "$i" -lt 20 ]; do
+while [ "$i" -lt 30 ]; do
   echo "thinking $i"
   i=$((i+1))
   sleep 0.2
@@ -45,7 +46,7 @@ ppz_a terminal share det-shell -- sleep 60 </dev/null >/dev/null &
 PID_SHELL=$!
 
 # Poll-and-capture instead of wait_for: the working phase is transient
-# (~4s), so assert on the captured row rather than re-querying after
+# (~6s), so assert on the captured row rather than re-querying after
 # the wait and racing the working→idle transition.
 poll_who_row() { # $1=handle $2=want "<status> <harness>" $3=attempts
   local row="" i
