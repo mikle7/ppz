@@ -2,9 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
 func TestTerminalSubsAlertStateMachineDefersWhileUserActive(t *testing.T) {
@@ -250,92 +253,17 @@ func TestTerminalSubsAlertPump_CopilotHarness_UsesCarriageReturnSubmit(t *testin
 	}
 }
 
-// TestTerminalSubsAlertStateMachineClearCancelsPending and
-// TestTerminalSubsAlertPumpSilentAfterCursorAdvanced pin the fix for
-// the double-delivery bug: after the first alert fires, the
-// level-triggered subs wait loop re-sets pending within 250ms (the
-// message is still unread). Without a way to cancel that pending bit
-// when the cursor IS eventually advanced, the pump fires a second alert
-// once the cooldown expires — even though the agent already handled the
-// message. ObserveSubsClear is the missing cancellation: the pump calls
-// it when subs wait returns an empty reply (unread=0), meaning the
-// agent ran ppz subs read and advanced the cursor. After a clear, no
-// further alert should fire for that delivery.
-
-func TestTerminalSubsAlertStateMachineClearCancelsPending(t *testing.T) {
-	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
-	sm := newTerminalSubsAlertStateMachine(terminalSubsAlertConfig{
-		IdleAfter: 15 * time.Second,
-		Cooldown:  30 * time.Second,
-		Message:   terminalSubsAlertMessage,
-	})
-
-	sm.ObserveSubsUnread(now)
-	sm.ReadyAlert(now.Add(16 * time.Second)) // first alert fires
-
-	// Level-triggered loop re-sets pending 250ms later (still unread).
-	sm.ObserveSubsUnread(now.Add(16*time.Second + 250*time.Millisecond))
-	// Agent runs ppz subs read — cursor advances, next subs wait empty.
-	sm.ObserveSubsClear(now.Add(17 * time.Second))
-
-	if got := sm.ReadyAlert(now.Add(48 * time.Second)); got != "" {
-		t.Fatalf("ReadyAlert after cursor advanced = %q, want empty (message was handled)", got)
-	}
-}
-
-func TestTerminalSubsAlertStateMachineFiringAfterClearThenNewUnread(t *testing.T) {
-	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
-	sm := newTerminalSubsAlertStateMachine(terminalSubsAlertConfig{
-		IdleAfter: 15 * time.Second,
-		Message:   terminalSubsAlertMessage,
-	})
-
-	sm.ObserveSubsUnread(now)
-	sm.ReadyAlert(now.Add(16 * time.Second)) // first alert fires
-
-	sm.ObserveSubsUnread(now.Add(16*time.Second + 250*time.Millisecond)) // level-triggered re-set
-	sm.ObserveSubsClear(now.Add(17 * time.Second))                        // cursor advanced
-
-	// New message arrives after the clear.
-	sm.ObserveSubsUnread(now.Add(18 * time.Second))
-
-	if got := sm.ReadyAlert(now.Add(34 * time.Second)); got == "" {
-		t.Fatal("ReadyAlert after clear + new unread = empty, want alert (new message must still fire)")
-	}
-}
-
-func TestTerminalSubsAlertPumpSilentAfterCursorAdvanced(t *testing.T) {
-	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
-	var ptyStdin bytes.Buffer
-	pump := newTerminalSubsAlertPump(terminalSubsAlertConfig{
-		IdleAfter: 15 * time.Second,
-		Cooldown:  30 * time.Second,
-		Message:   terminalSubsAlertMessage,
-	}, &ptyStdin)
-
-	pump.ObserveSubsUnread(now)
-	if wrote := pump.Flush(now.Add(16 * time.Second)); !wrote {
-		t.Fatal("first Flush did not write alert")
-	}
-
-	// Level-triggered subs wait re-sets pending 250ms after the alert
-	// fires (still unread; agent hasn't read yet).
-	pump.ObserveSubsUnread(now.Add(16*time.Second + 250*time.Millisecond))
-	// Agent runs ppz subs read — cursor advances, pump observes empty reply.
-	pump.ObserveSubsClear(now.Add(17 * time.Second))
-
-	if wrote := pump.Flush(now.Add(48 * time.Second)); wrote {
-		t.Fatalf("Flush after cursor advanced wrote second alert: %q, want silent", ptyStdin.String())
-	}
-}
-
 func TestTerminalSubsAlertPumpCooldownSuppressesImmediateRepeatedAlerts(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	var ptyStdin bytes.Buffer
+	// ConfirmUnread always-true: the message is genuinely never read in
+	// this scenario, so the fire-time gate must not change the re-nag
+	// cadence — repeated alerts per cooldown window stay correct.
 	pump := newTerminalSubsAlertPump(terminalSubsAlertConfig{
-		IdleAfter: 15 * time.Second,
-		Cooldown:  30 * time.Second,
-		Message:   terminalSubsAlertMessage,
+		IdleAfter:     15 * time.Second,
+		Cooldown:      30 * time.Second,
+		Message:       terminalSubsAlertMessage,
+		ConfirmUnread: func() bool { return true },
 	}, &ptyStdin)
 
 	pump.ObserveSubsUnread(now)
@@ -353,5 +281,188 @@ func TestTerminalSubsAlertPumpCooldownSuppressesImmediateRepeatedAlerts(t *testi
 	}
 	if strings.Count(ptyStdin.String(), "Please run 'ppz subs read' and action messages") != 2 {
 		t.Fatalf("PTY stdin after cooldown = %q, want two total alerts", ptyStdin.String())
+	}
+}
+
+// The four tests below pin the fire-time confirmation gate — the fix
+// for the redundant-final-nag bug that survives #119.
+//
+// Bug shape: streamForwardSubsAlertsOnce re-arms pending every ~250ms
+// while a message sits unread (level-triggered subs wait). The agent's
+// `ppz subs read` advances the cursor but publishes nothing on a
+// subscribed subject, so the in-flight subs wait BLOCKS rather than
+// returning the empty reply ObserveSubsClear (#119) listens for. A
+// pending bit armed within 250ms before the read therefore survives
+// it, and once idle + cooldown pass, the pump injects one final nag
+// for a message that was already handled.
+//
+// Design rule the gate encodes: never act on cached level state —
+// re-sample unread at the moment of injection.
+
+func TestTerminalSubsAlertPumpSuppressesAlertWhenUnreadGoneAtFireTime(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	var ptyStdin bytes.Buffer
+	unreadNow := true
+	pump := newTerminalSubsAlertPump(terminalSubsAlertConfig{
+		IdleAfter:     15 * time.Second,
+		Cooldown:      30 * time.Second,
+		Message:       terminalSubsAlertMessage,
+		ConfirmUnread: func() bool { return unreadNow },
+	}, &ptyStdin)
+
+	// Message lands; subs wait loop arms pending. Before the idle gate
+	// opens, the agent reads it — unread level drops to zero, but no
+	// down-edge reaches the pump.
+	pump.ObserveSubsUnread(now)
+	unreadNow = false
+
+	if wrote := pump.Flush(now.Add(16 * time.Second)); wrote {
+		t.Fatalf("Flush fired for already-read message: %q, want fire-time confirm to suppress", ptyStdin.String())
+	}
+	if ptyStdin.Len() != 0 {
+		t.Fatalf("PTY stdin after suppressed fire = %q, want empty", ptyStdin.String())
+	}
+
+	// The negative confirm must CLEAR pending, not just skip: if the
+	// stale bit survives, the next tick re-fires the moment the level
+	// goes high again for an unrelated reason.
+	unreadNow = true
+	if wrote := pump.Flush(now.Add(17 * time.Second)); wrote {
+		t.Fatalf("stale pending survived a negative confirm and re-fired: %q", ptyStdin.String())
+	}
+
+	// A genuinely new unread observation must still alert — and on the
+	// normal schedule. A suppressed (phantom) fire must not have
+	// stamped lastAlert: if it had, the 30s cooldown would defer this
+	// real alert to 46s.
+	pump.ObserveSubsUnread(now.Add(18 * time.Second))
+	if wrote := pump.Flush(now.Add(34 * time.Second)); !wrote {
+		t.Fatal("Flush after new unread did not alert; suppressed fire must not consume the cooldown")
+	}
+	if strings.Count(ptyStdin.String(), "Please run 'ppz subs read' and action messages") != 1 {
+		t.Fatalf("PTY stdin = %q, want exactly one alert (for the new message only)", ptyStdin.String())
+	}
+}
+
+func TestTerminalSubsAlertPumpFiresWhenUnreadConfirmedAtFireTime(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	var ptyStdin bytes.Buffer
+	pump := newTerminalSubsAlertPump(terminalSubsAlertConfig{
+		IdleAfter:     15 * time.Second,
+		Cooldown:      30 * time.Second,
+		Message:       terminalSubsAlertMessage,
+		ConfirmUnread: func() bool { return true },
+	}, &ptyStdin)
+
+	pump.ObserveSubsUnread(now)
+	if wrote := pump.Flush(now.Add(16 * time.Second)); !wrote {
+		t.Fatal("Flush with confirmed unread did not write alert")
+	}
+	if !strings.HasPrefix(ptyStdin.String(), "Please run 'ppz subs read' and action messages") {
+		t.Fatalf("PTY stdin alert = %q, want alert text", ptyStdin.String())
+	}
+}
+
+func TestTerminalSubsAlertPumpConsultsConfirmOnlyWhenOtherwiseReady(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	var ptyStdin bytes.Buffer
+	calls := 0
+	pump := newTerminalSubsAlertPump(terminalSubsAlertConfig{
+		IdleAfter:     15 * time.Second,
+		Cooldown:      30 * time.Second,
+		Message:       terminalSubsAlertMessage,
+		ConfirmUnread: func() bool { calls++; return true },
+	}, &ptyStdin)
+
+	// Not pending: the confirm IPC must not run on every 1s flush tick
+	// for the lifetime of an idle share.
+	pump.Flush(now)
+	if calls != 0 {
+		t.Fatalf("confirm consulted %d time(s) with nothing pending, want 0", calls)
+	}
+
+	// Pending but inside the idle gate: still no consult.
+	pump.ObserveSubsUnread(now)
+	pump.Flush(now.Add(5 * time.Second))
+	if calls != 0 {
+		t.Fatalf("confirm consulted %d time(s) before idle gate opened, want 0", calls)
+	}
+
+	// All gates open: exactly one consult, and the alert fires.
+	if wrote := pump.Flush(now.Add(16 * time.Second)); !wrote {
+		t.Fatal("Flush after idle did not write alert")
+	}
+	if calls != 1 {
+		t.Fatalf("confirm consulted %d time(s) at fire, want exactly 1", calls)
+	}
+
+	// Pending re-armed but inside cooldown: no consult.
+	pump.ObserveSubsUnread(now.Add(17 * time.Second))
+	pump.Flush(now.Add(20 * time.Second))
+	if calls != 1 {
+		t.Fatalf("confirm consulted %d time(s) during cooldown, want 1", calls)
+	}
+}
+
+// TestTerminalSubsAlertPumpDefersWhenUserTypesDuringConfirm pins the
+// post-confirm re-check in ReadyAlert: the confirm IPC runs outside
+// the state-machine lock, so user input can arrive while it's in
+// flight. If it does, the idle gate has closed and the alert must NOT
+// inject into the middle of whatever the user started typing — but it
+// must be DEFERRED, not dropped: pending survives the re-check, so the
+// alert fires on a later tick once the user goes idle again.
+func TestTerminalSubsAlertPumpDefersWhenUserTypesDuringConfirm(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	var ptyStdin bytes.Buffer
+	var pump *terminalSubsAlertPump
+	pump = newTerminalSubsAlertPump(terminalSubsAlertConfig{
+		IdleAfter: 15 * time.Second,
+		Cooldown:  30 * time.Second,
+		Message:   terminalSubsAlertMessage,
+		ConfirmUnread: func() bool {
+			// Keystrokes land mid-confirm, after the gates were checked.
+			pump.ObserveUserInput(now.Add(16*time.Second), []byte("typed during confirm"))
+			return true
+		},
+	}, &ptyStdin)
+
+	pump.ObserveSubsUnread(now)
+	if wrote := pump.Flush(now.Add(16 * time.Second)); wrote {
+		t.Fatalf("Flush injected despite user input during confirm: %q, want deferred", ptyStdin.String())
+	}
+	if ptyStdin.Len() != 0 {
+		t.Fatalf("PTY stdin after deferred fire = %q, want empty", ptyStdin.String())
+	}
+
+	// Deferred, not dropped: with the user idle again (and no lastAlert
+	// stamped by the deferral), the same pending alert fires without a
+	// fresh unread observation.
+	if wrote := pump.Flush(now.Add(40 * time.Second)); !wrote {
+		t.Fatal("Flush after user went idle again did not fire the deferred alert")
+	}
+	if strings.Count(ptyStdin.String(), "Please run 'ppz subs read' and action messages") != 1 {
+		t.Fatalf("PTY stdin = %q, want exactly one (deferred) alert", ptyStdin.String())
+	}
+}
+
+// TestConfirmSubsUnreadDecision pins the error semantics of the
+// production wiring: only a positive "nothing unread" suppresses. An
+// IPC failure (daemon restarting mid-share, socket hiccup) maps to
+// fire-anyway — the nag is at-least-once; a redundant alert for a
+// just-read message is annoying, a silently swallowed alert for an
+// unread one loses a message.
+func TestConfirmSubsUnreadDecision(t *testing.T) {
+	unread := cliproto.ListReply{Sources: []cliproto.Source{{
+		Handle:    "bob",
+		PipeInfos: []cliproto.PipeInfo{{Pipe: "inbox", Unread: 1}},
+	}}}
+	if !confirmSubsUnreadDecision(unread, nil) {
+		t.Error("decision(unread rows, nil err) = false, want true (fire)")
+	}
+	if confirmSubsUnreadDecision(cliproto.ListReply{}, nil) {
+		t.Error("decision(no unread, nil err) = true, want false (suppress)")
+	}
+	if !confirmSubsUnreadDecision(cliproto.ListReply{}, errors.New("ipc: connection refused")) {
+		t.Error("decision(zero reply, err) = false, want true (cannot disprove unread → fire)")
 	}
 }

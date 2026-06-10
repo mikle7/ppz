@@ -356,6 +356,22 @@ func cmdTerminalShare(args []string) error {
 		// share` invocations have no harness context and fall into
 		// the "" arm of submitInputForHarness (plain `\r`).
 		Harness: os.Getenv("PPZ_AGENT_HARNESS"),
+		// Fire-time confirmation: re-sample the live unread level
+		// (fresh snapshot, same IPC `ppz subs ls` uses) immediately
+		// before injecting. The subs-wait loop only signals the
+		// up-edge — `ppz subs read` advances the cursor without
+		// publishing, so the loop's pending bit goes stale with no
+		// wakeup to clear it. Sampling the level at the moment of
+		// decision is what guarantees no alert fires for an
+		// already-read message. daemon.Call (deadline-bounded), not
+		// CallWait: a wedged daemon must fail the confirm, not hang
+		// the flush loop.
+		ConfirmUnread: func() bool {
+			var reply cliproto.ListReply
+			err := daemon.Call(ipcSocket(), cliproto.IPCSubsList,
+				cliproto.SubsListRequest{Session: handle}, &reply)
+			return confirmSubsUnreadDecision(reply, err)
+		},
 	}, ptmx)
 
 	wg.Add(1)
@@ -815,8 +831,15 @@ func forwardSubsAlerts(ctx context.Context, handle string, pump *terminalSubsAle
 // observe call keeps us from spinning against a daemon that keeps
 // returning level-triggered "still unread" until the wrapped agent
 // runs `ppz subs read` and clears the cursor. False-positive empty
-// wakeups (a documented `subs wait` behaviour) are silently
-// re-armed without flipping pending.
+// wakeups (a documented `subs wait` behaviour) are ignored.
+//
+// This loop only ever sees the UP-edge: after the agent reads, the
+// next SubsWait blocks (a cursor advance publishes nothing, so no
+// wakeup fires) — there is no reliable down-edge to observe here.
+// Stale pending bits are instead neutralised at fire time by the
+// pump's ConfirmUnread gate (see the pump construction in
+// cmdTerminalShare), which re-samples the live unread level before
+// injecting.
 func streamForwardSubsAlertsOnce(ctx context.Context, handle string, pump *terminalSubsAlertPump) {
 	for {
 		if ctx.Err() != nil {
@@ -837,8 +860,6 @@ func streamForwardSubsAlertsOnce(ctx context.Context, handle string, pump *termi
 		}
 		if subsReplyHasUnread(reply) {
 			pump.ObserveSubsUnread(time.Now())
-		} else {
-			pump.ObserveSubsClear(time.Now())
 		}
 		select {
 		case <-ctx.Done():
