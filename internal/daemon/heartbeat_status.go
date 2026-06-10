@@ -10,6 +10,24 @@ func ClassifyHeartbeatStatus(last time.Time, now time.Time, intervalSec int) str
 	return classifyHeartbeatStatus(last, now, intervalSec)
 }
 
+// CombineHeartbeatStatus merges liveness with the beat's agent state
+// into the single STATUS string `ppz who`'s table shows:
+//
+//	offline, *        → "offline"           (state too old to be meaningful)
+//	online,  ""       → "online"            (plain shell / no harness)
+//	online,  working  → "online|working"
+//	stale,   working  → "stale|working"     (amber colour conveys the doubt)
+//
+// Kept next to the liveness classifier for the same reason that rule is
+// here: one source of truth, so the renderer and any future filters
+// can't drift apart.
+func CombineHeartbeatStatus(liveness string, agentState string) string {
+	if agentState == "" || liveness == "offline" {
+		return liveness
+	}
+	return liveness + "|" + agentState
+}
+
 // classifyHeartbeatStatus is the tri-state rule that drives `ppz who`'s
 // online / stale / offline column. Pure function so the colour and
 // filter logic upstream can rely on a single source of truth.

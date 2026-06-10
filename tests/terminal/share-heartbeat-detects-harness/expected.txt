@@ -1,0 +1,6 @@
+working: online|working claude
+idle: online|idle claude
+shell: online -
+"status": "online"
+"harness_source": "detected"
+exit=0
