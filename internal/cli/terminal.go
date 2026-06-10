@@ -442,7 +442,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		publishAndDisplayStdout(handle, harnessOutputReader{ptmx, det}, stdout)
+		publishAndDisplayStdout(handle, harnessOutputReader{r: ptmx, det: det}, stdout)
 	}()
 
 	// Subscribe to <handle>.stdin → write to PTY master (external `ppz send`

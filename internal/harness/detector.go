@@ -39,6 +39,7 @@ type Detector struct {
 	inspect func() (ForegroundProc, error)
 
 	mu       sync.Mutex
+	screen   func() string // optional: visible-screen source for blocked arbitration
 	harness  string
 	childPID int
 	tracker  *ActivityTracker
@@ -50,6 +51,15 @@ type Detector struct {
 // detector needs no clock input of its own.
 func NewDetector(inspect func() (ForegroundProc, error)) *Detector {
 	return &Detector{inspect: inspect}
+}
+
+// SetScreen wires an optional visible-screen source (the wrapper's
+// live screen model, bottom lines). When set, an identified harness
+// whose byte causality says "not working" is further arbitrated by its
+// ScreenDetector: blocker chrome on screen → StateBlocked. The source
+// is called with d's lock held and must not call back into d.
+func (d *Detector) SetScreen(src func() string) {
+	// RED skeleton — implemented after test review
 }
 
 // Poll re-inspects the foreground process and updates identification.

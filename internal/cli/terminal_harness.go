@@ -118,10 +118,13 @@ func runHarnessDetection(ctx context.Context, det *harness.Detector, started tim
 }
 
 // harnessOutputReader tees read timestamps into the detector so PTY
-// output counts as agent activity. Data passes through untouched.
+// output counts as agent activity, and (when screen is non-nil) feeds
+// the same bytes into the live screen model for blocked-state
+// detection. Data passes through untouched either way.
 type harnessOutputReader struct {
-	r   io.Reader
-	det *harness.Detector
+	r      io.Reader
+	det    *harness.Detector
+	screen io.Writer // optional live screen model; nil disables
 }
 
 func (h harnessOutputReader) Read(p []byte) (int, error) {
