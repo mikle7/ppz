@@ -404,6 +404,47 @@ func TestTerminalSubsAlertPumpConsultsConfirmOnlyWhenOtherwiseReady(t *testing.T
 	}
 }
 
+// TestTerminalSubsAlertPumpDefersWhenUserTypesDuringConfirm pins the
+// post-confirm re-check in ReadyAlert: the confirm IPC runs outside
+// the state-machine lock, so user input can arrive while it's in
+// flight. If it does, the idle gate has closed and the alert must NOT
+// inject into the middle of whatever the user started typing — but it
+// must be DEFERRED, not dropped: pending survives the re-check, so the
+// alert fires on a later tick once the user goes idle again.
+func TestTerminalSubsAlertPumpDefersWhenUserTypesDuringConfirm(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	var ptyStdin bytes.Buffer
+	var pump *terminalSubsAlertPump
+	pump = newTerminalSubsAlertPump(terminalSubsAlertConfig{
+		IdleAfter: 15 * time.Second,
+		Cooldown:  30 * time.Second,
+		Message:   terminalSubsAlertMessage,
+		ConfirmUnread: func() bool {
+			// Keystrokes land mid-confirm, after the gates were checked.
+			pump.ObserveUserInput(now.Add(16*time.Second), []byte("typed during confirm"))
+			return true
+		},
+	}, &ptyStdin)
+
+	pump.ObserveSubsUnread(now)
+	if wrote := pump.Flush(now.Add(16 * time.Second)); wrote {
+		t.Fatalf("Flush injected despite user input during confirm: %q, want deferred", ptyStdin.String())
+	}
+	if ptyStdin.Len() != 0 {
+		t.Fatalf("PTY stdin after deferred fire = %q, want empty", ptyStdin.String())
+	}
+
+	// Deferred, not dropped: with the user idle again (and no lastAlert
+	// stamped by the deferral), the same pending alert fires without a
+	// fresh unread observation.
+	if wrote := pump.Flush(now.Add(40 * time.Second)); !wrote {
+		t.Fatal("Flush after user went idle again did not fire the deferred alert")
+	}
+	if strings.Count(ptyStdin.String(), "Please run 'ppz subs read' and action messages") != 1 {
+		t.Fatalf("PTY stdin = %q, want exactly one (deferred) alert", ptyStdin.String())
+	}
+}
+
 // TestConfirmSubsUnreadDecision pins the error semantics of the
 // production wiring: only a positive "nothing unread" suppresses. An
 // IPC failure (daemon restarting mid-share, socket hiccup) maps to
