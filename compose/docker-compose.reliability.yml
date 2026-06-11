@@ -15,3 +15,12 @@ services:
   test-runner:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+  ppz-server:
+    environment:
+      # Short NATS user-JWT TTL (prod default: 5m) so refresh-window
+      # scenarios fit the 300s reliability cap. Refresh fires at
+      # exp-30s = login+90s; scenarios that must NOT be rescued by the
+      # rotation timer (daemon-reconnects-after-zombie-close) keep
+      # their assertion windows under that. Honored only because the
+      # base compose sets PPZ_DEV_LOGIN=true.
+      PPZ_NATS_JWT_TTL: "120s"
