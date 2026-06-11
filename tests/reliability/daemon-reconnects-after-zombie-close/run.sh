@@ -58,18 +58,20 @@ else
   echo "send-during-pause=FAILED"
 fi
 
-docker unpause compose-ppz-server-1 >/dev/null
-
-# Premise guard: the failure-close must have actually happened —
-# immediately after unpause the daemon should report disconnected
-# (a closed NC renders as "disconnected"). If it's still "connected"
-# the send never tripped reportNATSFailure and the verdict below would
-# be meaningless.
+# Premise guard: the failure-close must have actually happened — the
+# daemon should report disconnected (a closed NC renders as
+# "disconnected"). Checked while the server is STILL PAUSED: recovery
+# cannot complete against a frozen server, so the read is
+# deterministic. (Checking after unpause races a fast self-heal — the
+# very behaviour this scenario demands.) If still "connected" the send
+# never tripped reportNATSFailure and the verdict below is meaningless.
 if ppz_a status | grep -q '^nats: connected'; then
   echo "zombie-closed=NO"
 else
   echo "zombie-closed=YES"
 fi
+
+docker unpause compose-ppz-server-1 >/dev/null
 
 # The server is reachable again. The daemon must reconnect on its own.
 # Poll read-only status for ~30s (300 attempts x 0.1s + command time)
