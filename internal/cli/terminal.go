@@ -309,6 +309,13 @@ func cmdTerminalShare(args []string) error {
 	// reassignment can't redirect it mid-flight.
 	stdin, stdout := os.Stdin, os.Stdout
 
+	// Live screen model for blocked-state detection: the output tee
+	// (below) feeds it every byte the child draws, and the resize paths
+	// mirror the child PTY's geometry into it so it always renders at
+	// the real size. Created before the winsize plumbing so both
+	// branches can sync it.
+	screen := cliproto.NewLiveScreen(cliproto.DefaultRenderCols, cliproto.DefaultRenderRows)
+
 	stdinIsTTY := term.IsTerminal(int(stdin.Fd()))
 	if !stdinIsTTY {
 		restorePTYEcho := setPTYInputEcho(ptmx.Fd(), false)
@@ -321,6 +328,7 @@ func cmdTerminalShare(args []string) error {
 		}
 		_ = pty.InheritSize(stdin, ptmx)
 		publishWinsize(handle, ptmx)
+		syncScreenSize(screen, ptmx)
 
 		winch := make(chan os.Signal, 1)
 		signal.Notify(winch, syscall.SIGWINCH)
@@ -328,11 +336,13 @@ func cmdTerminalShare(args []string) error {
 			for range winch {
 				_ = pty.InheritSize(stdin, ptmx)
 				publishWinsize(handle, ptmx)
+				syncScreenSize(screen, ptmx)
 			}
 		}()
 	} else {
 		_ = pty.Setsize(ptmx, &pty.Winsize{Cols: 80, Rows: 24})
 		publishWinsize(handle, ptmx)
+		syncScreenSize(screen, ptmx)
 	}
 
 	var wg sync.WaitGroup
@@ -345,6 +355,7 @@ func cmdTerminalShare(args []string) error {
 	// re-inspects the foreground process and wakes the heartbeat loop
 	// on transitions. See docs/specs/agent-detection.md.
 	det := harness.NewDetector(ptyForegroundInspector(ptmx))
+	det.SetScreen(func() string { return screen.BottomText(harnessScreenBottomLines) })
 	hbWake := make(chan struct{}, 1)
 	detTicker := time.NewTicker(detectSnapshotInterval)
 	defer detTicker.Stop()
@@ -442,7 +453,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		publishAndDisplayStdout(handle, harnessOutputReader{r: ptmx, det: det}, stdout)
+		publishAndDisplayStdout(handle, harnessOutputReader{r: ptmx, det: det, screen: screen}, stdout)
 	}()
 
 	// Subscribe to <handle>.stdin → write to PTY master (external `ppz send`

@@ -19,5 +19,10 @@ type ScreenDetector interface {
 // Claude Code first; adding another harness is one case here plus one
 // screen_<name>.go pattern file (herdr's per-agent module layout).
 func ScreenDetectorFor(name string) ScreenDetector {
-	return nil // RED skeleton — implemented after test review
+	switch name {
+	case "claude":
+		return claudeScreen{}
+	default:
+		return nil
+	}
 }

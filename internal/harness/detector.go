@@ -59,7 +59,9 @@ func NewDetector(inspect func() (ForegroundProc, error)) *Detector {
 // ScreenDetector: blocker chrome on screen → StateBlocked. The source
 // is called with d's lock held and must not call back into d.
 func (d *Detector) SetScreen(src func() string) {
-	// RED skeleton — implemented after test review
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.screen = src
 }
 
 // Poll re-inspects the foreground process and updates identification.
@@ -109,5 +111,16 @@ func (d *Detector) Snapshot(now time.Time) Detection {
 	if d.harness == "" {
 		return Detection{}
 	}
-	return Detection{Harness: d.harness, ChildPID: d.childPID, State: d.tracker.State(now)}
+	state := d.tracker.State(now)
+	// Screen arbitration, only when byte causality says not-working:
+	// PTY activity is the authority for working (stale blocker chrome
+	// must not mask a streaming agent), the screen only splits idle
+	// into idle vs blocked. Idle includes the startup grace — a
+	// permission prompt at boot is a real question, not boot noise.
+	if state == StateIdle && d.screen != nil {
+		if sd := ScreenDetectorFor(d.harness); sd != nil && sd.Blocked(d.screen()) {
+			state = StateBlocked
+		}
+	}
+	return Detection{Harness: d.harness, ChildPID: d.childPID, State: state}
 }

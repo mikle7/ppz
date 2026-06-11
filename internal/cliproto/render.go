@@ -51,10 +51,18 @@ func RenderTerminal(in []byte, cols, rows int) string {
 	}
 	term := vt10x.New(vt10x.WithSize(cols, rows))
 	_, _ = term.Write(in)
+	return terminalText(term)
+}
 
+// terminalText dumps a terminal's visible grid as plain text — the
+// shared extraction behind RenderTerminal and LiveScreen.Text, so the
+// one-shot and live paths can never drift. Takes the emulator lock;
+// callers must not already hold it.
+func terminalText(term vt10x.Terminal) string {
 	term.Lock()
 	defer term.Unlock()
 
+	cols, rows := term.Size()
 	lines := make([]string, rows)
 	for y := 0; y < rows; y++ {
 		var b strings.Builder
