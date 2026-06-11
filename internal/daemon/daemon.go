@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -82,6 +83,17 @@ type Daemon struct {
 	// dial builds a fresh NATS connection; injectable so tests can
 	// substitute a stub. Defaults to connectNATSWithRefresh.
 	dial func(url string, r *RefreshLoop, store func(NATSEvent)) (*nats.Conn, error)
+
+	// wakeRetryInterval overrides the backoff between credential
+	// refresh attempts in onWake (see wake_watchdog.go). Zero means
+	// the production default (wakeRefreshRetryInterval); tests set
+	// milliseconds.
+	wakeRetryInterval time.Duration
+
+	// reconnecting is the single-flight guard for the background
+	// reconnect loop (kickReconnect): a failure-close may be reported
+	// by many concurrent operations, but only one recovery loop runs.
+	reconnecting atomic.Bool
 
 	// completionWarmMu serialises cold-cache warming inside
 	// handleComplete. Without it, N concurrent tab presses on a fresh
@@ -299,6 +311,67 @@ func (d *Daemon) reportNATSFailure() {
 		return
 	}
 	nc.Close()
+	// A closed NC never recovers by itself (nats.go's CLOSED state is
+	// terminal), and waiting for "the next ensureNATS" means waiting
+	// for the user to type a command — in the 2026-06-11 incident the
+	// daemon sat dead for minutes this way. Recover in the background.
+	d.kickReconnect()
+}
+
+// reconnectInitialBackoff / reconnectMaxBackoff bound the background
+// reconnect loop's retry cadence: fast enough that recovery lands
+// within seconds of the server becoming reachable, capped so an
+// extended outage doesn't hammer it.
+const (
+	reconnectInitialBackoff = 2 * time.Second
+	reconnectMaxBackoff     = 15 * time.Second
+)
+
+// kickReconnect starts the background NATS recovery loop, single-flight
+// (concurrent reporters coalesce onto one loop). The loop refreshes
+// credentials when due (transient failures are recorded via the refresh
+// loop's OnError and do NOT stop the loop — the cached JWT may still be
+// valid even when /auth/exchange is briefly unreachable) and redials
+// until the connection is live. Terminal exits: connected, logged out,
+// or bearer revoked.
+//
+// Lifetime: context.Background, same as the refresh loop — recovery
+// outlives any single IPC request and ends with the process.
+func (d *Daemon) kickReconnect() {
+	if d.NATSURL == "" || d.Refresh == nil {
+		return // pre-login/pre-bootstrap: ensureNATS owns first connect
+	}
+	if !d.reconnecting.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer d.reconnecting.Store(false)
+		backoff := reconnectInitialBackoff
+		for {
+			if _, ok := d.State.Credentials(); !ok {
+				return // logged out mid-recovery
+			}
+			if _, err := d.Refresh.RefreshNowIfDue(context.Background(), time.Now()); err != nil {
+				if errors.Is(err, ErrUnauthorized) {
+					return
+				}
+				// Transient — fall through and dial anyway with the
+				// cached creds; retry refresh next iteration.
+			}
+			if err := d.rebuildNC("reconnect-loop"); err == nil {
+				d.ncMu.Lock()
+				connected := d.NC != nil && d.NC.IsConnected()
+				d.ncMu.Unlock()
+				if connected {
+					return
+				}
+			}
+			time.Sleep(backoff)
+			if backoff *= 2; backoff > reconnectMaxBackoff {
+				backoff = reconnectMaxBackoff
+			}
+		}
+	}()
 }
 
 // recordNATSEvent is the single sink for connection-state events: it
@@ -360,6 +433,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if err := os.Chmod(d.Sock, 0o600); err != nil {
 		return fmt.Errorf("chmod sock: %w", err)
 	}
+
+	// Sleep/wake detection: macOS pauses the monotonic clock during
+	// sleep, so every pending timer (refresh fire included) resumes
+	// LATE after wake. The watchdog spots the wall-clock jump and
+	// forces refresh + reconnect immediately. See wake_watchdog.go.
+	d.startWakeWatchdog(ctx)
 
 	go d.serveIPC(ctx, ln)
 

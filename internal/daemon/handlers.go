@@ -202,6 +202,23 @@ func (d *Daemon) startRefreshLoop(accountID, jwt, seed string, expUnix int64) {
 		OnUnauthorized: func(string) {
 			d.State.SetLoginCheck(cliproto.LoginCheckInvalid)
 		},
+		// Record every failed refresh attempt WITH its cause. The
+		// 2026-06-11 wake-from-sleep bundle had a ~70s window where
+		// every /auth/exchange failed and the bundle couldn't say why —
+		// ensureNATS collapses all transport errors to
+		// E_SERVER_UNREACHABLE. This event is the durable trace
+		// (`ppz diagnostics`, future bundles). Fires with no
+		// RefreshLoop lock held, so reading d.Refresh.JWTExp() here is
+		// deadlock-free.
+		OnError: func(err error) {
+			d.recordNATSEvent(NATSEvent{
+				Type:   "refresh_error",
+				At:     time.Now(),
+				Caller: "refresh-loop",
+				JWTExp: d.Refresh.JWTExp(),
+				Reason: err.Error(),
+			})
+		},
 		// Proactively rebuild the NATS connection with the fresh creds
 		// during the 60s rotation overlap window (server `nbf` is set
 		// 30s before issuance, refresh fires at exp-30s, so both JWTs
