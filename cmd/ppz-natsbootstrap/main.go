@@ -6,18 +6,16 @@
 //
 // Output format is bare KEY=VALUE lines so a shell can `eval` it.
 //
-//   PPZ_NATS_OPERATOR_JWT=…
-//   PPZ_NATS_ACCOUNT_JWT=…
-//   PPZ_NATS_SYSTEM_ACCOUNT_JWT=…
-//   PPZ_NATS_ACCOUNT_SIGNING_SEED=…
+//	PPZ_NATS_OPERATOR_JWT=…
+//	PPZ_NATS_OPERATOR_SEED=…
+//	PPZ_NATS_SYSTEM_ACCOUNT_JWT=…
 package main
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/nats-io/jwt/v2"
-	"github.com/nats-io/nkeys"
+	"github.com/pipescloud/ppz/internal/natsauth"
 )
 
 func main() {
@@ -28,39 +26,15 @@ func main() {
 }
 
 func run() error {
-	opKP, err := nkeys.CreateOperator()
-	if err != nil {
-		return err
-	}
-	opPub, _ := opKP.PublicKey()
-	opSeed, _ := opKP.Seed()
-
-	sysKP, err := nkeys.CreateAccount()
-	if err != nil {
-		return err
-	}
-	sysPub, _ := sysKP.PublicKey()
-
-	opClaims := jwt.NewOperatorClaims(opPub)
-	opClaims.Name = "ppz-operator"
-	opClaims.SystemAccount = sysPub
-	opJWT, err := opClaims.Encode(opKP)
-	if err != nil {
-		return err
-	}
-
-	sysClaims := jwt.NewAccountClaims(sysPub)
-	sysClaims.Name = "ppz-sys"
-	sysJWT, err := sysClaims.Encode(opKP)
-	if err != nil {
-		return err
-	}
-
 	// Phase 3.5: no longer mints a default tenants account at boot —
 	// per-org accounts are created at runtime by ppz-server's
 	// AccountPool, signed with the operator key it holds in env.
-	fmt.Printf("PPZ_NATS_OPERATOR_JWT=%s\n", opJWT)
-	fmt.Printf("PPZ_NATS_OPERATOR_SEED=%s\n", string(opSeed))
-	fmt.Printf("PPZ_NATS_SYSTEM_ACCOUNT_JWT=%s\n", sysJWT)
+	chain, err := natsauth.BootstrapOperator()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("PPZ_NATS_OPERATOR_JWT=%s\n", chain.OperatorJWT)
+	fmt.Printf("PPZ_NATS_OPERATOR_SEED=%s\n", chain.OperatorSeed)
+	fmt.Printf("PPZ_NATS_SYSTEM_ACCOUNT_JWT=%s\n", chain.SystemAccountJWT)
 	return nil
 }
