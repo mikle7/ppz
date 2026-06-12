@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -34,9 +35,17 @@ func main() {
 		NATSJetStreamStoreDir: envOr("PPZ_JETSTREAM_STORE_DIR", ""),
 		Version:               version.Version,
 	}
+	ephemeral := flag.Bool("ephemeral", false,
+		"zero-config throwaway server: embedded postgres, minted NATS creds, seeded account, free ports; prints PPZ_EPHEMERAL_URL/_API_KEY on stdout")
+	flag.Parse()
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	if err := server.Run(ctx, cfg); err != nil {
+	run := server.Run
+	if *ephemeral {
+		run = server.RunEphemeral
+	}
+	if err := run(ctx, cfg); err != nil {
 		log.Fatal(err)
 	}
 }
