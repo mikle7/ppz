@@ -43,12 +43,12 @@ bypass for local/test use.
 
 ## Prerequisites
 
-1. **The server binaries.** The default install is client-only. Re-run the
-   installer opting in:
+1. **The server binaries.** The install one-liner already ships
+   `ppz-server` + `ppz-natsbootstrap` alongside `ppz`:
    ```bash
-   PPZ_INCLUDE_SERVER=1 ./install.sh        # adds ppz-server + ppz-natsbootstrap
+   ./install.sh                              # installs ppz + ppz-server + ppz-natsbootstrap
    # or, from a repo clone (also builds ppz-seed, needed for dev-login fixtures):
-   make install                              # builds + installs all five binaries to ~/.local/bin
+   make install                              # builds + installs all four binaries to ~/.local/bin
    ```
    Confirm: `which ppz-server ppz-natsbootstrap`. Note `install.sh` does **not**
    ship `ppz-seed` — it comes only from the repo-clone path above, so use that if

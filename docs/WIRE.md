@@ -484,24 +484,6 @@ exit.
 TUI viewer: enters alt-screen, follows `<handle>.stdout` until SIGINT/Ctrl-C,
 exits alt-screen, exit 0.
 
-## 8a. Desktop `--dump-state` (test mode)
-
-`ppz-desktop --dump-state --ipc=<sock>` connects to the named daemon, asks for
-its source list (via `List`), and prints a JSON snapshot of exactly the state
-the GUI would render, then exits 0.
-
-```json
-{
-  "logged_in": true,
-  "org_id": "<uuid>",
-  "sources": [
-    {"handle":"chat","last_broadcast_at":"<rfc3339>|null","last_broadcast_payload":"hello|null"}
-  ]
-}
-```
-
-If not logged in: `org_id` is `null`, `sources` is `[]`.
-
 ## 9. Daemon on-disk state
 
 Under `$PPZ_HOME` (default `~/.ppz`):

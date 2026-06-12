@@ -46,7 +46,7 @@ help:
 	@echo "                    overwrite each other instead of shadowing."
 	@echo "  test              Run Go unit tests"
 	@echo "  compose-build     Build all docker images"
-	@echo "  compose-up        Start the e2e environment (postgres, server, daemons, GUIs)"
+	@echo "  compose-up        Start the e2e environment (postgres, server, daemons)"
 	@echo "  compose-down      Tear down the e2e environment + volumes"
 	@echo "  e2e               Run the full bash test suite (one-shot: builds + starts + runs)"
 	@echo "  e2e-filter F=…    Run a subset (one-shot, includes build + start)"
@@ -72,23 +72,22 @@ build:
 	@mkdir -p bin
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/ppz           ./cmd/ppz
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/ppz-server    ./cmd/ppz-server
-	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/ppz-desktop   ./cmd/ppz-desktop
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/ppz-seed      ./cmd/ppz-seed
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/ppz-natsbootstrap ./cmd/ppz-natsbootstrap
 	@echo "Built $(VERSION) ($(SHA)) into ./bin/:"
 	@ls -1 bin/
 
 # Build + drop every binary in ./bin/ into $(INSTALL_BIN) (default
-# ~/.local/bin — same as install.sh). Lands all five (ppz, ppz-desktop,
-# ppz-server, ppz-seed, ppz-natsbootstrap) so devs hacking on the full
-# stack get the operator tools too; install.sh subsets to ppz +
-# ppz-desktop because end users don't need the rest.
+# ~/.local/bin — same as install.sh). Lands all four (ppz, ppz-server,
+# ppz-seed, ppz-natsbootstrap) so devs hacking on the full stack get the
+# seed tool too; install.sh subsets to ppz + ppz-server +
+# ppz-natsbootstrap because end users don't need ppz-seed.
 #
 # Wires zsh/bash completion into the user's rc file (idempotent — the
 # marker comment guards against duplicates).
 install: build
 	@mkdir -p "$(INSTALL_BIN)"
-	@for b in ppz ppz-desktop ppz-server ppz-seed ppz-natsbootstrap; do \
+	@for b in ppz ppz-server ppz-seed ppz-natsbootstrap; do \
 		install -m 0755 "./bin/$$b" "$(INSTALL_BIN)/$$b"; \
 	done
 	@echo "Installed $(VERSION) ($(SHA)) → $(INSTALL_BIN)/"
@@ -138,12 +137,12 @@ compose-down:
 
 e2e:
 	$(COMPOSE) build test-runner
-	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b
 	$(COMPOSE) run --rm test-runner timeout 15m bash /tests/run.sh
 
 e2e-filter:
 	$(COMPOSE) build test-runner
-	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b
 	$(COMPOSE) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/run.sh
 
 # Fast iteration mode. e2e-up prepares the stack once; e2e-run executes the
@@ -153,14 +152,14 @@ e2e-filter:
 # mounted into the test-runner, so test-script edits don't need a rebuild.
 e2e-up:
 	$(COMPOSE) build test-runner
-	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build postgres ppz-server daemon-a daemon-b
 
 e2e-run:
 	$(COMPOSE) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/run.sh
 
 e2e-rebuild:
 	$(COMPOSE) build
-	$(COMPOSE) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 
 # WAN suite — applies a netem qdisc to daemon-a so we can assert that
 # hot paths don't degenerate to one-round-trip-per-message under
@@ -168,24 +167,24 @@ e2e-rebuild:
 # the regular tests/run.sh skips that subdirectory.
 e2e-wan:
 	$(COMPOSE_WAN) build test-runner
-	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 	$(COMPOSE_WAN) run --rm test-runner timeout 15m bash /tests/wan/run.sh
 
 e2e-wan-filter:
 	$(COMPOSE_WAN) build test-runner
-	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 	$(COMPOSE_WAN) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/wan/run.sh
 
 e2e-wan-up:
 	$(COMPOSE_WAN) build test-runner
-	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 
 e2e-wan-run:
 	$(COMPOSE_WAN) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/wan/run.sh
 
 e2e-wan-rebuild:
 	$(COMPOSE_WAN) build
-	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_WAN) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 
 e2e-wan-down:
 	$(COMPOSE_WAN) down -v --remove-orphans
@@ -199,24 +198,24 @@ COMPOSE_RELIABILITY := docker compose -f compose/docker-compose.yml -f compose/d
 
 e2e-reliability:
 	$(COMPOSE_RELIABILITY) build test-runner
-	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 	$(COMPOSE_RELIABILITY) run --rm test-runner timeout 15m bash /tests/reliability/run.sh
 
 e2e-reliability-filter:
 	$(COMPOSE_RELIABILITY) build test-runner
-	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 	$(COMPOSE_RELIABILITY) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/reliability/run.sh
 
 e2e-reliability-up:
 	$(COMPOSE_RELIABILITY) build test-runner
-	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 
 e2e-reliability-run:
 	$(COMPOSE_RELIABILITY) run --rm -e PPZ_TEST_FILTER='$(F)' test-runner timeout 15m bash /tests/reliability/run.sh
 
 e2e-reliability-rebuild:
 	$(COMPOSE_RELIABILITY) build
-	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b desktop-gui-a desktop-gui-b
+	$(COMPOSE_RELIABILITY) up -d --build --force-recreate postgres ppz-server daemon-a daemon-b
 
 e2e-reliability-down:
 	$(COMPOSE_RELIABILITY) down -v --remove-orphans

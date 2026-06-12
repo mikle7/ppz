@@ -3,14 +3,13 @@ version: 2
 # ppz release pipeline.
 #
 # Triggered on workflow_dispatch by .github/workflows/release.yml.
-# Builds ppz, ppz-server, ppz-desktop, and ppz-natsbootstrap for
+# Builds ppz, ppz-server, and ppz-natsbootstrap for
 # linux/darwin × amd64/arm64, archives them per-platform, computes
 # checksums, and uploads to the matching GitHub Release.
 #
-# install.sh is opinionated about WHICH of these to drop into a user's
-# PATH: by default just `ppz` + `ppz-desktop`; `PPZ_INCLUDE_SERVER=1`
-# adds `ppz-server` + `ppz-natsbootstrap` for self-hosters. The tarball
-# carries all four either way; install.sh just picks.
+# All three binaries ship in the tarball and install.sh drops all three
+# into the user's PATH: `ppz` (CLI) plus `ppz-server` + `ppz-natsbootstrap`
+# for anyone who wants to bring up a local/self-hosted server.
 
 before:
   hooks:
@@ -41,18 +40,6 @@ builds:
       - -X github.com/pipescloud/ppz/internal/version.Version={{.Version}}
       - -X github.com/pipescloud/ppz/internal/version.BuildSHA={{.ShortCommit}}
 
-  - id: ppz-desktop
-    main: ./cmd/ppz-desktop
-    binary: ppz-desktop
-    env: [CGO_ENABLED=0]
-    goos: [linux, darwin]
-    goarch: [amd64, arm64]
-    flags: [-trimpath]
-    ldflags:
-      - -s -w
-      - -X github.com/pipescloud/ppz/internal/version.Version={{.Version}}
-      - -X github.com/pipescloud/ppz/internal/version.BuildSHA={{.ShortCommit}}
-
   # ppz-seed is intentionally NOT published in release tarballs.
   # It only populates the OSS test fixtures (foo/bar/alpha/beta hardcoded
   # in internal/seed/seed.go) and is built from source by the compose
@@ -70,7 +57,7 @@ builds:
 
 archives:
   - id: default
-    builds: [ppz, ppz-server, ppz-desktop, ppz-natsbootstrap]
+    builds: [ppz, ppz-server, ppz-natsbootstrap]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
