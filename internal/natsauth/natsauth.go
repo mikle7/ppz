@@ -209,6 +209,12 @@ func StartEmbeddedNATSWithAuth(cfg EmbeddedConfig) (*natsserver.Server, error) {
 		Port:             cfg.Port,
 		TrustedOperators: []*jwt.OperatorClaims{opClaims},
 		AccountResolver:  resolver,
+		// Embedded: the host process owns signal handling. Without this,
+		// nats-server's Start() installs its own SIGINT/SIGTERM handler
+		// whose Shutdown races ours and panics (close of nil channel in
+		// shutdownEventing), killing the process before deferred cleanup
+		// runs.
+		NoSigs: true,
 	}
 	if sysAccClaims != nil {
 		opts.SystemAccount = sysAccClaims.Subject
