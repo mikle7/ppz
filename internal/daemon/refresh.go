@@ -33,6 +33,13 @@ const skewSeconds = 30
 // errors from RefreshFn.
 const retryAfter = 5 * time.Second
 
+// refreshErrorCoalesceWindow rate-limits refresh_error event recording
+// for an UNCHANGED failure reason (see startRefreshLoop's OnError
+// hook). One event per window keeps a multi-hour outage within the
+// ring (256 entries ≈ 4h at this rate) instead of letting per-retry
+// spam evict the outage's first events.
+const refreshErrorCoalesceWindow = time.Minute
+
 // OnRefreshedFn fires after refreshNow successfully swaps in fresh
 // credentials. The daemon hooks this to proactively rebuild its NATS
 // connection within the 60s overlap window (User JWT `nbf` is set 30s

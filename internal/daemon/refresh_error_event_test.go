@@ -74,3 +74,51 @@ func TestRefreshFailureRecordsEventWithCause(t *testing.T) {
 		t.Fatalf("refresh_error event recorded with empty Reason — the underlying error must be preserved, got: %+v", *found)
 	}
 }
+
+// TestRefreshErrorEventsCoalesceRepeats — during a sustained outage the
+// background recovery loops (kickReconnect every 2-15s, onWake every
+// 5s, the refresh loop's own 5s retry) each drive refresh attempts
+// whose failures are identical. Recording every one would flood the
+// bounded ring (natsEventRingCap) and evict the events that diagnose
+// the outage's START — the exact evidence fix #1 exists to preserve.
+// Contract: an identical consecutive reason records at most once per
+// coalesce window; a CHANGED reason always records (a DNS failure
+// turning into a TLS failure is signal, not spam).
+func TestRefreshErrorEventsCoalesceRepeats(t *testing.T) {
+	d := &Daemon{
+		State:      NewState(t.TempDir()),
+		NATSEvents: newNATSEventRing(natsEventRingCap),
+		HTTP:       &http.Client{Timeout: 2 * time.Second},
+	}
+	creds := Credentials{
+		URL:          "http://127.0.0.1:1",
+		APIKey:       "pz_test_refresh_coalesce",
+		AccountID:    "00000000-0000-0000-0000-000000000001",
+		NATSUserJWT:  "stale-jwt",
+		NATSUserSeed: "stale-seed",
+	}
+	if err := d.State.SetLogin(creds, creds.AccountID, "alpha", "pz_test"); err != nil {
+		t.Fatalf("SetLogin: %v", err)
+	}
+	d.startRefreshLoop(creds.AccountID, creds.NATSUserJWT, creds.NATSUserSeed,
+		time.Now().Add(-time.Minute).Unix())
+	t.Cleanup(d.Refresh.Stop)
+
+	// Three back-to-back failures with an identical cause (connection
+	// refused against the same URL) — the sustained-outage retry shape.
+	for i := 0; i < 3; i++ {
+		if _, err := d.Refresh.RefreshNowIfDue(context.Background(), time.Now()); err == nil {
+			t.Fatalf("RefreshNowIfDue #%d: expected a transport error, got nil", i+1)
+		}
+	}
+
+	var count int
+	for _, ev := range d.NATSEvents.Snapshot() {
+		if ev.Type == "refresh_error" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("%d refresh_error events for 3 identical consecutive failures, want 1 (coalesced)", count)
+	}
+}

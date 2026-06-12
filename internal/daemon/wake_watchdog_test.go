@@ -100,6 +100,23 @@ func TestWakeWatchdog_SteadyCadenceNeverFires(t *testing.T) {
 	}
 }
 
+// loginForWakeTests stores dummy credentials so the daemon under test
+// is logged in — onWake (like kickReconnect) treats a logged-out
+// daemon as a no-op, and these tests model the post-wake recovery of a
+// logged-in one. The URL is never dialed: each test injects its own
+// RefreshFn.
+func loginForWakeTests(t *testing.T, d *Daemon) {
+	t.Helper()
+	creds := Credentials{
+		URL:       "http://127.0.0.1:1",
+		APIKey:    "pz_wake_test",
+		AccountID: "00000000-0000-0000-0000-000000000001",
+	}
+	if err := d.State.SetLogin(creds, creds.AccountID, "alpha", "pz_wake"); err != nil {
+		t.Fatalf("SetLogin: %v", err)
+	}
+}
+
 // TestDaemonOnWake_RefreshesAndRebuilds pins the daemon-side wiring: at
 // wake with an expired JWT (the incident state), onWake must refresh
 // credentials immediately and swap in a fresh NATS connection,
@@ -117,6 +134,7 @@ func TestDaemonOnWake_RefreshesAndRebuilds(t *testing.T) {
 			return nats.Connect(u)
 		},
 	}
+	loginForWakeTests(t, d)
 	d.Refresh = &RefreshLoop{
 		AccountID: "00000000-0000-0000-0000-000000000001",
 		Refresh: func(context.Context, string) (string, string, int64, error) {
@@ -177,6 +195,7 @@ func TestDaemonOnWake_RetriesTransientRefreshFailures(t *testing.T) {
 			return nats.Connect(u)
 		},
 	}
+	loginForWakeTests(t, d)
 	d.Refresh = &RefreshLoop{
 		AccountID: "00000000-0000-0000-0000-000000000001",
 		Refresh: func(context.Context, string) (string, string, int64, error) {
@@ -209,6 +228,43 @@ func TestDaemonOnWake_RetriesTransientRefreshFailures(t *testing.T) {
 	}
 }
 
+// TestDaemonOnWake_NoopsWhenLoggedOut — parity with kickReconnect's
+// logged-out guard: onWake on a daemon with no stored credentials must
+// not call /auth/exchange at all (it would send stale creds) and must
+// not loop; it returns nil promptly. The RefreshLoop here deliberately
+// returns a transient error — without the guard, onWake would retry it
+// indefinitely.
+func TestDaemonOnWake_NoopsWhenLoggedOut(t *testing.T) {
+	var attempts int64
+	d := &Daemon{
+		State:             NewState(t.TempDir()), // no SetLogin — logged out
+		NATSEvents:        newNATSEventRing(natsEventRingCap),
+		Follows:           newFollowRegistry(),
+		wakeRetryInterval: time.Millisecond,
+	}
+	// Constructed without Start so no background goroutine races the
+	// attempt counter; onWake's RefreshNowIfDue path works regardless
+	// (zero expUnix → permanently due).
+	d.Refresh = &RefreshLoop{
+		AccountID: "00000000-0000-0000-0000-000000000001",
+		Refresh: func(context.Context, string) (string, string, int64, error) {
+			atomic.AddInt64(&attempts, 1)
+			return "", "", 0, errors.New("transient")
+		},
+	}
+
+	// The timeout is a backstop so a missing guard fails the test
+	// quickly instead of spinning until the suite deadline.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if err := d.onWake(ctx); err != nil {
+		t.Fatalf("onWake on a logged-out daemon = %v, want nil (prompt no-op)", err)
+	}
+	if got := atomic.LoadInt64(&attempts); got != 0 {
+		t.Fatalf("onWake attempted %d refreshes while logged out, want 0", got)
+	}
+}
+
 // TestDaemonOnWake_StopsOnUnauthorized — a revoked bearer must NOT be
 // retried forever: ErrUnauthorized is terminal (matching the refresh
 // loop's own semantics), so a wake on a logged-out machine fails fast.
@@ -221,6 +277,7 @@ func TestDaemonOnWake_StopsOnUnauthorized(t *testing.T) {
 		NATSURL:           "nats://127.0.0.1:1",
 		wakeRetryInterval: time.Millisecond,
 	}
+	loginForWakeTests(t, d)
 	d.Refresh = &RefreshLoop{
 		AccountID: "00000000-0000-0000-0000-000000000001",
 		Refresh: func(context.Context, string) (string, string, int64, error) {

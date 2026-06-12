@@ -121,6 +121,12 @@ func (d *Daemon) onWake(ctx context.Context) error {
 			interval = wakeRefreshRetryInterval
 		}
 		for {
+			// Logged out (possibly mid-retry): nothing to refresh and
+			// no credential to dial with — stop, matching
+			// kickReconnect's per-iteration guard.
+			if _, ok := d.State.Credentials(); !ok {
+				return nil
+			}
 			_, err := r.RefreshNowIfDue(ctx, time.Now())
 			if err == nil {
 				break
