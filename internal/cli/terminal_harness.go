@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
 
+	"github.com/pipescloud/ppz/internal/cliproto"
 	"github.com/pipescloud/ppz/internal/harness"
 )
 
@@ -81,6 +83,23 @@ const (
 	detectSnapshotInterval    = time.Second
 )
 
+// harnessScreenBottomLines is how much of the live screen the blocked
+// detectors see. Dialogs and prompts render at the bottom; 50 lines
+// matches what herdr found sufficient across harness UIs.
+const harnessScreenBottomLines = 50
+
+// syncScreenSize mirrors the child PTY's current geometry into the
+// live screen model so it always renders at the child's real size.
+// Errors keep the previous grid — a stale size degrades pattern
+// matching, it must never break the share.
+func syncScreenSize(screen *cliproto.LiveScreen, ptmx *os.File) {
+	ws, err := pty.GetsizeFull(ptmx)
+	if err != nil || ws.Cols == 0 || ws.Rows == 0 {
+		return
+	}
+	screen.Resize(int(ws.Cols), int(ws.Rows))
+}
+
 // runHarnessDetection polls the detector and nudges `wake` whenever the
 // detection snapshot changes (harness appeared/exited, working↔idle),
 // so the heartbeat loop emits an immediate out-of-cycle beat instead of
@@ -118,16 +137,22 @@ func runHarnessDetection(ctx context.Context, det *harness.Detector, started tim
 }
 
 // harnessOutputReader tees read timestamps into the detector so PTY
-// output counts as agent activity. Data passes through untouched.
+// output counts as agent activity, and (when screen is non-nil) feeds
+// the same bytes into the live screen model for blocked-state
+// detection. Data passes through untouched either way.
 type harnessOutputReader struct {
-	r   io.Reader
-	det *harness.Detector
+	r      io.Reader
+	det    *harness.Detector
+	screen io.Writer // optional live screen model; nil disables
 }
 
 func (h harnessOutputReader) Read(p []byte) (int, error) {
 	n, err := h.r.Read(p)
 	if n > 0 {
 		h.det.ObserveOutput(time.Now())
+		if h.screen != nil {
+			_, _ = h.screen.Write(p[:n])
+		}
 	}
 	return n, err
 }

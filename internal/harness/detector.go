@@ -39,6 +39,7 @@ type Detector struct {
 	inspect func() (ForegroundProc, error)
 
 	mu       sync.Mutex
+	screen   func() string // optional: visible-screen source for blocked arbitration
 	harness  string
 	childPID int
 	tracker  *ActivityTracker
@@ -50,6 +51,17 @@ type Detector struct {
 // detector needs no clock input of its own.
 func NewDetector(inspect func() (ForegroundProc, error)) *Detector {
 	return &Detector{inspect: inspect}
+}
+
+// SetScreen wires an optional visible-screen source (the wrapper's
+// live screen model, bottom lines). When set, an identified harness
+// whose byte causality says "not working" is further arbitrated by its
+// ScreenDetector: blocker chrome on screen → StateBlocked. The source
+// is called with d's lock held and must not call back into d.
+func (d *Detector) SetScreen(src func() string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.screen = src
 }
 
 // Poll re-inspects the foreground process and updates identification.
@@ -99,5 +111,16 @@ func (d *Detector) Snapshot(now time.Time) Detection {
 	if d.harness == "" {
 		return Detection{}
 	}
-	return Detection{Harness: d.harness, ChildPID: d.childPID, State: d.tracker.State(now)}
+	state := d.tracker.State(now)
+	// Screen arbitration, only when byte causality says not-working:
+	// PTY activity is the authority for working (stale blocker chrome
+	// must not mask a streaming agent), the screen only splits idle
+	// into idle vs blocked. Idle includes the startup grace — a
+	// permission prompt at boot is a real question, not boot noise.
+	if state == StateIdle && d.screen != nil {
+		if sd := ScreenDetectorFor(d.harness); sd != nil && sd.Blocked(d.screen()) {
+			state = StateBlocked
+		}
+	}
+	return Detection{Harness: d.harness, ChildPID: d.childPID, State: state}
 }

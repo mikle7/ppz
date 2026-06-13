@@ -211,7 +211,7 @@ func identifiedDetector() *harness.Detector {
 // the tee must both pass the bytes through and stamp the observation.
 func TestHarnessOutputReader_ReadMarksWorking(t *testing.T) {
 	det := identifiedDetector()
-	r := harnessOutputReader{strings.NewReader("agent output"), det}
+	r := harnessOutputReader{r: strings.NewReader("agent output"), det: det}
 
 	buf := make([]byte, 32)
 	n, err := r.Read(buf)
@@ -227,7 +227,7 @@ func TestHarnessOutputReader_ReadMarksWorking(t *testing.T) {
 // and must not refresh the working window.
 func TestHarnessOutputReader_EmptyReadDoesNotMarkWorking(t *testing.T) {
 	det := identifiedDetector()
-	r := harnessOutputReader{strings.NewReader(""), det}
+	r := harnessOutputReader{r: strings.NewReader(""), det: det}
 
 	_, _ = r.Read(make([]byte, 32))
 	if got := det.Snapshot(time.Now()).State; got != harness.StateIdle {
@@ -254,5 +254,24 @@ func TestHarnessInputWriter_TaintsSubsequentOutputAsEcho(t *testing.T) {
 	det.ObserveOutput(time.Now()) // the injected bytes' echo
 	if got := det.Snapshot(time.Now()).State; got != harness.StateIdle {
 		t.Errorf("echo after injected input = %q, want %q (tainted)", got, harness.StateIdle)
+	}
+}
+
+// With a screen writer wired, the output tee feeds the same bytes into
+// the live screen model that it passes through to the display/publish
+// path — this is the only place the screen model learns what the child
+// drew, so blocked detection sees exactly what the user sees.
+func TestHarnessOutputReader_FeedsScreen(t *testing.T) {
+	det := identifiedDetector()
+	var screen bytes.Buffer
+	r := harnessOutputReader{r: strings.NewReader("dialog bytes"), det: det, screen: &screen}
+
+	buf := make([]byte, 32)
+	n, err := r.Read(buf)
+	if err != nil || string(buf[:n]) != "dialog bytes" {
+		t.Fatalf("Read = (%q, %v), want passthrough", buf[:n], err)
+	}
+	if screen.String() != "dialog bytes" {
+		t.Errorf("screen received %q, want %q", screen.String(), "dialog bytes")
 	}
 }

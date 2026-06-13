@@ -20,7 +20,7 @@ applicable parts into ppz's wrapper and heartbeat pipeline, and surfaces the res
 |-------|------|-----------|--------|
 | 1 | Detect *which* harness is running in the wrapped PTY | foreground process-group inspection | implemented (2026-06-10) |
 | 2 | Detect working/idle + combined `ppz who` status | PTY byte causality | implemented (2026-06-10) |
-| 3 | Detect blocked (permission prompts) | live vt10x screen model + per-harness patterns | future |
+| 3 | Detect blocked (permission prompts) | live vt10x screen model + per-harness patterns | implemented, Claude-first (2026-06-11) |
 | 4 | Detect model without env vars | best-effort, Claude-first (transcript tail) | future |
 
 Phases 1+2 shipped together: identification feeds the heartbeat, causality feeds
@@ -52,6 +52,14 @@ fixture (`share-heartbeat-detects-harness`).
   binary-name rows + one pattern module.
 - **Model detection**: herdr deliberately has none ("detection is decoupled",
   AGENTS.md) — a meaningful signal about its reliability.
+
+**Licensing boundary**: herdr is AGPL-3.0-or-later and third-party
+(github.com/ogulcancelik/herdr); ppz is Apache-2.0. herdr is used as a
+behavioral reference only — architecture ideas, timing parameters, and factual
+UI pattern strings (which are facts about the agents' UIs, not herdr's
+expression). No herdr source is copied or closely translated, including test
+code. A function-for-function port would make ppz a derivative work and pull
+the AGPL across the project.
 
 The Go translation of herdr's extensibility model: a data table of `Spec` rows for
 identification (phase 1), and a per-harness `ScreenDetector` interface registered on
@@ -180,21 +188,40 @@ func CombineHeartbeatStatus(liveness string, agentState string) string
 
 ---
 
-## Phase 3 sketch (blocked) — future
+## Phase 3 (blocked) — implemented 2026-06-11, Claude-first
 
-ppz already bundles a VT100 emulator (`internal/thirdparty/vt10x`, used one-shot by
-`cliproto.RenderTerminal` for `ppz read --tty`). The wrapper keeps a *private* live
-instance: tee output chunks into `term.Write()`, `Resize()` on SIGWINCH, read the
-bottom ~50 lines under `term.Lock()` when causality says "not working", and run the
-identified harness's `ScreenDetector` patterns (ported from herdr's
-`src/detect/agents/claude_code.rs` first). Pre-work before relying on it:
+The wrapper keeps a private live instance of the bundled vt10x emulator
+(`cliproto.LiveScreen`): the output tee feeds it every byte the child draws, the
+winsize paths mirror SIGWINCH into it, and the detector consults its bottom 50
+lines (`harnessScreenBottomLines`) — but only when byte causality already says
+"not working". PTY activity stays the authority for working; the screen splits
+idle into idle vs blocked. Blocked is startup-grace-exempt: grace suppresses
+false *working* from boot noise, but a permission prompt at boot (resume onto a
+dialog) is a real question.
 
-1. Validate incremental writes — replay the existing `claude-session.bin` fixtures
-   chunk-by-chunk vs one-shot and diff (escape sequences straddling chunk
-   boundaries are the risk).
-2. The pinned stale-cell bug (`TestRender_AppleSessionMatchesGroundTruth_AtSourceDims`
-   RED test) can leave ghost "Do you want to proceed?" text on the parsed screen →
-   false blocked. Characterize against Claude fixtures; fix or mask before shipping.
+Per-harness patterns hang off `harness.ScreenDetector` (`ScreenDetectorFor`);
+Claude Code (`screen_claude.go`) recognizes permission/edit dialogs,
+selector-chrome forms, permission waits, and interview screens, with two
+false-positive guards: working chrome ("esc to interrupt") vetoes stale dialog
+text, and a live input prompt box (a ❯ line that isn't a numbered selector)
+marks question text above it as history/ghost cells rather than a live dialog.
+Adding a harness = one `ScreenDetectorFor` case + one `screen_<name>.go`.
+
+Pre-work outcomes:
+
+1. Incremental writes validated: `TestLiveScreen_ChunkedFeedMatchesOneShot`
+   replays the real session fixtures at chunk sizes 1/7/4096 (1-byte chunks
+   split every escape sequence and rune) and matches one-shot `RenderTerminal`
+   exactly — vt10x's parser state survives arbitrary chunking; only UTF-8
+   tearing needed handling (LiveScreen carries trailing partial runes).
+2. The vt10x stale-cell bug is *mitigated, not fixed*: the live-prompt-box and
+   working-chrome vetoes mean ghost dialog text can't flip an interactive
+   session to blocked on its own. The bug's pinned render test remains; fixing
+   the emulator is still worthwhile independent hardening.
+
+Follow-on hardening: ground-truth fixtures captured from real blocked Claude
+sessions (`ppz read <h>.stdout --raw` while a dialog is up) to back the
+synthetic pattern tests; codex/copilot/agy/pi pattern modules.
 
 ## Phase 4 sketch (model) — future, best-effort
 
