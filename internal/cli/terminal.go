@@ -453,6 +453,18 @@ func cmdTerminalShare(args []string) error {
 		forwardStdin(ctx, handle, harnessInputWriter{ptmx, det})
 	}()
 
+	// Subscribe to <handle>.stdctrl → apply viewer-requested resizes to
+	// the child PTY. The viewer→wrapper half of the resize channel: a
+	// viewer (h2oslide pane, browser) publishes {"type":"setsize",...}
+	// and the child is sized to match. Applied directly to the child PTY
+	// (not via local SIGWINCH), so it works for headless/remote/container
+	// wrappers that have no controlling tty.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		forwardResize(ctx, handle, ptmx)
+	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -759,6 +771,84 @@ func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer
 		}
 		_, _ = io.WriteString(master, evt.Message.Payload)
 		seen.add(evt.Message.ID)
+	}
+}
+
+// forwardResize subscribes to <handle>.stdctrl and applies viewer
+// "setsize" requests to the child PTY. Mirrors forwardStdin's resilient
+// redial loop. It ignores the wrapper's own "resize" messages (which it
+// publishes via publishWinsize), so there's no feedback loop; only
+// viewer-sent "setsize" messages take effect. Resizing the child PTY
+// raises SIGWINCH inside it, so the wrapped program re-renders.
+func forwardResize(ctx context.Context, handle string, ptmx *os.File) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		streamForwardResizeOnce(ctx, handle, ptmx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
+
+func streamForwardResizeOnce(ctx context.Context, handle string, ptmx *os.File) {
+	conn, err := net.Dial("unix", ipcSocket())
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	body, _ := json.Marshal(cliproto.ReadRequest{
+		Handle:    handle,
+		Channel:   "stdctrl",
+		Follow:    true,
+		NoAdvance: true,
+	})
+	if err := json.NewEncoder(conn).Encode(map[string]any{"method": cliproto.IPCRead, "params": json.RawMessage(body)}); err != nil {
+		return
+	}
+
+	stopCloser := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stopCloser:
+		}
+	}()
+	defer close(stopCloser)
+
+	var last struct{ cols, rows int }
+	dec := bufio.NewScanner(conn)
+	dec.Buffer(make([]byte, 0, 64*1024), 1*1024*1024)
+	for dec.Scan() {
+		var evt cliproto.ReadEvent
+		if err := json.Unmarshal(dec.Bytes(), &evt); err != nil || evt.Message == nil {
+			continue
+		}
+		var msg struct {
+			Type string `json:"type"`
+			Cols int    `json:"cols"`
+			Rows int    `json:"rows"`
+		}
+		if json.Unmarshal([]byte(evt.Message.Payload), &msg) != nil || msg.Type != "setsize" {
+			continue // ignore "resize" (our own) and anything else
+		}
+		if msg.Cols <= 0 || msg.Rows <= 0 {
+			continue
+		}
+		if msg.Cols == last.cols && msg.Rows == last.rows {
+			continue // retained-replay or duplicate; nothing to do
+		}
+		last.cols, last.rows = msg.Cols, msg.Rows
+		_ = pty.Setsize(ptmx, &pty.Winsize{Cols: uint16(msg.Cols), Rows: uint16(msg.Rows)})
+		publishWinsize(handle, ptmx)
 	}
 }
 
