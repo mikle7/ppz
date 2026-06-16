@@ -45,7 +45,7 @@ func TestCmdLs_PatternsForwardToList(t *testing.T) {
 }
 
 // Bare `ppz ls` (no args) must keep working unchanged — every other
-// IPCList caller (source.go, pipe.go, completion.go, desktop.go)
+// IPCList caller (source.go, pipe.go, completion.go)
 // passes no patterns and expects the full snapshot.
 func TestCmdLs_NoArgsSendsEmptyPatterns(t *testing.T) {
 	dir, err := os.MkdirTemp("/tmp", "ppz-ls-nopat-")

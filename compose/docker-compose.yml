@@ -1,7 +1,7 @@
 # ppz Phase 1 e2e harness.
 #
 # Topology mirrors the user's spec:
-#   local-a (test-runner) <-> daemon-a + desktop-gui-a <-> ppz-server <-> daemon-b + desktop-gui-b <-> local-b
+#   local-a (test-runner) <-> daemon-a <-> ppz-server <-> daemon-b <-> local-b
 #
 # Boot order is enforced via depends_on healthchecks. The seeder runs as part
 # of ppz-server's entrypoint and writes plaintext keys + org IDs into the
@@ -114,32 +114,6 @@ services:
       - daemon-b-home:/home/ppz
     networks: [ppz]
 
-  desktop-gui-a:
-    build:
-      context: ..
-      dockerfile: compose/Dockerfile.gui
-    command: ["ppz-desktop", "--headless", "--ipc=/home/ppz/daemon.sock", "--http-addr=:9090"]
-    depends_on:
-      - daemon-a
-    volumes:
-      - daemon-a-home:/home/ppz
-    ports:
-      - "9091:9090"   # browser viewer for daemon-a → http://localhost:9091
-    networks: [ppz]
-
-  desktop-gui-b:
-    build:
-      context: ..
-      dockerfile: compose/Dockerfile.gui
-    command: ["ppz-desktop", "--headless", "--ipc=/home/ppz/daemon.sock", "--http-addr=:9090"]
-    depends_on:
-      - daemon-b
-    ports:
-      - "9092:9090"   # browser viewer for daemon-b → http://localhost:9092
-    volumes:
-      - daemon-b-home:/home/ppz
-    networks: [ppz]
-
   test-runner:
     build:
       context: ..
@@ -154,10 +128,6 @@ services:
       daemon-a:
         condition: service_started
       daemon-b:
-        condition: service_started
-      desktop-gui-a:
-        condition: service_started
-      desktop-gui-b:
         condition: service_started
     volumes:
       - ../tests:/tests:ro

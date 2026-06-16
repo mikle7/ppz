@@ -25,16 +25,11 @@ from the latest [GitHub Release](https://github.com/pipescloud/ppz/releases),
 verifies the sha256, and drops the binaries into `~/.local/bin`. No
 Go toolchain required.
 
-By default you get the **CLI client**: `ppz` + `ppz-desktop` (local
-web GUI). Self-hosters who want to run their own server can opt into
-the server bundle:
+You get the full bundle: the **CLI** `ppz`, plus `ppz-server` and
+`ppz-natsbootstrap` for anyone who wants to bring up their own
+local/self-hosted server.
 
-```bash
-PPZ_INCLUDE_SERVER=1 curl -fsSL .../install.sh | bash
-# adds: ppz-server, ppz-natsbootstrap
-```
-
-Other knobs: `PPZ_VERSION=v0.17.0` to pin a tag, `PPZ_INSTALL_DIR=/usr/local/bin`
+Knobs: `PPZ_VERSION=v0.17.0` to pin a tag, `PPZ_INSTALL_DIR=/usr/local/bin`
 to change the target directory.
 
 Upgrade an installed CLI in place with:
@@ -70,10 +65,9 @@ there's no shadowing risk if you mix them. Override with
 
 | Binary | Audience | Purpose |
 |---|---|---|
-| `ppz`               | CLI users (default) | The user-facing CLI (`ppz terminal create`, `ppz send`, `ppz read`, `ppz pipe …`). |
-| `ppz-desktop`       | CLI users (default) | Local web GUI for browsing pipes. |
-| `ppz-server`        | Self-hosters (`PPZ_INCLUDE_SERVER=1`) | Hosts the account/source/pipe state and embeds a NATS server. pipescloud.io runs one. |
-| `ppz-natsbootstrap` | Self-hosters (`PPZ_INCLUDE_SERVER=1`) | One-shot helper that mints an ephemeral NATS NSC chain (operator + account JWTs) for a fresh server. Production usually pulls these from a secret manager instead. |
+| `ppz`               | CLI users | The user-facing CLI (`ppz terminal create`, `ppz send`, `ppz read`, `ppz pipe …`). |
+| `ppz-server`        | Self-hosters | Hosts the account/source/pipe state and embeds a NATS server. pipescloud.io runs one. |
+| `ppz-natsbootstrap` | Self-hosters | One-shot helper that mints an ephemeral NATS NSC chain (operator + account JWTs) for a fresh server. Production usually pulls these from a secret manager instead. |
 | `ppz-seed`          | Source / e2e only | Populates the OSS test fixtures (`foo`/`bar` users, `alpha`/`beta` accounts). Built from source by the compose harness — not published in release tarballs. |
 
 ## Using ppz from agents
@@ -134,8 +128,9 @@ everything a local server needs and writes its config to `.ppz-local/`
 (gitignored):
 
 ```bash
-# get the server binaries (or build from source: make build)
-PPZ_INCLUDE_SERVER=1 curl -fsSL https://raw.githubusercontent.com/pipescloud/ppz/main/install.sh | bash
+# the install one-liner already ships ppz-server + ppz-natsbootstrap
+# (or build from source: make build)
+curl -fsSL https://raw.githubusercontent.com/pipescloud/ppz/main/install.sh | bash
 
 scripts/ppz-local-server.sh          # answer the prompts → setup
 scripts/ppz-local-server.sh --start  # load the config + run ppz-server

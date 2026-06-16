@@ -11,19 +11,15 @@ set -euo pipefail
 # Configurable:
 #   PPZ_INSTALL_DIR     target dir (default: $HOME/.local/bin)
 #   PPZ_VERSION         tag to pin (default: latest release; e.g. v0.17.0)
-#   PPZ_INCLUDE_SERVER  set to 1 to also install ppz-server +
-#                       ppz-natsbootstrap (for self-hosters bringing up
-#                       a local server). Default install is CLI-only:
-#                       just ppz + ppz-desktop.
+#
+# Installs the full bundle: ppz (CLI) plus ppz-server + ppz-natsbootstrap
+# for bringing up a local/self-hosted server.
 
 REPO="pipescloud/ppz"
 INSTALL_DIR="${PPZ_INSTALL_DIR:-$HOME/.local/bin}"
 PIN_VERSION="${PPZ_VERSION:-}"
 
-BINARIES=(ppz ppz-desktop)
-if [ "${PPZ_INCLUDE_SERVER:-0}" = "1" ]; then
-	BINARIES+=(ppz-server ppz-natsbootstrap)
-fi
+BINARIES=(ppz ppz-server ppz-natsbootstrap)
 
 msg() { printf '%s\n' "$*" >&2; }
 die() { msg "ppz install: $*"; exit 1; }

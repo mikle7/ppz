@@ -1218,7 +1218,7 @@ func (d *Daemon) handleList(ctx context.Context, conn net.Conn, params json.RawM
 	// so `ppz ls foo%` and `ppz ls --watch foo%` agree on what
 	// matches. Without patterns, fall through to the original
 	// unfiltered enumeration — every other IPCList caller (source.go,
-	// pipe.go, completion.go, desktop.go) takes this path and expects
+	// pipe.go, completion.go) takes this path and expects
 	// the full snapshot.
 	if len(req.Patterns) > 0 {
 		if err := d.ensureNATS(ctx); err != nil {
