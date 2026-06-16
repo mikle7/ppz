@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -196,11 +197,55 @@ func (d *Daemon) startRefreshLoop(accountID, jwt, seed string, expUnix int64) {
 	if d.Refresh != nil {
 		d.Refresh.Stop()
 	}
+	// refresh_error coalescing state for OnError below — see the hook's
+	// comment. Closure-scoped so each loop generation starts clean.
+	var (
+		refreshErrMu         sync.Mutex
+		lastRefreshErrReason string
+		lastRefreshErrAt     time.Time
+	)
 	d.Refresh = &RefreshLoop{
 		AccountID:   accountID,
 		Refresh: d.authExchangeRefresh,
 		OnUnauthorized: func(string) {
 			d.State.SetLoginCheck(cliproto.LoginCheckInvalid)
+		},
+		// Record every failed refresh attempt WITH its cause. The
+		// 2026-06-11 wake-from-sleep bundle had a ~70s window where
+		// every /auth/exchange failed and the bundle couldn't say why —
+		// ensureNATS collapses all transport errors to
+		// E_SERVER_UNREACHABLE. This event is the durable trace
+		// (`ppz diagnostics`, future bundles). Fires with no
+		// RefreshLoop lock held, so reading d.Refresh.JWTExp() here is
+		// deadlock-free.
+		//
+		// Coalesced: during a sustained outage the recovery loops
+		// (refresh retry 5s, kickReconnect 2-15s, onWake 5s) fail with
+		// an identical reason every few seconds; recording each one
+		// would flood the bounded ring and evict the events that
+		// diagnose the outage's START. An unchanged reason records at
+		// most once per refreshErrorCoalesceWindow; a CHANGED reason
+		// records immediately (DNS→TLS is signal). State is per-loop
+		// closure: a re-login resets it along with the loop itself.
+		OnError: func(err error) {
+			reason := err.Error()
+			refreshErrMu.Lock()
+			dup := reason == lastRefreshErrReason &&
+				time.Since(lastRefreshErrAt) < refreshErrorCoalesceWindow
+			if !dup {
+				lastRefreshErrReason, lastRefreshErrAt = reason, time.Now()
+			}
+			refreshErrMu.Unlock()
+			if dup {
+				return
+			}
+			d.recordNATSEvent(NATSEvent{
+				Type:   "refresh_error",
+				At:     time.Now(),
+				Caller: "refresh-loop",
+				JWTExp: d.Refresh.JWTExp(),
+				Reason: reason,
+			})
 		},
 		// Proactively rebuild the NATS connection with the fresh creds
 		// during the 60s rotation overlap window (server `nbf` is set

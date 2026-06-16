@@ -1,0 +1,5 @@
+setup=OK
+send-during-pause=FAILED
+zombie-closed=YES
+verdict=RECONNECTED
+exit=0

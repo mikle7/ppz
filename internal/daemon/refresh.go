@@ -33,6 +33,13 @@ const skewSeconds = 30
 // errors from RefreshFn.
 const retryAfter = 5 * time.Second
 
+// refreshErrorCoalesceWindow rate-limits refresh_error event recording
+// for an UNCHANGED failure reason (see startRefreshLoop's OnError
+// hook). One event per window keeps a multi-hour outage within the
+// ring (256 entries ≈ 4h at this rate) instead of letting per-retry
+// spam evict the outage's first events.
+const refreshErrorCoalesceWindow = time.Minute
+
 // OnRefreshedFn fires after refreshNow successfully swaps in fresh
 // credentials. The daemon hooks this to proactively rebuild its NATS
 // connection within the 60s overlap window (User JWT `nbf` is set 30s
@@ -55,6 +62,18 @@ type RefreshLoop struct {
 	Refresh        RefreshFn
 	OnUnauthorized func(accountID string)
 	OnRefreshed    OnRefreshedFn
+
+	// OnError fires on EVERY failed refresh attempt (including the
+	// terminal ErrUnauthorized, immediately before OnUnauthorized) with
+	// the underlying error. The daemon hooks this to record a
+	// "refresh_error" event — the 2026-06-11 incident bundle was
+	// undiagnosable precisely because failed /auth/exchange attempts
+	// left no trace (ensureNATS collapses them all to
+	// E_SERVER_UNREACHABLE). Runs synchronously on whichever goroutine
+	// attempted the refresh (the loop, RefreshNowIfDue callers, …)
+	// with no RefreshLoop lock held; implementations must be cheap and
+	// must not call back into RefreshLoop.
+	OnError func(err error)
 
 	mu      sync.Mutex
 	jwt     string
@@ -186,6 +205,9 @@ func (r *RefreshLoop) run(ctx context.Context) {
 
 func (r *RefreshLoop) refreshNow(ctx context.Context) error {
 	newJWT, newSeed, newExp, err := r.Refresh(ctx, r.AccountID)
+	if err != nil && r.OnError != nil {
+		r.OnError(err)
+	}
 	if errors.Is(err, ErrUnauthorized) {
 		if r.OnUnauthorized != nil {
 			r.OnUnauthorized(r.AccountID)
