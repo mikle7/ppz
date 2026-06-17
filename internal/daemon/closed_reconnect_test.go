@@ -141,3 +141,95 @@ func TestSwapClose_DoesNotChurnReconnect(t *testing.T) {
 	}
 	t.Cleanup(func() { newNC.Close() })
 }
+
+// TestFailureCloseRecoversWithoutChurn locks the "one no-op, no churn"
+// invariant for the recursive path recordNATSEvent("closed") →
+// kickReconnect. A failure-close kicks recovery; recovery's own swap
+// (and the post-flag-reset race on the original close handler) can fire
+// further "closed" events that kick again. Two brakes keep this bounded:
+// the reconnecting CAS suppresses nested kicks while the loop runs, and
+// rebuildNC's generation check coalesces any kick that slips through
+// into a no-op that produces NO new swap — so the recursion terminates.
+//
+// The load-bearing brake is the coalescing: if it regressed (e.g.
+// rebuildNC always dialed), the trailing kick would swap → close →
+// kick → swap forever. We assert the INVARIANT, not the interleaving
+// (which is timing-dependent and would flake): after recovery, the swap
+// count must stop growing and the connection must stay put. A churn
+// regression makes the swap count climb without bound.
+func TestFailureCloseRecoversWithoutChurn(t *testing.T) {
+	natsURL := startEmbeddedNATSURL(t)
+	d := &Daemon{
+		State:            NewState(t.TempDir()),
+		NATSEvents:       newNATSEventRing(natsEventRingCap),
+		Follows:          newFollowRegistry(),
+		Watches:          newWatchRegistry(),
+		Heartbeats:       NewHeartbeatCache(),
+		NATSURL:          natsURL,
+		reconnectBackoff: 5 * time.Millisecond,
+		dial: func(u string, _ *RefreshLoop, store func(NATSEvent)) (*nats.Conn, error) {
+			return nats.Connect(u, natsObserveOptions(store, nil)...)
+		},
+	}
+	loginForWakeTests(t, d)
+	d.Refresh = &RefreshLoop{
+		AccountID: "00000000-0000-0000-0000-000000000001",
+		Refresh: func(context.Context, string) (string, string, int64, error) {
+			return "jwt", "seed", time.Now().Add(5 * time.Minute).Unix(), nil
+		},
+	}
+	if err := d.Refresh.Start(context.Background(), "jwt", "seed", time.Now().Add(5*time.Minute).Unix()); err != nil {
+		t.Fatalf("RefreshLoop.Start: %v", err)
+	}
+	t.Cleanup(d.Refresh.Stop)
+
+	if err := d.rebuildNC("test-initial"); err != nil {
+		t.Fatalf("initial rebuildNC: %v", err)
+	}
+	if !waitNCConnected(d, 3*time.Second) {
+		t.Fatalf("initial connection never came up")
+	}
+
+	// Failure-close: closes the live conn AND kicks the background
+	// reconnect, exactly like a JetStream-op failure in production.
+	d.reportNATSFailure()
+
+	if !waitNCConnected(d, 5*time.Second) {
+		t.Fatalf("did not recover after failure-close")
+	}
+
+	countSwaps := func() int {
+		n := 0
+		for _, e := range d.NATSEvents.Snapshot() {
+			if e.Type == "swap" {
+				n++
+			}
+		}
+		return n
+	}
+
+	// Let any trailing closed-event kicks (recovery's swap-close, plus
+	// the post-reset race on the original close) play out — many ×
+	// reconnectBackoff — then assert convergence.
+	d.ncMu.Lock()
+	converged := d.NC
+	d.ncMu.Unlock()
+	before := countSwaps()
+	time.Sleep(200 * time.Millisecond)
+	after := countSwaps()
+
+	if after != before {
+		t.Fatalf("swap churn after recovery: %d → %d swaps (coalescing brake regressed)", before, after)
+	}
+	d.ncMu.Lock()
+	stable := d.NC == converged && d.NC != nil && d.NC.IsConnected()
+	d.ncMu.Unlock()
+	if !stable {
+		t.Fatalf("connection not stable after recovery — churned to a different conn")
+	}
+	t.Cleanup(func() {
+		if d.NC != nil {
+			d.NC.Close()
+		}
+	})
+}
