@@ -95,6 +95,11 @@ type Daemon struct {
 	// by many concurrent operations, but only one recovery loop runs.
 	reconnecting atomic.Bool
 
+	// reconnectBackoff overrides the initial backoff of the background
+	// connect/recovery loop (kickConnect). Zero means the production
+	// default (reconnectInitialBackoff); tests set milliseconds.
+	reconnectBackoff time.Duration
+
 	// baseCtx is the daemon-lifetime context, set once at the top of
 	// Run(). Background recovery loops kicked from places without a
 	// request context (reportNATSFailure, the ClosedHandler) use it so
@@ -376,6 +381,9 @@ func (d *Daemon) kickConnect(ctx context.Context, caller string) {
 	go func() {
 		defer d.reconnecting.Store(false)
 		backoff := reconnectInitialBackoff
+		if d.reconnectBackoff > 0 {
+			backoff = d.reconnectBackoff
+		}
 		for {
 			if _, ok := d.State.Credentials(); !ok {
 				return // logged out mid-recovery

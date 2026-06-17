@@ -390,7 +390,17 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return cliproto.New(cliproto.EInvalidAPIKey)
+			// Distinguish a genuine auth failure (terminal — retrying
+			// can't fix a revoked/invalid key) from a transient server
+			// error (5xx/429 — retryable). Collapsing both to
+			// EInvalidAPIKey made the background connect loop
+			// (kickConnect) give up forever when the server was merely
+			// down/overloaded during the restart window. 401/403 mirror
+			// the refresh path's ErrUnauthorized treatment.
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				return cliproto.New(cliproto.EInvalidAPIKey)
+			}
+			return cliproto.New(cliproto.EServerUnreachable)
 		}
 		var ex cliproto.AuthExchangeReply
 		if err := json.NewDecoder(resp.Body).Decode(&ex); err != nil {
