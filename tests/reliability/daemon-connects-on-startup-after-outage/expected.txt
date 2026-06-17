@@ -1,0 +1,4 @@
+setup=OK
+down-state=NOT-CONNECTED
+verdict=CONNECTED-AFTER-OUTAGE
+exit=0
