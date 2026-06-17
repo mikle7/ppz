@@ -37,8 +37,11 @@ else
 fi
 
 echo "--- revoked key is marked with data-key-state=revoked ---"
-if printf '%s' "$page" | tr '\n' ' ' \
-   | grep -qE "data-key-state=\"revoked\"[^>]*>[^<]*will-be-revoked|data-key-id=\"$id_b\"[^>]*data-key-state=\"revoked\""; then
+# pipefail off in a subshell: grep -q exits on match and SIGPIPEs the
+# upstream tr (which streams the whole page); that 141 would otherwise
+# flip this assertion to a false miss for a large page.
+if (set +o pipefail; printf '%s' "$page" | tr '\n' ' ' \
+   | grep -qE "data-key-state=\"revoked\"[^>]*>[^<]*will-be-revoked|data-key-id=\"$id_b\"[^>]*data-key-state=\"revoked\""); then
   echo "revoked-state-marker=present"
 else
   echo "revoked-state-marker=missing"

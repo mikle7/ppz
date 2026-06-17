@@ -1,0 +1,3 @@
+setup=OK
+verdict=CONNECTED-ON-STARTUP
+exit=0

@@ -362,6 +362,27 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	if !ok {
 		return cliproto.New(cliproto.ENotLoggedIn)
 	}
+	if err := d.bootstrapNATS(ctx, creds); err != nil {
+		return err
+	}
+	// Single serialized rebuild: connects (or no-ops if already current on
+	// this JWT generation), records the reconnect signal, and subscribes
+	// org heartbeats. Coalesces with the OnRefreshed goroutine via ncMu so
+	// a rotation triggers exactly one swap — no burst-swap-storm. Runs
+	// OUTSIDE bootstrapMu (it has its own ncMu); holding both across the
+	// dial is unnecessary and would widen the lock.
+	return d.rebuildNC("ensureNATS")
+}
+
+// bootstrapNATS single-flights (via bootstrapMu) the credential + URL
+// preparation that must happen before rebuildNC can dial: refreshing the
+// JWT if due, and the one-time cold /auth/exchange that populates
+// d.NATSURL and the refresh loop on a freshly restarted daemon. The
+// NATSURL=="" check doubles as the double-check — the second caller to
+// acquire the lock finds it set and skips the exchange. See bootstrapMu.
+func (d *Daemon) bootstrapNATS(ctx context.Context, creds *Credentials) error {
+	d.bootstrapMu.Lock()
+	defer d.bootstrapMu.Unlock()
 	d.ensureRefreshLoopFromCreds(creds)
 	if d.Refresh != nil {
 		// Refresh creds if the JWT is within its rotation window. We do NOT
@@ -390,7 +411,17 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return cliproto.New(cliproto.EInvalidAPIKey)
+			// Distinguish a genuine auth failure (terminal — retrying
+			// can't fix a revoked/invalid key) from a transient server
+			// error (5xx/429 — retryable). Collapsing both to
+			// EInvalidAPIKey made the background connect loop
+			// (kickConnect) give up forever when the server was merely
+			// down/overloaded during the restart window. 401/403 mirror
+			// the refresh path's ErrUnauthorized treatment.
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				return cliproto.New(cliproto.EInvalidAPIKey)
+			}
+			return cliproto.New(cliproto.EServerUnreachable)
 		}
 		var ex cliproto.AuthExchangeReply
 		if err := json.NewDecoder(resp.Body).Decode(&ex); err != nil {
@@ -412,11 +443,7 @@ func (d *Daemon) ensureNATS(ctx context.Context) error {
 	// the refresh loop never started (e.g. fresh daemon process
 	// post-restart), boot it from the persisted creds.
 	d.ensureRefreshLoopFromCreds(creds)
-	// Single serialized rebuild: connects (or no-ops if already current on
-	// this JWT generation), records the reconnect signal, and subscribes
-	// org heartbeats. Coalesces with the OnRefreshed goroutine via ncMu so
-	// a rotation triggers exactly one swap — no burst-swap-storm.
-	return d.rebuildNC("ensureNATS")
+	return nil
 }
 
 func (d *Daemon) ensureRefreshLoopFromCreds(creds *Credentials) {
