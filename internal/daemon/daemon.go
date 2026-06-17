@@ -95,6 +95,13 @@ type Daemon struct {
 	// by many concurrent operations, but only one recovery loop runs.
 	reconnecting atomic.Bool
 
+	// baseCtx is the daemon-lifetime context, set once at the top of
+	// Run(). Background recovery loops kicked from places without a
+	// request context (reportNATSFailure, the ClosedHandler) use it so
+	// they stop when the daemon shuts down. Nil outside Run() (unit
+	// tests) — callers fall back to context.Background().
+	baseCtx context.Context
+
 	// completionWarmMu serialises cold-cache warming inside
 	// handleComplete. Without it, N concurrent tab presses on a fresh
 	// daemon all read CompletionSnapshot()=false and race to fire
@@ -327,19 +334,41 @@ const (
 	reconnectMaxBackoff     = 15 * time.Second
 )
 
-// kickReconnect starts the background NATS recovery loop, single-flight
-// (concurrent reporters coalesce onto one loop). The loop refreshes
-// credentials when due (transient failures are recorded via the refresh
-// loop's OnError and do NOT stop the loop — the cached JWT may still be
-// valid even when /auth/exchange is briefly unreachable) and redials
-// until the connection is live. Terminal exits: connected, logged out,
-// or bearer revoked.
-//
-// Lifetime: context.Background, same as the refresh loop — recovery
-// outlives any single IPC request and ends with the process.
+// connectOnStartup brings the NATS connection up at daemon startup for
+// an already-logged-in daemon. Without it, Run() leaves the connection
+// to be established lazily by the first IPC command that calls
+// ensureNATS — so a restarted daemon (upgrade, reboot, crash) sits at
+// `nats: unknown`, subscribed to nothing and receiving no pushed
+// messages, until the operator happens to run a command. Delegates to
+// the single-flight connect loop, which bootstraps a cold daemon (no
+// refresh loop / no NATS URL yet) via ensureNATS.
+func (d *Daemon) connectOnStartup(ctx context.Context) {
+	d.kickConnect(ctx, "startup")
+}
+
+// kickReconnect starts the background NATS recovery loop after a
+// connection is lost (a JetStream-op failure-close via
+// reportNATSFailure, or a terminal close observed by recordNATSEvent).
+// It uses the daemon-lifetime context so recovery ends at shutdown.
 func (d *Daemon) kickReconnect() {
-	if d.NATSURL == "" || d.Refresh == nil {
-		return // pre-login/pre-bootstrap: ensureNATS owns first connect
+	ctx := d.baseCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	d.kickConnect(ctx, "reconnect")
+}
+
+// kickConnect runs the single-flight background connect/recovery loop:
+// concurrent callers (startup, reportNATSFailure, the ClosedHandler)
+// coalesce onto ONE loop. Each iteration calls ensureNATS — the
+// canonical "make sure we're connected, bootstrapping creds + NATS URL
+// if cold" operation — which coalesces with command-driven ensureNATS
+// callers and the refresh goroutine via ncMu. The loop retries
+// transient failures (server / NATS unreachable) with capped backoff
+// and exits on: connected, logged out, or bearer revoked.
+func (d *Daemon) kickConnect(ctx context.Context, caller string) {
+	if _, ok := d.State.Credentials(); !ok {
+		return // not logged in — nothing to connect (pre-login / post-logout)
 	}
 	if !d.reconnecting.CompareAndSwap(false, true) {
 		return
@@ -351,22 +380,28 @@ func (d *Daemon) kickReconnect() {
 			if _, ok := d.State.Credentials(); !ok {
 				return // logged out mid-recovery
 			}
-			if _, err := d.Refresh.RefreshNowIfDue(context.Background(), time.Now()); err != nil {
-				if errors.Is(err, ErrUnauthorized) {
-					return
-				}
-				// Transient — fall through and dial anyway with the
-				// cached creds; retry refresh next iteration.
-			}
-			if err := d.rebuildNC("reconnect-loop"); err == nil {
+			err := d.ensureNATS(ctx)
+			if err == nil {
 				d.ncMu.Lock()
 				connected := d.NC != nil && d.NC.IsConnected()
 				d.ncMu.Unlock()
 				if connected {
 					return
 				}
+			} else {
+				// Revoked bearer / not-logged-in is terminal — retrying
+				// can't fix it. Everything else (server / NATS
+				// unreachable) is transient: back off and retry.
+				var ce *cliproto.Error
+				if errors.As(err, &ce) && (ce.Code == cliproto.EInvalidAPIKey || ce.Code == cliproto.ENotLoggedIn) {
+					return
+				}
 			}
-			time.Sleep(backoff)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
 			if backoff *= 2; backoff > reconnectMaxBackoff {
 				backoff = reconnectMaxBackoff
 			}
@@ -386,11 +421,29 @@ func (d *Daemon) recordNATSEvent(ev NATSEvent) {
 	if d.Home != "" {
 		_ = appendNATSEventLog(d.Home, ev)
 	}
+	// A terminal close (server kick / "Authorization Violation" / a drop
+	// nats.go gave up on) is otherwise just a log line: a background
+	// close with no active command would wait for the next JWT rotation
+	// to rebuild — up to ~4.5 min awake, far longer across sleep (the
+	// 2026-06-15 diagnostics). Kick the single-flight reconnect. It
+	// no-ops when the daemon is already healthy on a newer connection —
+	// the routine rotation closes the OLD conn, and ensureNATS's
+	// generation check coalesces that away — so the common swap-close
+	// costs one quick no-op iteration, not churn. kickReconnect is
+	// non-blocking (CAS + goroutine), so this is safe even on the
+	// swap path where recordNATSEvent runs under ncMu.
+	if ev.Type == "closed" {
+		d.kickReconnect()
+	}
 }
 
 // Run runs the daemon in the foreground. Returns when ctx is cancelled or
 // the listener fails.
 func (d *Daemon) Run(ctx context.Context) error {
+	// Daemon-lifetime context for background loops kicked from contexts
+	// without a request (reportNATSFailure, the ClosedHandler). Set
+	// before anything that could trigger a reconnect.
+	d.baseCtx = ctx
 	if err := os.MkdirAll(d.Home, 0o700); err != nil {
 		return fmt.Errorf("mkdir home: %w", err)
 	}
@@ -439,6 +492,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// LATE after wake. The watchdog spots the wall-clock jump and
 	// forces refresh + reconnect immediately. See wake_watchdog.go.
 	d.startWakeWatchdog(ctx)
+
+	// Bring NATS up proactively if we're already logged in — don't wait
+	// for the first IPC command. A restarted daemon (upgrade, reboot)
+	// otherwise sits at `nats: unknown`, subscribed to nothing, until
+	// something calls ensureNATS.
+	d.connectOnStartup(ctx)
 
 	go d.serveIPC(ctx, ln)
 
