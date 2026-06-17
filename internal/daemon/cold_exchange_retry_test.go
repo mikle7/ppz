@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -150,5 +151,78 @@ func TestKickConnect_RecoversAfterTransientColdExchangeFailure(t *testing.T) {
 	})
 	if got := atomic.LoadInt64(&calls); got < 3 {
 		t.Fatalf("only %d exchange attempts; expected retries through the 503s", got)
+	}
+}
+
+// TestEnsureNATS_ConcurrentColdStartSingleExchange — RED for the
+// cold-path double-entry race amplified by PR #128. connectOnStartup's
+// background ensureNATS and the first IPC command's ensureNATS can both
+// observe NATSURL=="" and run the cold /auth/exchange block
+// concurrently, racing the unsynchronized writes to d.NATSURL and
+// d.Refresh (startRefreshLoop runs twice → orphaned refresh goroutine).
+// The cold bootstrap must be single-flighted: exactly one exchange, one
+// refresh loop, regardless of how many callers race in.
+//
+// The server-side delay widens the check-then-set window so the race is
+// reliably exercised; -race on this test also covers the field writes.
+func TestEnsureNATS_ConcurrentColdStartSingleExchange(t *testing.T) {
+	natsURL := startEmbeddedNATSURL(t)
+	var calls int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt64(&calls, 1)
+		time.Sleep(40 * time.Millisecond) // widen the check-then-set window
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(cliproto.AuthExchangeReply{
+			NATSURL:      natsURL,
+			AccountID:    "00000000-0000-0000-0000-000000000001",
+			AccountName:  "alpha",
+			NATSUserJWT:  "jwt",
+			NATSUserSeed: "seed",
+			ExpiresAt:    time.Now().Add(5 * time.Minute),
+		})
+	}))
+	defer srv.Close()
+
+	d := &Daemon{
+		State:      NewState(t.TempDir()),
+		NATSEvents: newNATSEventRing(natsEventRingCap),
+		Follows:    newFollowRegistry(),
+		Watches:    newWatchRegistry(),
+		Heartbeats: NewHeartbeatCache(),
+		HTTP:       &http.Client{Timeout: 2 * time.Second},
+		dial: func(u string, _ *RefreshLoop, store func(NATSEvent)) (*nats.Conn, error) {
+			return nats.Connect(u, natsObserveOptions(store, nil)...)
+		},
+	}
+	creds := Credentials{URL: srv.URL, APIKey: "pz_test", AccountID: "00000000-0000-0000-0000-000000000001"}
+	if err := d.State.SetLogin(creds, creds.AccountID, "alpha", "pz_test"); err != nil {
+		t.Fatalf("SetLogin: %v", err)
+	}
+
+	const goroutines = 8
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = d.ensureNATS(context.Background())
+		}()
+	}
+	wg.Wait()
+	t.Cleanup(func() {
+		if d.Refresh != nil {
+			d.Refresh.Stop()
+		}
+		if d.NC != nil {
+			d.NC.Close()
+		}
+	})
+
+	if got := atomic.LoadInt64(&calls); got != 1 {
+		t.Fatalf("/auth/exchange called %d times for %d concurrent cold-start callers, want 1 "+
+			"(unsynchronized cold bootstrap double-enters)", got, goroutines)
+	}
+	if !waitNCConnected(d, 3*time.Second) {
+		t.Fatalf("concurrent cold start did not converge to a connection")
 	}
 }

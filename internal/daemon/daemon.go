@@ -100,6 +100,19 @@ type Daemon struct {
 	// default (reconnectInitialBackoff); tests set milliseconds.
 	reconnectBackoff time.Duration
 
+	// bootstrapMu single-flights the cold-start section of ensureNATS —
+	// refresh-loop init + the one-time /auth/exchange that populates
+	// NATSURL and the refresh loop. Without it, connectOnStartup's
+	// background ensureNATS and the first IPC command's ensureNATS can
+	// both observe NATSURL=="" and run the cold block concurrently,
+	// double-calling /auth/exchange and racing the plain-field writes to
+	// d.NATSURL / d.Refresh (startRefreshLoop twice → orphaned refresh
+	// goroutine). Distinct from ncMu, which guards only the connection
+	// swap: ensureNATS must NOT hold ncMu across the HTTP exchange.
+	// Lock order is always bootstrapMu → ncMu (via OnRefreshed →
+	// rebuildNC), never the reverse.
+	bootstrapMu sync.Mutex
+
 	// baseCtx is the daemon-lifetime context, set once at the top of
 	// Run(). Background recovery loops kicked from places without a
 	// request context (reportNATSFailure, the ClosedHandler) use it so
