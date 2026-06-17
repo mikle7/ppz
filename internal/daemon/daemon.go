@@ -111,6 +111,18 @@ type Daemon struct {
 	// swap: ensureNATS must NOT hold ncMu across the HTTP exchange.
 	// Lock order is always bootstrapMu → ncMu (via OnRefreshed →
 	// rebuildNC), never the reverse.
+	//
+	// NOTE: bootstrapMu serializes the cold WRITERS of d.NATSURL; it does
+	// NOT make the field itself race-free (it's read under ncMu in
+	// rebuildNC and unlocked in handleLogin/diagSummary). This is benign
+	// only because d.NATSURL is write-once-then-constant: it goes
+	// ""→<url> exactly once per daemon (the cold block re-enters only
+	// while empty), then never changes, so the single transition is the
+	// only race window and a torn/empty read just retries the dial. If
+	// NATSURL ever becomes mutable mid-life (per-org endpoints, region
+	// failover, server re-pointing a live daemon), this stops being
+	// write-once and must move to one consistent lock or
+	// atomic.Pointer[string] across all NATSURL sites.
 	bootstrapMu sync.Mutex
 
 	// baseCtx is the daemon-lifetime context, set once at the top of
