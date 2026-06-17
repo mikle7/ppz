@@ -36,14 +36,26 @@ sleep 100
 out=$(ppz_a diagnostics 2>/dev/null)
 
 # Event lines render as: <type> <timestamp> caller=... nc=... reason="..."
-if echo "$out" | grep -qE '^refresh_error'; then
+# Collect the refresh_error lines once. NB: avoid `grep -E ... | grep -q`
+# under `set -o pipefail` (set by common.sh) — the downstream `grep -q`
+# exits on its first match and SIGPIPEs the upstream grep, whose 141 then
+# becomes the pipeline status and flips the verdict. The hazard is
+# timing-sensitive (it worsens as the daemon accumulates more
+# refresh_error events), exactly the trap wait_for documents. So capture
+# into a var and use `grep -c` (reads all input, never early-exits).
+errs=$(echo "$out" | grep -E '^refresh_error')
+
+if [ -n "$errs" ]; then
   echo "refresh_error=PRESENT"
 else
   echo "refresh_error=ABSENT"
 fi
 
-# The reason must carry the underlying error, not be empty.
-if echo "$out" | grep -E '^refresh_error' | grep -qvE 'reason=""'; then
+# The reason must carry the underlying error, not be empty. Count lines
+# whose reason opens with a non-quote char (reason="x… , i.e. non-empty);
+# reason="" has a quote immediately after = and is not counted.
+withreason=$(grep -cE 'reason="[^"]' <<<"$errs")
+if [ "${withreason:-0}" -gt 0 ]; then
   echo "reason=PRESENT"
 else
   echo "reason=ABSENT"
