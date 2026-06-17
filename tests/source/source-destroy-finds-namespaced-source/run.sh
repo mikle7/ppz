@@ -19,4 +19,7 @@ ppz_a ls | ls_normalize | awk '$1 ~ /boris/ {print $1}' | sort
 ppz_a source destroy boris 2>&1 | head -1
 
 echo "--- after destroy ---"
-ppz_a ls | ls_normalize | awk '$1 ~ /boris/ {print $1}' | sort | grep -q . || echo "no boris rows"
+# pipefail off in a subshell: grep -q . exits on the first row and
+# SIGPIPEs the upstream sort, whose 141 would otherwise become the
+# pipeline status and fire the `|| echo` even when boris rows exist.
+(set +o pipefail; ppz_a ls | ls_normalize | awk '$1 ~ /boris/ {print $1}' | sort | grep -q .) || echo "no boris rows"
