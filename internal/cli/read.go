@@ -207,7 +207,7 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 			// Phase 1.5.2: uncollared pipes (bareTarget != "") render
 			// tabular by default — they're the messaging primitive and
 			// share the inbox/broadcast shape semantically.
-			cliproto.FormatReadMessage(os.Stdout, *evt.Message, time.Local)
+			cliproto.FormatReadMessage(os.Stdout, *evt.Message, time.Local, cliproto.TerminalWidth(), shouldUseColor(asJSON))
 		default:
 			fmt.Fprintln(os.Stdout, evt.Message.Payload)
 		}
