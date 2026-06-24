@@ -112,8 +112,10 @@ func cmdDaemonStart(args []string) error {
 // itself so callers can shape their own messaging.
 func ensureDaemonRunning() (already bool, pid int, err error) {
 	var st cliproto.StatusReply
-	if e := daemon.Call(ipcSocket(), cliproto.IPCStatus, struct{}{}, &st); e == nil && st.DaemonPID != 0 {
-		return true, st.DaemonPID, nil
+	probeErr := daemon.Call(ipcSocket(), cliproto.IPCStatus, struct{}{}, &st)
+	already, pid, needFork := resolveDaemonPresence(st.DaemonPID, probeErr, livePIDFromHome())
+	if !needFork {
+		return already, pid, nil
 	}
 	p, err := forkDaemon()
 	if err != nil {
@@ -123,6 +125,38 @@ func ensureDaemonRunning() (already bool, pid int, err error) {
 		return false, 0, fmt.Errorf("daemon did not come up: %w", err)
 	}
 	return false, p, nil
+}
+
+// resolveDaemonPresence decides, from the Status-probe result and the
+// pidfile-owner's liveness, whether a daemon is already running (and its
+// pid) or a fork is needed. Pure so it's unit-testable without a socket or
+// a real fork; ensureDaemonRunning keeps the side effects.
+func resolveDaemonPresence(probePID int, probeErr error, livePID int) (already bool, pid int, needFork bool) {
+	if probeErr == nil && probePID != 0 {
+		return true, probePID, false
+	}
+	// The Status probe didn't give a clean answer (transport error, or a
+	// reply without a pid). Before forking — which would spawn a redundant
+	// second daemon and rewrite the pidfile — check whether a live daemon
+	// already owns the pidfile. A transient probe failure (a slow probe
+	// right after logout, an IPC hiccup under load) must not duplicate a
+	// daemon that's actually up; trust the pidfile + liveness over a single
+	// flaky probe. A wedged-but-alive daemon then surfaces as a timeout on
+	// the caller's real RPC rather than as a silent duplicate process.
+	if livePID != 0 {
+		return true, livePID, false
+	}
+	return false, 0, true
+}
+
+// livePIDFromHome returns the pid recorded in $PPZ_HOME/daemon.pid when that
+// process is actually alive, else 0 (absent or stale pidfile).
+func livePIDFromHome() int {
+	pid := daemon.PIDFromHome(home())
+	if daemon.IsAlive(pid) {
+		return pid
+	}
+	return 0
 }
 
 // forkDaemon re-execs the current binary with `daemon start --foreground`,
