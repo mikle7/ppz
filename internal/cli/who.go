@@ -86,6 +86,21 @@ func shouldUseColor(asJSON bool) bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
+// readBodyWidth returns the wrap-width budget for the tabular `ppz read`
+// renderer: the terminal column count when stdout is an interactive TTY,
+// else 0 (no wrapping). Word-wrapping reflows a message body with synthetic
+// line breaks — a human-presentation nicety that would actively harm any
+// programmatic reader (a pipe, an agent, CI) by hiding which newlines were
+// in the original message. Gating on TTY keeps non-interactive output
+// byte-identical to the unwrapped form. Unlike colour this ignores
+// NO_COLOR: a human who disables colour still wants wrapping.
+func readBodyWidth() int {
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return 0
+	}
+	return cliproto.TerminalWidth()
+}
+
 // whoRenderOpts configures how renderWho formats the rows it receives.
 // The TTY check + NO_COLOR handling happens in cmdWho before this is
 // constructed — the renderer just respects the flags it's given.

@@ -207,7 +207,7 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 			// Phase 1.5.2: uncollared pipes (bareTarget != "") render
 			// tabular by default — they're the messaging primitive and
 			// share the inbox/broadcast shape semantically.
-			cliproto.FormatReadMessage(os.Stdout, *evt.Message, time.Local)
+			renderReadMessageTabular(*evt.Message)
 		default:
 			fmt.Fprintln(os.Stdout, evt.Message.Payload)
 		}
@@ -220,6 +220,18 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 		return nil
 	}
 	return nil
+}
+
+// renderReadMessageTabular writes one message in the tabular default to
+// stdout. Wrap width and colour are inferred from whether stdout is an
+// interactive terminal via the TTY-gated helpers — non-interactive readers
+// (pipes, agents, CI, redirects) MUST get reflow-free, uncoloured output so
+// the rendered row stays byte-identical to the raw message newlines. This
+// path only runs for non-JSON reads (the switch routes --json earlier), so
+// colour keys off shouldUseColor(false). See
+// TestRenderReadMessageTabular_NonTTYDoesNotWrap.
+func renderReadMessageTabular(msg cliproto.ReadMessage) {
+	cliproto.FormatReadMessage(os.Stdout, msg, time.Local, readBodyWidth(), shouldUseColor(false))
 }
 
 func currentInboxTarget() (string, error) {

@@ -13,6 +13,24 @@ import (
 // truncated, on the theory that a misaligned line beats a lost identity.
 const senderColumnWidth = 12
 
+// ANSI palette for the tabular read renderer, applied only on the
+// interactive-TTY path (the caller gates via shouldUseColor). Timestamp
+// renders dim — it's secondary metadata — and the sender bold-cyan so the
+// two header fields visually separate from the white message body. Pinned
+// by TestFormatReadMessage_ColorsTimestampAndSender.
+const (
+	readAnsiReset  = "\x1b[0m"
+	readAnsiTime   = "\x1b[2m"    // dim
+	readAnsiSender = "\x1b[1;36m" // bold cyan
+)
+
+// minBodyColumnWidth is the floor below which FormatReadMessage stops
+// word-wrapping. On a very narrow terminal — or when a long sender overflows
+// the sender column and eats the prefix budget — wrapping to a handful of
+// columns produces one-word-per-line sludge; better to emit the body
+// unwrapped and let the terminal soft-wrap it.
+const minBodyColumnWidth = 20
+
 // IsTabularReadPipe reports whether `ppz read <handle>.<pipe>` should
 // render in the v0.23 three-column tabular form by default. Only the
 // human-visible inbox-shaped pipes do — pty pipes (stdout / stdin /
@@ -37,7 +55,12 @@ func IsTabularReadPipe(pipe string) bool {
 // Multi-line payloads emit subsequent lines indented under the body column
 // (no time, no sender). loc controls the timezone of HH:MM:SS — production
 // callers pass time.Local.
-func FormatReadMessage(w io.Writer, m ReadMessage, loc *time.Location) {
+//
+// width is the terminal column budget used to word-wrap long body lines
+// under the body column (0 disables wrapping — split on \n only). color
+// toggles ANSI colour on the timestamp + sender fields; the caller gates
+// it on TTY / NO_COLOR. (Both currently unused — wired in below.)
+func FormatReadMessage(w io.Writer, m ReadMessage, loc *time.Location, width int, color bool) {
 	t := parseCreatedAt(m.CreatedAt)
 	if loc == nil {
 		loc = time.UTC
@@ -53,18 +76,78 @@ func FormatReadMessage(w io.Writer, m ReadMessage, loc *time.Location) {
 	// not displayed; the row is purely "ack:read → <id8>".
 	body := bodyForRow(m)
 
-	// Multi-line: split the body into one or more lines and indent
-	// continuations under the body column.
-	prefix := fmt.Sprintf("%s  %-*s  ", timeCol, senderColumnWidth, sender)
-	lines := strings.Split(body, "\n")
-	indent := strings.Repeat(" ", len(prefix))
-	for i, line := range lines {
+	// The uncoloured prefix fixes column alignment and the continuation
+	// indent. ANSI escapes are zero-width on the terminal, so everything
+	// after the first line must reuse this *visible* width — never len() of
+	// a coloured string.
+	visiblePrefix := fmt.Sprintf("%s  %-*s  ", timeCol, senderColumnWidth, sender)
+	prefixWidth := len(visiblePrefix)
+	indent := strings.Repeat(" ", prefixWidth)
+
+	// Colour the timestamp + sender on the first line only. Padding stays
+	// outside the escapes so the visible prefix width is unchanged.
+	firstPrefix := visiblePrefix
+	if color {
+		pad := senderColumnWidth - len(sender)
+		if pad < 0 {
+			pad = 0
+		}
+		firstPrefix = fmt.Sprintf("%s%s%s  %s%s%s%s  ",
+			readAnsiTime, timeCol, readAnsiReset,
+			readAnsiSender, sender, readAnsiReset, strings.Repeat(" ", pad))
+	}
+
+	// Word-wrap each logical line to the body column when there's a usable
+	// width budget; otherwise emit as-is (split on \n only). The agent /
+	// pipe path (width 0) and the too-narrow path both fall through here,
+	// keeping their output reflow-free.
+	bodyWidth := width - prefixWidth
+	var rendered []string
+	for _, line := range strings.Split(body, "\n") {
+		if width > 0 && bodyWidth >= minBodyColumnWidth {
+			rendered = append(rendered, wrapBodyLine(line, bodyWidth)...)
+		} else {
+			rendered = append(rendered, line)
+		}
+	}
+
+	for i, line := range rendered {
 		if i == 0 {
-			fmt.Fprintln(w, prefix+line)
+			fmt.Fprintln(w, firstPrefix+line)
 		} else {
 			fmt.Fprintln(w, indent+line)
 		}
 	}
+}
+
+// wrapBodyLine greedily word-wraps a single logical line to at most width
+// columns, preserving any leading indentation (bullets, quoted blocks) on
+// the first emitted sub-line. Lines already within width — the common case —
+// pass through untouched so their internal spacing is preserved byte-for-
+// byte. A single word longer than width is left to overflow its row rather
+// than being hard-split mid-token. width math is byte-based, so multi-byte
+// runes wrap slightly conservatively; the renderer never slices mid-word.
+func wrapBodyLine(line string, width int) []string {
+	if width <= 0 || len(line) <= width {
+		return []string{line}
+	}
+	trimmed := strings.TrimLeft(line, " ")
+	lead := line[:len(line)-len(trimmed)]
+	words := strings.Fields(trimmed)
+	if len(words) == 0 {
+		return []string{line}
+	}
+	out := make([]string, 0, len(words))
+	cur := lead + words[0]
+	for _, word := range words[1:] {
+		if len(cur)+1+len(word) <= width {
+			cur += " " + word
+			continue
+		}
+		out = append(out, cur)
+		cur = word
+	}
+	return append(out, cur)
 }
 
 // bodyForRow returns the rendered body — the third column of one row,
