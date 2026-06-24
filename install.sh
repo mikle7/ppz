@@ -65,6 +65,72 @@ sha256_of() {
 	fi
 }
 
+# Append INSTALL_DIR to PATH in the user's shell rc, so `ppz` is usable
+# in new shells without the user hand-editing anything. Idempotent: a
+# marker comment means we only ever write the block once per file, and
+# re-running the installer (or `ppz update`) won't pile up duplicates.
+#
+# Echoes the rc files it touched (one per line) so the caller can tell
+# the user which file to `source`. Honours $SHELL to pick the right rc,
+# and handles fish's distinct PATH syntax.
+persist_path() {
+	local marker="# added by ppz install"
+	local shell_name rc files=()
+	shell_name=$(basename "${SHELL:-sh}")
+
+	case "$shell_name" in
+		fish)
+			# fish doesn't use POSIX `export`; a conf.d snippet is the
+			# idiomatic, self-contained way to extend PATH.
+			rc="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/ppz.fish"
+			mkdir -p "$(dirname "$rc")" 2>/dev/null || return 0
+			if [ ! -f "$rc" ] || ! grep -qF "$marker" "$rc" 2>/dev/null; then
+				{
+					printf '%s\n' "$marker"
+					printf 'fish_add_path %s\n' "$INSTALL_DIR"
+				} >>"$rc" 2>/dev/null || return 0
+				echo "$rc"
+			fi
+			return 0
+			;;
+		zsh)
+			files=("${ZDOTDIR:-$HOME}/.zshrc")
+			;;
+		bash)
+			# Login shells on macOS read .bash_profile; interactive
+			# shells on Linux read .bashrc. Touch whichever already
+			# exists, else fall back to the platform's usual default so
+			# the line is actually read on next login.
+			[ -f "$HOME/.bashrc" ]       && files+=("$HOME/.bashrc")
+			[ -f "$HOME/.bash_profile" ] && files+=("$HOME/.bash_profile")
+			if [ "${#files[@]}" -eq 0 ]; then
+				if [ "$OS" = "darwin" ]; then
+					files=("$HOME/.bash_profile")
+				else
+					files=("$HOME/.bashrc")
+				fi
+			fi
+			;;
+		*)
+			# Unknown/POSIX shell: ~/.profile is the lowest-common-
+			# denominator that login shells source.
+			files=("$HOME/.profile")
+			;;
+	esac
+
+	local f
+	for f in "${files[@]}"; do
+		if [ -f "$f" ] && grep -qF "$marker" "$f" 2>/dev/null; then
+			continue
+		fi
+		{
+			printf '\n%s\n' "$marker"
+			printf 'export PATH="%s:$PATH"\n' "$INSTALL_DIR"
+		} >>"$f" 2>/dev/null || continue
+		echo "$f"
+	done
+}
+
 main() {
 	read -r OS ARCH < <(detect_target)
 	TAG=$(resolve_tag)
@@ -157,11 +223,25 @@ main() {
 			fi
 			;;
 		*)
-			msg ""
-			msg "Heads-up: ${INSTALL_DIR} is not on \$PATH. Add to your shell rc:"
-			msg "    export PATH=\"${INSTALL_DIR}:\$PATH\""
-			msg ""
-			msg "Then verify:  ppz version"
+			# Not on PATH. Persist it to the shell rc ourselves so the
+			# user doesn't have to hand-edit anything — the whole point
+			# of the install script is that `ppz` Just Works afterwards.
+			touched=$(persist_path)
+			if [ -n "$touched" ]; then
+				msg ""
+				msg "Added ${INSTALL_DIR} to \$PATH in:"
+				printf '    %s\n' $touched >&2
+				msg ""
+				msg "Open a new terminal (or 'source' the file above) and: ppz version"
+			else
+				# Couldn't (or didn't need to) write a rc file — fall
+				# back to telling the user how to do it by hand.
+				msg ""
+				msg "Heads-up: ${INSTALL_DIR} is not on \$PATH. Add to your shell rc:"
+				msg "    export PATH=\"${INSTALL_DIR}:\$PATH\""
+				msg ""
+				msg "Then verify:  ppz version"
+			fi
 			;;
 	esac
 }
