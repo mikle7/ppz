@@ -59,7 +59,6 @@ var topLevelGroups = []helpGroup{
 	}},
 	{"IDENTITIES", []helpRow{
 		{"ppz source create H", "claim a bare message handle (auto-pipe: inbox)"},
-		{"ppz terminal create H", "create a pty-backed handle and set as current"},
 		{"ppz agent create H", "create a handle and run an AI harness in it"},
 		{"ppz source destroy PAT", "glob-destroy sources or pipes"},
 	}},
@@ -283,7 +282,7 @@ Run 'ppz source create --help' or 'ppz source destroy --help' for details.`,
 
 	"source create": `usage: ppz source create HANDLE
 
-Claim a bare message-kind handle (auto-pipe: inbox) and set it as the session's current handle. Use when you want a named actor identity without committing to a terminal or agent role. Distinct from 'ppz terminal create' (pty pipe set) and 'ppz agent create' (agent pipes + harness). Strict: errors if the handle already exists in the account.`,
+Claim a bare message-kind handle (auto-pipe: inbox) and set it as the session's current handle. Use when you want a named actor identity without committing to a terminal or agent role. For a pty pipe set, run a terminal with 'ppz terminal share' (auto-creates the handle); for an agent harness, use 'ppz agent create'. Strict: errors if the handle already exists in the account.`,
 
 	"source destroy": `usage: ppz source destroy PATTERN
 
@@ -294,18 +293,13 @@ Glob-destroy sources or pipes:
 
 Examples: destroy '*' · destroy 'agent-*' · destroy '*.stdout' · destroy apple`,
 
-	"terminal": `usage: ppz terminal {create|share|watch|read} ...
+	"terminal": `usage: ppz terminal {share|watch|read} ...
 
-  ppz terminal create HANDLE        create a pty-backed handle, set as current
   ppz terminal share H [-- CMD...]  run CMD (or $SHELL) in a pty bound to H
   ppz terminal watch H              follow H.stdout in an alt-screen TUI
   ppz terminal read H [flags]       render H.stdout (reread with --tty default)
 
 Run 'ppz terminal <subverb> --help' for details.`,
-
-	"terminal create": `usage: ppz terminal create HANDLE
-
-Create a pty-backed handle (auto-pipes: inbox/stdin/stdout/stdctrl) and set it as the session's current handle.`,
 
 	"terminal share": `usage: ppz terminal share H [-- CMD ...]
 
@@ -446,7 +440,7 @@ Best-effort: a missing ack is indistinguishable from "not yet read". If you need
 
 	"sessions": `Sessions — current handle & subprocess identity
 
-Each shell session has its own current handle, keyed off the calling tty. Subprocesses with no shared tty get a fresh session id per invocation, so a 'ppz terminal create' in one call won't be visible to the next — and 'ppz send --request-ack' will reject with E_NO_CURRENT_SOURCE.
+Each shell session has its own current handle, keyed off the calling tty. Subprocesses with no shared tty get a fresh session id per invocation, so a 'ppz source create' in one call won't be visible to the next — and 'ppz send --request-ack' will reject with E_NO_CURRENT_SOURCE.
 
 Pin a stable id by exporting PPZ_SESSION=<id> at the agent's lifecycle level so all subsequent ppz calls share session state.`,
 

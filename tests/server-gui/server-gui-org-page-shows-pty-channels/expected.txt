@@ -4,20 +4,12 @@ pty-pipe:inbox::
 pty-pipe:stdctrl:RELATIVE:STDCTRL_JSON
 pty-pipe:stdin::
 pty-pipe:stdout::
-regular:heartbeat::
 regular:inbox::
-regular:stdctrl::
-regular:stdin::
-regular:stdout::
 --- pipe-links ---
 /orgs/alpha/sources/pty-pipe/pipes/heartbeat
 /orgs/alpha/sources/pty-pipe/pipes/inbox
 /orgs/alpha/sources/pty-pipe/pipes/stdctrl
 /orgs/alpha/sources/pty-pipe/pipes/stdin
 /orgs/alpha/sources/pty-pipe/pipes/stdout
-/orgs/alpha/sources/regular/pipes/heartbeat
 /orgs/alpha/sources/regular/pipes/inbox
-/orgs/alpha/sources/regular/pipes/stdctrl
-/orgs/alpha/sources/regular/pipes/stdin
-/orgs/alpha/sources/regular/pipes/stdout
 exit=0

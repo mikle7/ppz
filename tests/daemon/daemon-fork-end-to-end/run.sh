@@ -33,7 +33,7 @@ PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz daemon start
 PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 
 # Step 3: create -> send -> ls.
-PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz terminal create fresh-flow >/dev/null
+PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz source create fresh-flow >/dev/null
 PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz send fresh-flow.inbox "it just works"
 wait_for 20 "PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz ls | grep -q 'it just works'" >/dev/null
 PPZ_HOME=$HOME_C PPZ_IPC_SOCKET=$SOCK ppz ls | ls_normalize

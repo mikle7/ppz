@@ -65,7 +65,7 @@ there's no shadowing risk if you mix them. Override with
 
 | Binary | Audience | Purpose |
 |---|---|---|
-| `ppz`               | CLI users | The user-facing CLI (`ppz terminal create`, `ppz send`, `ppz read`, `ppz pipe …`). |
+| `ppz`               | CLI users | The user-facing CLI (`ppz source create`, `ppz send`, `ppz read`, `ppz pipe …`). |
 | `ppz-server`        | Self-hosters | Hosts the account/source/pipe state and embeds a NATS server. pipescloud.io runs one. |
 | `ppz-natsbootstrap` | Self-hosters | One-shot helper that mints an ephemeral NATS NSC chain (operator + account JWTs) for a fresh server. Production usually pulls these from a secret manager instead. |
 | `ppz-seed`          | Source / e2e only | Populates the OSS test fixtures (`foo`/`bar` users, `alpha`/`beta` accounts). Built from source by the compose harness — not published in release tarballs. |
@@ -74,13 +74,13 @@ there's no shadowing risk if you mix them. Override with
 
 ppz keeps **current-handle** state per shell session, keyed off the calling
 tty. For interactive use that's transparent — open a terminal, run
-`ppz terminal create alpha`, every subsequent `ppz` call in the same window
+`ppz source create alpha`, every subsequent `ppz` call in the same window
 sees `alpha` as current.
 
 For agents that run each command as a fresh subprocess (most agent harnesses
 do — Claude Code's Bash tool, OpenAI's code interpreter, container `exec`
 flows), there's no shared tty across calls, so each invocation gets its own
-session id. `ppz terminal create alpha` in one subprocess won't be visible
+session id. `ppz source create alpha` in one subprocess won't be visible
 to the next, and `ppz send … --request-ack` will trip `E_NO_CURRENT_SOURCE`.
 
 The fix is one line at the agent's lifecycle level — pin a stable session id
@@ -88,7 +88,7 @@ once and every call inherits it:
 
 ```bash
 export PPZ_SESSION="agent-${AGENT_NAME}"
-ppz terminal create alpha
+ppz source create alpha
 ppz send beta "ping" --request-ack    # sees alpha as current; ack routes back
 ```
 

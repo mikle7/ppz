@@ -40,11 +40,12 @@ ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 
 # jimmy: message-kind source. .inbox is the ack:read destination.
 ppz_a source create jimmy >/dev/null
-# alan: pty-kind source. terminal create writes State.Current(OUTER
+# alan: source identity. source create writes State.Current(OUTER
 # session)=alan; we'll then share BARE (no explicit handle) so share
-# resolves the wrapped handle from current. (Sharing with explicit
-# handle would try to re-create alan and fail E_SOURCE_TAKEN.)
-ppz_a terminal create alan >/dev/null
+# resolves the wrapped handle from current and upgrades it to a pty.
+# (Sharing with an explicit handle would try to re-create alan and
+# fail E_SOURCE_TAKEN.)
+ppz_a source create alan >/dev/null
 
 # Jimmy sends to alan.inbox with --request-ack. PPZ_CURRENT_HANDLE=
 # jimmy makes the send stamp sender=jimmy (so the ack has somewhere

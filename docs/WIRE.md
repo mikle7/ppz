@@ -313,7 +313,7 @@ disconnected / unknown stay red.
 logged in url=<URL> key=KEYPREFIX org=<org_id>
 ```
 
-### `ppz terminal create HANDLE` — one line
+### `ppz source create HANDLE` — one line
 ```
 created handle=<handle> subject=<account_id>.<handle>.inbox
 ```
@@ -473,14 +473,14 @@ username the table renders.
 
 Empty list: zero output, exit 0.
 
-### `ppz terminal create HANDLE [-- CMD ...]`
-Wraps a shell (or `<cmd>`) in a PTY tied to source `HANDLE` (kind=pty), with
-`PPZ_CURRENT_HANDLE=<handle>` exported to the child. Stdout chunks publish
-verbatim to `<handle>.stdout`; subscribed `<handle>.stdin` messages forward to
-the PTY master. Foreground; blocks until child exits. Exit 0 on clean child
-exit.
+### `ppz terminal share HANDLE [-- CMD ...]`
+Wraps a shell (or `<cmd>`) in a PTY bound to source `HANDLE` (kind=pty;
+auto-creates the source on first use), with `PPZ_CURRENT_HANDLE=<handle>`
+exported to the child. Stdout chunks publish verbatim to `<handle>.stdout`;
+subscribed `<handle>.stdin` messages forward to the PTY master. Foreground;
+blocks until child exits. Exit 0 on clean child exit.
 
-### `ppz terminal view HANDLE`
+### `ppz terminal watch HANDLE`
 TUI viewer: enters alt-screen, follows `<handle>.stdout` until SIGINT/Ctrl-C,
 exits alt-screen, exit 0.
 
@@ -510,7 +510,7 @@ in-memory cache would mask that wipe and cause false-negative unread counts.)
 | `PPZ_SESSION` | Override session id used to key cursor state (otherwise derived from `tty(1)`, falling back to `"default"`). |
 | `PPZ_TEST_FILTER` | Glob filter for `tests/run.sh`. |
 | `PPZ_NATS_URL` | Override the NATS URL the daemon dials, regardless of what `/auth/exchange` returned. Useful when running daemon outside compose against an in-compose NATS. |
-| `PPZ_CURRENT_HANDLE` | Override the daemon's `current` for one CLI invocation (used by `terminal create` so the wrapped child's `broadcast` targets the wrap's source). |
+| `PPZ_CURRENT_HANDLE` | Override the daemon's `current` for one CLI invocation (exported by `terminal share` / `agent create` into the wrapped child so its `ppz` calls resolve the wrap's handle as current). |
 
 ## 11. Heartbeat (`<handle>.heartbeat`)
 

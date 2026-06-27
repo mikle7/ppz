@@ -11,9 +11,10 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-# terminal create provisions inbox + stdin + stdout + stdctrl so we
-# get a multi-pipe handle to exercise the recursive bit.
-ppz_a terminal create cindy >/dev/null
+# source create provisions the inbox auto-pipe; the custom pipe below
+# makes this a multi-pipe handle (auto + user) so the recursive
+# destroy is exercised across both pipe origins.
+ppz_a source create cindy >/dev/null
 # Plus a custom user-pipe so we cover the auto + user destroy path.
 ppz_a pipe create cindy.archive >/dev/null
 

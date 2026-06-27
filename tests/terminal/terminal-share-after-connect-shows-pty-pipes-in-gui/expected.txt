@@ -1,5 +1,4 @@
 --- foo source-rows in GUI ---
-foo:heartbeat:RELATIVE:HEARTBEAT_JSON
 foo:inbox::
 foo:stdctrl:RELATIVE:STDCTRL_JSON
 foo:stdin::

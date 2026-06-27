@@ -5,7 +5,7 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a terminal create chat
+ppz_a source create chat
 echo "--- status ---"
 ppz_a status | grep '^current source:'
 echo "--- ls ---"
