@@ -21,6 +21,7 @@ type DeviceCode struct {
 	UserCode   string
 	ClientName string
 	UserID     *uuid.UUID
+	AccountID  *uuid.UUID // org the user picked on the verify page
 	ExpiresAt  time.Time
 	VerifiedAt *time.Time
 	ConsumedAt *time.Time
@@ -48,33 +49,34 @@ func CreateDeviceCode(ctx context.Context, p *Pool, ttl time.Duration, clientNam
 
 func LookupDeviceCode(ctx context.Context, p *Pool, deviceCode string) (DeviceCode, error) {
 	return scanDeviceCode(p.QueryRow(ctx,
-		`SELECT device_code, user_code, client_name, user_id, expires_at, verified_at, consumed_at, created_at
+		`SELECT device_code, user_code, client_name, user_id, account_id, expires_at, verified_at, consumed_at, created_at
 		   FROM oauth_device_codes WHERE device_code = $1`, deviceCode))
 }
 
 func LookupDeviceCodeByUserCode(ctx context.Context, p *Pool, userCode string) (DeviceCode, error) {
 	return scanDeviceCode(p.QueryRow(ctx,
-		`SELECT device_code, user_code, client_name, user_id, expires_at, verified_at, consumed_at, created_at
+		`SELECT device_code, user_code, client_name, user_id, account_id, expires_at, verified_at, consumed_at, created_at
 		   FROM oauth_device_codes WHERE user_code = $1`, userCode))
 }
 
 func scanDeviceCode(row pgx.Row) (DeviceCode, error) {
 	var dc DeviceCode
-	err := row.Scan(&dc.DeviceCode, &dc.UserCode, &dc.ClientName, &dc.UserID, &dc.ExpiresAt, &dc.VerifiedAt, &dc.ConsumedAt, &dc.CreatedAt)
+	err := row.Scan(&dc.DeviceCode, &dc.UserCode, &dc.ClientName, &dc.UserID, &dc.AccountID, &dc.ExpiresAt, &dc.VerifiedAt, &dc.ConsumedAt, &dc.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DeviceCode{}, ErrNotFound
 	}
 	return dc, err
 }
 
-// ApproveDeviceCode marks the user_code as verified by userID. Idempotent.
+// ApproveDeviceCode marks the user_code as verified by userID, binding it
+// to the org accountID the user selected on the verify page. Idempotent.
 // Returns ErrNotFound if user_code doesn't exist or is already expired.
-func ApproveDeviceCode(ctx context.Context, p *Pool, userCode string, userID uuid.UUID) error {
+func ApproveDeviceCode(ctx context.Context, p *Pool, userCode string, userID, accountID uuid.UUID) error {
 	tag, err := p.Exec(ctx,
 		`UPDATE oauth_device_codes
-		   SET user_id = $2, verified_at = COALESCE(verified_at, now())
+		   SET user_id = $2, account_id = $3, verified_at = COALESCE(verified_at, now())
 		 WHERE user_code = $1 AND expires_at > now()`,
-		userCode, userID)
+		userCode, userID, accountID)
 	if err != nil {
 		return err
 	}
@@ -84,31 +86,32 @@ func ApproveDeviceCode(ctx context.Context, p *Pool, userCode string, userID uui
 	return nil
 }
 
-// ConsumeDeviceCode is the CLI poll path. Returns the user_id and
-// marks the code consumed (single-use). State machine errors:
+// ConsumeDeviceCode is the CLI poll path. Returns the user_id and the
+// org the user selected (nil if approved without one) and marks the code
+// consumed (single-use). State machine errors:
 //   - ErrDeviceCodePending if not yet verified
 //   - ErrDeviceCodeExpired if past TTL
 //   - ErrNotFound if unknown / already consumed
-func ConsumeDeviceCode(ctx context.Context, p *Pool, deviceCode string) (uuid.UUID, error) {
+func ConsumeDeviceCode(ctx context.Context, p *Pool, deviceCode string) (uuid.UUID, *uuid.UUID, error) {
 	dc, err := LookupDeviceCode(ctx, p, deviceCode)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, nil, err
 	}
 	if dc.ConsumedAt != nil {
-		return uuid.Nil, ErrNotFound
+		return uuid.Nil, nil, ErrNotFound
 	}
 	if time.Now().After(dc.ExpiresAt) {
-		return uuid.Nil, ErrDeviceCodeExpired
+		return uuid.Nil, nil, ErrDeviceCodeExpired
 	}
 	if dc.VerifiedAt == nil || dc.UserID == nil {
-		return uuid.Nil, ErrDeviceCodePending
+		return uuid.Nil, nil, ErrDeviceCodePending
 	}
 	if _, err := p.Exec(ctx,
 		`UPDATE oauth_device_codes SET consumed_at = now() WHERE device_code = $1 AND consumed_at IS NULL`,
 		deviceCode); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, nil, err
 	}
-	return *dc.UserID, nil
+	return *dc.UserID, dc.AccountID, nil
 }
 
 // ─── bearer tokens ───────────────────────────────────────────────────

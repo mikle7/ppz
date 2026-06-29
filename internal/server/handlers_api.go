@@ -52,12 +52,12 @@ func (s *Server) handleAuthExchange(w http.ResponseWriter, r *http.Request) {
 			}
 			accountID = parsed
 		} else {
-			ownedOrg, err := db.FirstOwnedAccountFor(ctx, s.Pool, tok.UserID)
+			defaultOrg, err := db.DefaultAccountFor(ctx, s.Pool, tok.UserID)
 			if err != nil {
-				writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "no org owned by user"})
+				writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: "user belongs to no org"})
 				return
 			}
-			accountID = ownedOrg.ID
+			accountID = defaultOrg.ID
 		}
 	} else {
 		key, err := db.LookupAPIKey(ctx, s.Pool, req.APIKey)

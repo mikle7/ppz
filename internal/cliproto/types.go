@@ -219,6 +219,11 @@ const (
 type LoginRequest struct {
 	URL    string `json:"url"`
 	APIKey string `json:"api_key"`
+	// AccountID is the org the user chose during the OAuth device flow
+	// (empty for api-key logins, where the key already pins the org).
+	// The daemon forwards it as AuthExchangeRequest.AccountID so the NATS
+	// JWT is minted in the selected org.
+	AccountID string `json:"account_id,omitempty"`
 }
 
 type LoginReply struct {

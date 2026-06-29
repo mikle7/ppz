@@ -149,12 +149,13 @@ func (s *Server) requireAPIKey(h authedHandler) http.HandlerFunc {
 			h(w, r, db.APIKey{AccountID: accountID, CreatedByUserID: caller.UserID})
 			return
 		}
-		// Fallback: caller's first owned org. Used by daemons that
-		// haven't switched (or haven't been updated to send ?org=).
-		org, err := db.FirstOwnedAccountFor(r.Context(), s.Pool, caller.UserID)
+		// Fallback: caller's default org (owned, else member). Used by
+		// daemons that haven't sent an explicit ?org=. Must match the
+		// /auth/exchange default so listing and the minted NATS creds agree.
+		org, err := db.DefaultAccountFor(r.Context(), s.Pool, caller.UserID)
 		if err != nil {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": "no org owned by user; mint an API key on the GUI first",
+				"error": "user belongs to no org; create or join one on the GUI first",
 			})
 			return
 		}

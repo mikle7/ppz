@@ -1,0 +1,7 @@
+user_code_extracted: true
+beta_id_found: true
+cli_exit_code: 0
+account: beta
+--- send + read back from selected org ---
+payload: hello-from-beta
+exit=0

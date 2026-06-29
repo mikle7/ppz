@@ -48,6 +48,11 @@ DELETE FROM accounts WHERE name NOT IN ('alpha','beta');
 -- test fixtures (see internal/seed/seed.go) — keep them so member-
 -- management tests can rely on stable user ids.
 DELETE FROM users WHERE username NOT IN ('unauthenticated', 'foo', 'bar');
+-- Clear the per-user "last selected org" preference. It's scenario-local
+-- (set when a user authorizes a CLI session into a specific org via the
+-- device flow); without this reset a prior scenario's choice bleeds into
+-- the next scenario's default-org assertions.
+UPDATE users SET last_selected_account_id = NULL;
 -- Reset memberships to the seeded baseline. Auth V2 widened this so
 -- bar is also a member of alpha (used by owner-only-gate tests).
 DELETE FROM account_members;

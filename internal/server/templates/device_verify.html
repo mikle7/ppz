@@ -21,6 +21,16 @@
       {{end}}
       <form method="post" action="/oauth/device/verify" class="hero-cta">
         <input type="hidden" name="user_code" value="{{.UserCode}}">
+        {{if .Orgs}}
+          <div class="org-field">
+            <label for="account_id">Authorize into organisation</label>
+            <select id="account_id" name="account_id" class="org-select">
+              {{range .Orgs}}
+                <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </div>
+        {{end}}
         <button type="submit" class="btn-primary">Approve as me</button>
       </form>
       <p class="hero-sub" style="opacity:0.6">Code: <code>{{.UserCode}}</code></p>

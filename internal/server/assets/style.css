@@ -338,6 +338,27 @@ body[data-page="landing"] {
   transition: background 0.15s;
 }
 .btn-primary:hover { background: var(--btn-bg-hover); }
+/* Device-flow org picker: stacks a label + <select> on its own row above
+   the Approve button (the .hero-cta flex-wraps it onto its own line). */
+.org-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin-bottom: 0.4rem;
+}
+.org-field label { color: var(--muted); font-size: 0.85rem; }
+.org-select {
+  font: inherit;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 240px;
+}
+.org-select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
 /* Secondary button: subtle outline against the black hero, sits
    beside the primary CTA. Used for "GitHub →" today. */
 .btn-secondary,

@@ -1,0 +1,5 @@
+has_select: true
+has_alpha: true
+has_beta: true
+default_selected: alpha
+exit=0

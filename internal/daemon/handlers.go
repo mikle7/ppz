@@ -286,7 +286,10 @@ func (d *Daemon) handleLogin(ctx context.Context, conn net.Conn, params json.Raw
 		writeIPCErr(conn, &cliproto.Error{Code: "E_PROTOCOL", Message: err.Error()})
 		return
 	}
-	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: req.APIKey})
+	// Forward the org chosen in the device flow (empty for api-key logins,
+	// where the key pins the org). The server mints the NATS JWT in this
+	// org after validating the user's membership.
+	body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: req.APIKey, AccountID: req.AccountID})
 	httpReq, _ := http.NewRequestWithContext(ctx, "POST", req.URL+"/api/v1/auth/exchange", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	resp, err := d.HTTP.Do(httpReq)
@@ -399,7 +402,10 @@ func (d *Daemon) bootstrapNATS(ctx context.Context, creds *Credentials) error {
 		}
 	}
 	if d.NATSURL == "" {
-		body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey})
+		// Carry the org the user logged into. Without it the server's OAuth
+		// branch falls back to its default org and mints the NATS JWT there
+		// — desyncing it from the AccountID we stamp on ?org= list calls.
+		body, _ := json.Marshal(cliproto.AuthExchangeRequest{APIKey: creds.APIKey, AccountID: creds.AccountID})
 		req, err := http.NewRequestWithContext(ctx, "POST", creds.URL+"/api/v1/auth/exchange", bytes.NewReader(body))
 		if err != nil {
 			return err
@@ -436,7 +442,12 @@ func (d *Daemon) bootstrapNATS(ctx context.Context, creds *Credentials) error {
 		// don't depend on stale on-disk values.
 		creds.NATSUserJWT = ex.NATSUserJWT
 		creds.NATSUserSeed = ex.NATSUserSeed
-		_ = d.State.SetLogin(*creds, creds.AccountID, creds.AccountName, keyPrefix(creds.APIKey))
+		// Adopt the account the server actually minted the JWT in — not the
+		// stale persisted AccountID — so State.AccountID() (used for ?org=
+		// listing and every NATS subject) stays bound to the live creds.
+		creds.AccountID = ex.AccountID
+		creds.AccountName = ex.AccountName
+		_ = d.State.SetLogin(*creds, ex.AccountID, ex.AccountName, keyPrefix(creds.APIKey))
 		d.startRefreshLoop(ex.AccountID, ex.NATSUserJWT, ex.NATSUserSeed, ex.ExpiresAt.Unix())
 	}
 	// If we got here without /auth/exchange (NATSURL was already known) but
