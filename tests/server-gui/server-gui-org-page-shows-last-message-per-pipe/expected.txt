@@ -2,9 +2,5 @@
 Last Message
 --- per-pipe rows: handle:pipe:RELATIVE:payload (inbox + archive both populated) ---
 foo:archive:RELATIVE:hello-archive
-foo:heartbeat::
 foo:inbox:RELATIVE:hello-inbox
-foo:stdctrl::
-foo:stdin::
-foo:stdout::
 exit=0

@@ -19,10 +19,10 @@ import (
 //
 //   ppz source create HANDLE   — claim a bare actor identity (a
 //                                 message-kind source, with inbox
-//                                 auto-pipe). Distinct from
-//                                 `ppz terminal create` (pty pipe
-//                                 set) and `ppz agent create` (agent
-//                                 pipe set + harness).
+//                                 auto-pipe). For a pty pipe set, run
+//                                 `ppz terminal share` (auto-creates
+//                                 the handle); for an agent harness,
+//                                 `ppz agent create`.
 //   ppz source destroy PATTERN — glob-destroy sources / pipes. The
 //                                 expressive bits (glob across
 //                                 handles, pipe-pattern that crosses

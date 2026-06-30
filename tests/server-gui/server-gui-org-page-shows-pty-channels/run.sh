@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# A pty source exposes four pipes (inbox, stdctrl, stdin, stdout).
-# The org page table must render one row per (source, pipe) for pty
-# sources, and one row (pipe=inbox) for message sources. Each row
-# gets data-source-row and data-source-pipe-link markers.
+# A pty source exposes five pipes (heartbeat, inbox, stdctrl, stdin,
+# stdout). The org page table must render one row per (source, pipe)
+# for pty sources, and one row (pipe=inbox) for message sources. Each
+# row gets data-source-row and data-source-pipe-link markers.
 . /tests/lib/common.sh
 auth_as_foo
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a terminal create regular >/dev/null
+ppz_a source create regular >/dev/null
 ppz_a terminal share pty-pipe -- true >/dev/null
 
 PAGE=$(curl_server "/orgs/alpha")

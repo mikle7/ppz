@@ -4,8 +4,8 @@
 # org's pipes — no leakage.
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
 ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_beta)"  >/dev/null
-ppz_a terminal create alpha-only >/dev/null
-ppz_b terminal create beta-only  >/dev/null
+ppz_a source create alpha-only >/dev/null
+ppz_b source create beta-only  >/dev/null
 echo "--- a ---"
 ppz_a ls | ls_normalize
 echo "--- b ---"

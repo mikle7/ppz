@@ -9,9 +9,9 @@
 . /tests/lib/common.sh
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a terminal create chat >/dev/null
+ppz_a source create chat >/dev/null
 ppz_a send chat.inbox "hello world" >/dev/null
-ppz_a terminal create verbose >/dev/null
+ppz_a source create verbose >/dev/null
 # A payload that exceeds the 60-byte preview cap so we can assert the … marker.
 LONG="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 ppz_a send verbose.inbox "$LONG" >/dev/null

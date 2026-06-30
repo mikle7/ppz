@@ -1,5 +1,5 @@
 --- E_NOT_LOGGED_IN: should reference 'ppz daemon login' ---
 error: E_NOT_LOGGED_IN: not logged in; run 'ppz daemon login URL -apikey K'
---- E_NO_CURRENT_SOURCE: should reference 'ppz terminal create' / 'ppz set handle' ---
-error: E_NO_CURRENT_SOURCE: no current source for this shell session; run 'ppz terminal create <handle>' (or 'ppz set handle <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state
+--- E_NO_CURRENT_SOURCE: should reference 'ppz source create' / 'ppz set handle' ---
+error: E_NO_CURRENT_SOURCE: no current source for this shell session; run 'ppz source create <handle>' (or 'ppz set handle <handle>' to point at an existing one); if you're driving ppz from agent subprocesses with no shared tty, export PPZ_SESSION=<id> consistently across calls so they share session state
 exit=0

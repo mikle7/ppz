@@ -204,7 +204,7 @@ for it:
 
 ```bash
 ppz source create H        # claim a bare message handle (auto-creates H.inbox) — NO harness
-ppz terminal create H      # create a pty-backed handle AND set it as current
+ppz terminal share H [-- CMD]  # run a pty (shell/CMD) bound to H — publishes H.stdout, reads H.stdin
 ppz agent create H         # create a handle AND run an AI harness in it
 ppz set handle H           # set this session's current handle
 ppz get handle / unset handle
@@ -213,11 +213,12 @@ ppz daemon start|stop|restart|logout
 ppz source destroy 'PAT'   # glob-destroy sources/pipes (careful — destructive)
 ```
 
-**Which `create`?** `source create` = a bare mailbox handle, no process.
-`terminal create` = a pty-backed handle (you get stdin/stdout pipes) and it's
-set current. `agent create` = a handle *plus* a spawned AI harness running in
-it. For "I just need to talk on the mesh", you usually already have a handle
-(pinned via `PPZ_SESSION`) and need none of these.
+**Which verb?** `source create` = a bare mailbox handle, no process, set
+current. `terminal share` = run a live pty (shell/CMD) bound to a handle —
+auto-creates the handle if missing, publishes its stdout and reads its stdin.
+`agent create` = a handle *plus* a spawned AI harness running in it. For "I
+just need to talk on the mesh", you usually already have a handle (pinned via
+`PPZ_SESSION`) and need none of these.
 
 ### `ppz command H` — driving another agent's keyboard (DANGEROUS)
 `ppz command H "INSTR"` types `INSTR` into `H.stdin` then sends a control key —

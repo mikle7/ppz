@@ -1,13 +1,5 @@
 --- a ---
-alpha-only.heartbeat 0 0 - - foo
 alpha-only.inbox 0 0 - - foo
-alpha-only.stdctrl 0 0 - - foo
-alpha-only.stdin 0 0 - - foo
-alpha-only.stdout 0 0 - - foo
 --- b ---
-beta-only.heartbeat 0 0 - - bar
 beta-only.inbox 0 0 - - bar
-beta-only.stdctrl 0 0 - - bar
-beta-only.stdin 0 0 - - bar
-beta-only.stdout 0 0 - - bar
 exit=0

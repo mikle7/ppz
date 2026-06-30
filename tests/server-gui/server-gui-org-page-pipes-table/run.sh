@@ -8,7 +8,7 @@
 auth_as_foo
 
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)" >/dev/null
-ppz_a terminal create chat >/dev/null
+ppz_a source create chat >/dev/null
 ppz_a send chat.inbox "hello table" >/dev/null
 wait_for 20 "ppz_a ls | grep -q 'hello table'" >/dev/null
 

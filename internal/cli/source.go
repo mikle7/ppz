@@ -19,10 +19,10 @@ import (
 //
 //   ppz source create HANDLE   — claim a bare actor identity
 //                                 (message-kind source, with inbox
-//                                 auto-pipe). Distinct from
-//                                 `ppz terminal create` (pty pipe
-//                                 set) and `ppz agent create` (agent
-//                                 pipe set + harness).
+//                                 auto-pipe). For a pty pipe set, run a
+//                                 terminal with `ppz terminal share`
+//                                 (auto-creates the handle); for an
+//                                 agent harness, `ppz agent create`.
 //   ppz source destroy PATTERN — glob-destroy sources / pipes. The
 //                                 expressive bits (glob across
 //                                 handles, pipe-pattern matching
@@ -52,8 +52,8 @@ func cmdSourceGroup(args []string) error {
 // cmdSourceCreate creates a bare message-kind source (auto-pipe set:
 // inbox only) and sets it as the session's current handle. Strict:
 // errors with E_HANDLE_TAKEN if the handle already exists in the
-// account. Distinct from `ppz terminal create` and `ppz agent create`
-// which provision richer pipe bundles.
+// account. For richer pipe bundles, `ppz terminal share` (pty pipe set,
+// auto-creates the handle) or `ppz agent create` (agent pipes + harness).
 func cmdSourceCreate(args []string) error {
 	if len(args) != 1 {
 		usageExit("source create")

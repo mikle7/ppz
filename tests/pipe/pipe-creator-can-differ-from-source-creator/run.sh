@@ -9,7 +9,7 @@
 ppz_a daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha)"  >/dev/null  # foo
 ppz_b daemon login "$PPZ_SERVER_URL" -apikey "$(key_alpha2)" >/dev/null  # bar
 
-ppz_a terminal create chat       >/dev/null   # source created by foo
+ppz_a source create chat       >/dev/null   # source created by foo
 ppz_b pipe create chat.notes   >/dev/null   # pipe created by bar on foo's source
 
 # Daemon A's view is built from the server's GET /api/v1/sources +

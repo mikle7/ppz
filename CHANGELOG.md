@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased — remove `ppz terminal create`
+
+**Breaking (CLI surface).** Removed the `ppz terminal create HANDLE` subverb.
+It only provisioned a pty-shaped source and set it current — it never ran a
+process, so a freshly "created" terminal produced no `stdout` stream and no
+heartbeats, which read as broken. The pty pipe set has no meaning until
+something runs in it. Use instead:
+
+- **`ppz source create HANDLE`** — claim a handle and set it current
+  (message-kind, `inbox` auto-pipe). The `E_NO_CURRENT_SOURCE` recovery hint
+  now points here.
+- **`ppz terminal share HANDLE [-- CMD]`** — run a live pty bound to `HANDLE`
+  (auto-creates the handle on first use), publishing `HANDLE.stdout`, reading
+  `HANDLE.stdin`, and emitting heartbeats. This is what actually produces a
+  streaming terminal.
+
+`agent create` is unaffected — it already routed through `terminal share`, not
+`terminal create`.
+
 ## v0.31.1 — Strict bare rule + first-wins collisions (Phase 1.5.1)
 
 **Breaking release.** Wire-level stream naming changed — cutover via Reset Database action then redeploy.
