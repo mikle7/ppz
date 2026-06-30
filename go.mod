@@ -7,6 +7,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/mattn/go-runewidth v0.0.15
 	github.com/nats-io/nats-server/v2 v2.12.7
 	github.com/nats-io/nats.go v1.51.0
 	golang.org/x/crypto v0.50.0
@@ -27,6 +28,7 @@ require (
 	github.com/nats-io/jwt/v2 v2.8.1 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
