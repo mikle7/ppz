@@ -315,7 +315,6 @@ body[data-page="landing"] {
   font-size: 1rem;
   line-height: 1.5;
 }
-}
 .hero-cta {
   margin: 0;
   display: flex;
@@ -338,15 +337,35 @@ body[data-page="landing"] {
   transition: background 0.15s;
 }
 .btn-primary:hover { background: var(--btn-bg-hover); }
-/* Device-flow org picker: stacks a label + <select> on its own row above
-   the Approve button (the .hero-cta flex-wraps it onto its own line). */
+
+/* Device-flow approval form. The shared .hero-cta is a centred,
+   wrapping flex ROW (landing/login put a single button in it). The
+   device-verify form holds three stacked controls — org picker, the
+   pairing code, then the Approve button — so we override it to a
+   centred COLUMN here. (The old row layout let the full-width
+   .org-field shrink and sit beside the button, squeezing it until
+   "Approve as me" wrapped onto two lines.) */
+body[data-page="device-verify"] .hero-cta {
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+/* Match the button width to the <select> so the column lines up, and
+   never let the label wrap regardless of how narrow it gets. */
+body[data-page="device-verify"] .btn-primary {
+  white-space: nowrap;
+  min-width: 240px;
+  text-align: center;
+}
+
+/* Device-flow org picker: a label + <select> stacked on their own
+   row above the pairing code. */
 .org-field {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.35rem;
   width: 100%;
-  margin-bottom: 0.4rem;
 }
 .org-field label { color: var(--muted); font-size: 0.85rem; }
 .org-select {
@@ -359,6 +378,37 @@ body[data-page="landing"] {
   min-width: 240px;
 }
 .org-select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+
+/* Pairing code, shown above the Approve button. The user reads this
+   off the page to confirm it matches what the CLI printed, so it
+   needs to be legible — large spaced monospace in a bordered pill,
+   outlined in the pipe-blue cobalt (--btn-bg) to tie it to the brand
+   without competing with the solid CTA below it. */
+.device-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+.device-code-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.device-code-value {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.5rem;
+  font-weight: 600;
+  /* trailing letter-spacing adds phantom space on the right; the
+     extra left padding re-centres the glyphs in the pill. */
+  letter-spacing: 0.18em;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--btn-bg);
+  border-radius: 8px;
+  padding: 0.45rem 1rem 0.45rem 1.18rem;
+}
 /* Secondary button: subtle outline against the black hero, sits
    beside the primary CTA. Used for "GitHub →" today. */
 .btn-secondary,
@@ -376,7 +426,6 @@ body[data-page="landing"] {
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: #888;
-  }
 }
 
 /* ─── pipescloud marketing chrome ─── */
