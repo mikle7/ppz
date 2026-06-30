@@ -49,12 +49,14 @@ func cmdDaemonLogin(args []string) error {
 	}
 
 	credential := *apikey
+	var accountID string // org chosen in the device flow; empty for api-key logins
 	if credential == "" {
-		got, err := runDeviceFlow(url, !*noOpen)
+		got, org, err := runDeviceFlow(url, !*noOpen)
 		if err != nil {
 			return err
 		}
 		credential = got
+		accountID = org
 	}
 
 	already, pid, err := ensureDaemonRunning()
@@ -65,7 +67,7 @@ func cmdDaemonLogin(args []string) error {
 		fmt.Fprintf(os.Stdout, "daemon started pid=%d\n", pid)
 	}
 	var reply cliproto.LoginReply
-	if err := daemon.Call(ipcSocket(), cliproto.IPCLogin, cliproto.LoginRequest{URL: url, APIKey: credential}, &reply); err != nil {
+	if err := daemon.Call(ipcSocket(), cliproto.IPCLogin, cliproto.LoginRequest{URL: url, APIKey: credential, AccountID: accountID}, &reply); err != nil {
 		return err
 	}
 	cliproto.PrintLogin(os.Stdout, reply)
@@ -74,10 +76,11 @@ func cmdDaemonLogin(args []string) error {
 }
 
 // runDeviceFlow drives the OAuth 2.0 Device Authorization Grant against
-// `url` and returns the resulting bearer token. With autoOpen=true,
-// it shells out to the platform browser-opener so the user just clicks
-// "Approve" — no typing the user_code.
-func runDeviceFlow(url string, autoOpen bool) (string, error) {
+// `url` and returns the resulting bearer token plus the org the user
+// selected on the verify page (empty if the server didn't report one).
+// With autoOpen=true, it shells out to the platform browser-opener so the
+// user just clicks "Approve" — no typing the user_code.
+func runDeviceFlow(url string, autoOpen bool) (string, string, error) {
 	// 1. Mint device + user codes. Send our identity so the verify
 	//    page can name the client (e.g. "ppz CLI 0.15.0 (abc1234)
 	//    would like to connect").
@@ -86,12 +89,12 @@ func runDeviceFlow(url string, autoOpen bool) (string, error) {
 	}{ClientName: fmt.Sprintf("ppz CLI %s (%s)", version.Version, version.BuildSHA)})
 	resp, err := http.Post(url+"/oauth/device/code", "application/json", bytes.NewReader(reqBody))
 	if err != nil {
-		return "", fmt.Errorf("device code: %w", err)
+		return "", "", fmt.Errorf("device code: %w", err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("device code: HTTP %d: %s", resp.StatusCode, body)
+		return "", "", fmt.Errorf("device code: HTTP %d: %s", resp.StatusCode, body)
 	}
 	var dc struct {
 		DeviceCode string `json:"device_code"`
@@ -100,7 +103,7 @@ func runDeviceFlow(url string, autoOpen bool) (string, error) {
 		ExpiresIn  int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(body, &dc); err != nil {
-		return "", fmt.Errorf("device code parse: %w", err)
+		return "", "", fmt.Errorf("device code parse: %w", err)
 	}
 
 	// 2. Build the browser URL ourselves (don't trust the server's
@@ -123,13 +126,13 @@ func runDeviceFlow(url string, autoOpen bool) (string, error) {
 
 	for time.Now().Before(deadline) {
 		time.Sleep(interval)
-		token, errCode, err := pollDeviceToken(url, dc.DeviceCode)
+		token, accountID, errCode, err := pollDeviceToken(url, dc.DeviceCode)
 		if err != nil {
-			return "", fmt.Errorf("poll: %w", err)
+			return "", "", fmt.Errorf("poll: %w", err)
 		}
 		if token != "" {
 			fmt.Fprintln(os.Stdout, "✓ approved")
-			return token, nil
+			return token, accountID, nil
 		}
 		switch errCode {
 		case "authorization_pending":
@@ -137,26 +140,28 @@ func runDeviceFlow(url string, autoOpen bool) (string, error) {
 		case "slow_down":
 			interval += 1 * time.Second
 		case "expired_token":
-			return "", fmt.Errorf("device code expired before approval — re-run `ppz login`")
+			return "", "", fmt.Errorf("device code expired before approval — re-run `ppz login`")
 		case "invalid_grant":
-			return "", fmt.Errorf("device code invalid — re-run `ppz login`")
+			return "", "", fmt.Errorf("device code invalid — re-run `ppz login`")
 		default:
-			return "", fmt.Errorf("unexpected error %q", errCode)
+			return "", "", fmt.Errorf("unexpected error %q", errCode)
 		}
 	}
-	return "", fmt.Errorf("timed out waiting for approval")
+	return "", "", fmt.Errorf("timed out waiting for approval")
 }
 
-// pollDeviceToken returns (token, "", nil) on success, ("", errCode, nil)
-// on RFC 8628 known errors, ("", "", err) on transport/parse errors.
-func pollDeviceToken(url, deviceCode string) (string, string, error) {
+// pollDeviceToken returns (token, accountID, "", nil) on success,
+// ("", "", errCode, nil) on RFC 8628 known errors, ("", "", "", err) on
+// transport/parse errors. accountID is the org the user selected on the
+// verify page (may be empty).
+func pollDeviceToken(url, deviceCode string) (string, string, string, error) {
 	req := struct {
 		DeviceCode string `json:"device_code"`
 	}{DeviceCode: deviceCode}
 	body, _ := json.Marshal(req)
 	resp, err := http.Post(url+"/oauth/device/token", "application/json", bytes.NewReader(body))
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
@@ -164,18 +169,19 @@ func pollDeviceToken(url, deviceCode string) (string, string, error) {
 	if resp.StatusCode == http.StatusOK {
 		var ok struct {
 			AccessToken string `json:"access_token"`
+			AccountID   string `json:"account_id"`
 		}
 		if err := json.Unmarshal(respBody, &ok); err != nil {
-			return "", "", err
+			return "", "", "", err
 		}
-		return ok.AccessToken, "", nil
+		return ok.AccessToken, ok.AccountID, "", nil
 	}
 
 	var errResp struct {
 		Error string `json:"error"`
 	}
 	_ = json.Unmarshal(respBody, &errResp)
-	return "", errResp.Error, nil
+	return "", "", errResp.Error, nil
 }
 
 // cmdDaemonLogout clears stored credentials, the current source pointer, and

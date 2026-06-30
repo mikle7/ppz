@@ -145,21 +145,30 @@ func GetAccountByName(ctx context.Context, p *Pool, name string) (Account, error
 	return a, err
 }
 
-// FirstOwnedAccountFor returns the account owned by userID. If they own
-// multiple, returns the oldest. If they own none, returns ErrNotFound.
-// Used by the OAuth path of requireAPIKey to pick a default account for
-// callers who haven't yet specified one (Auth V2 Phase 2 interim;
-// proper account-selection UX is V3).
-func FirstOwnedAccountFor(ctx context.Context, p *Pool, userID uuid.UUID) (Account, error) {
+// DefaultAccountFor returns the account to use for a caller who hasn't
+// explicitly selected one: their oldest OWNED account, or — if they own
+// none — their oldest account by MEMBERSHIP. Returns ErrNotFound only
+// when the user neither owns nor belongs to any account.
+//
+// This is the account-selection default for the OAuth path (device flow
+// + /auth/exchange) and the requireAPIKey ?org fallback. It must consider
+// membership: a user invited into an org (a member, not owner) otherwise
+// has no usable default and every OAuth call 403s / errors — and listing
+// (?org=, membership-aware) would disagree with the minted NATS creds.
+func DefaultAccountFor(ctx context.Context, p *Pool, userID uuid.UUID) (Account, error) {
 	var a Account
 	err := p.QueryRow(ctx,
-		`SELECT id, name, owner_user_id, created_at,
-		        COALESCE(nats_account_pub,''),
-		        COALESCE(nats_account_jwt,''),
-		        COALESCE(nats_account_signing_seed,'')
-		   FROM accounts
-		  WHERE owner_user_id = $1
-		  ORDER BY created_at ASC
+		`SELECT a.id, a.name, a.owner_user_id, a.created_at,
+		        COALESCE(a.nats_account_pub,''),
+		        COALESCE(a.nats_account_jwt,''),
+		        COALESCE(a.nats_account_signing_seed,'')
+		   FROM accounts a
+		  WHERE a.owner_user_id = $1
+		     OR EXISTS (
+		         SELECT 1 FROM account_members m
+		          WHERE m.account_id = a.id AND m.user_id = $1
+		     )
+		  ORDER BY (a.owner_user_id = $1) DESC, a.created_at ASC
 		  LIMIT 1`, userID).
 		Scan(&a.ID, &a.Name, &a.OwnerUserID, &a.CreatedAt, &a.NATSAccountPub, &a.NATSAccountJWT, &a.NATSAccountSigningSeed)
 	if err != nil {

@@ -70,6 +70,28 @@ func GetUserByUsername(ctx context.Context, p *Pool, username string) (User, err
 	return u, err
 }
 
+// GetLastSelectedAccount returns the org the user last authorized a CLI
+// session into (nil if they never have, or the org was since deleted —
+// the FK is ON DELETE SET NULL). Used to default the device-flow org
+// dropdown.
+func GetLastSelectedAccount(ctx context.Context, p *Pool, userID uuid.UUID) (*uuid.UUID, error) {
+	var acct *uuid.UUID
+	err := p.QueryRow(ctx,
+		`SELECT last_selected_account_id FROM users WHERE id = $1`, userID).Scan(&acct)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return acct, err
+}
+
+// SetLastSelectedAccount records the org a user just authorized into so
+// the next device-flow verify page defaults its dropdown to it.
+func SetLastSelectedAccount(ctx context.Context, p *Pool, userID, accountID uuid.UUID) error {
+	_, err := p.Exec(ctx,
+		`UPDATE users SET last_selected_account_id = $2 WHERE id = $1`, userID, accountID)
+	return err
+}
+
 // UsernamesByIDs resolves a set of user IDs to {id → username}. Used by
 // the server's list endpoints that need to attribute every source/pipe
 // row to a user (HUMAN column). Single round-trip via ANY($1::uuid[]).

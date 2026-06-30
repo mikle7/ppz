@@ -14,8 +14,57 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/pipescloud/ppz/internal/db"
 )
+
+// orgOption is one entry in the verify-page org dropdown.
+type orgOption struct {
+	ID       string
+	Name     string
+	Selected bool
+}
+
+// resolveDefaultOrg returns the account_id the verify-page dropdown should
+// pre-select for userID: the org they last authorized into (if still a
+// member), else their default org (owned, else member). Empty string if
+// the user belongs to no org.
+func (s *Server) resolveDefaultOrg(r *http.Request, userID uuid.UUID, accounts []db.Account) string {
+	if last, err := db.GetLastSelectedAccount(r.Context(), s.Pool, userID); err == nil && last != nil {
+		for _, a := range accounts {
+			if a.ID == *last {
+				return last.String()
+			}
+		}
+	}
+	if def, err := db.DefaultAccountFor(r.Context(), s.Pool, userID); err == nil {
+		return def.ID.String()
+	}
+	return ""
+}
+
+// resolveSelectedOrg validates the account_id the user submitted on the
+// verify page (must be one they own or belong to). An empty raw value
+// falls back to the user's default org. Returns an error the caller can
+// surface as 403.
+func (s *Server) resolveSelectedOrg(r *http.Request, userID uuid.UUID, raw string) (uuid.UUID, error) {
+	if raw == "" {
+		def, err := db.DefaultAccountFor(r.Context(), s.Pool, userID)
+		if err != nil {
+			return uuid.Nil, errors.New("you do not belong to any org")
+		}
+		return def.ID, nil
+	}
+	accountID, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil, errors.New("org is not a valid id")
+	}
+	if !db.IsMemberOrOwner(r.Context(), s.Pool, accountID, userID) {
+		return uuid.Nil, errors.New("you are not a member of the selected org")
+	}
+	return accountID, nil
+}
 
 // Lifetimes — kept short so abandoned flows expire cheaply.
 const (
@@ -73,11 +122,26 @@ func (s *Server) handleDeviceVerifyPage(w http.ResponseWriter, r *http.Request) 
 			clientName = dc.ClientName
 		}
 	}
+	// Build the org dropdown: every org the signed-in user can act in,
+	// with the default (last-selected, else default org) pre-selected.
+	uid := UserIDFromCtx(r.Context())
+	accounts, _ := db.ListAccountsForUser(r.Context(), s.Pool, uid)
+	defaultOrg := s.resolveDefaultOrg(r, uid, accounts)
+	orgs := make([]orgOption, 0, len(accounts))
+	for _, a := range accounts {
+		orgs = append(orgs, orgOption{
+			ID:       a.ID.String(),
+			Name:     a.Name,
+			Selected: a.ID.String() == defaultOrg,
+		})
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = tmpl.ExecuteTemplate(w, "device_verify.html", map[string]any{
 		"UserCode":   userCode,
 		"ClientName": clientName,
 		"approved":   r.URL.Query().Get("approved"),
+		"Orgs":       orgs,
 	})
 }
 
@@ -93,7 +157,17 @@ func (s *Server) handleDeviceVerifySubmit(w http.ResponseWriter, r *http.Request
 		return
 	}
 	uid := UserIDFromCtx(r.Context())
-	if err := db.ApproveDeviceCode(r.Context(), s.Pool, userCode, uid); err != nil {
+
+	// Resolve the org the user is authorizing into. The dropdown posts
+	// account_id; an empty value (old client / no selection) falls back to
+	// the user's default org. Either way, the user must belong to it.
+	accountID, err := s.resolveSelectedOrg(r, uid, r.FormValue("account_id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	if err := db.ApproveDeviceCode(r.Context(), s.Pool, userCode, uid, accountID); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			http.Error(w, "user_code not found or expired", http.StatusNotFound)
 			return
@@ -101,6 +175,9 @@ func (s *Server) handleDeviceVerifySubmit(w http.ResponseWriter, r *http.Request
 		http.Error(w, "approve: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Remember the choice so the next login defaults to it. Best-effort —
+	// a failure here doesn't invalidate the approval that just succeeded.
+	_ = db.SetLastSelectedAccount(r.Context(), s.Pool, uid, accountID)
 	// Render a "you can close this tab" page (or redirect with success
 	// query). Keeping it simple — just a 303 to a confirmation route.
 	http.Redirect(w, r, "/oauth/device/verify?user_code="+userCode+"&approved=1", http.StatusSeeOther)
@@ -115,6 +192,9 @@ type deviceTokenReply struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int    `json:"expires_in"`
+	// AccountID is the org the user selected on the verify page. The CLI
+	// forwards it to /auth/exchange so the NATS JWT is minted there.
+	AccountID string `json:"account_id,omitempty"`
 }
 
 type deviceTokenError struct {
@@ -133,7 +213,7 @@ func (s *Server) handleDeviceToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, deviceTokenError{Error: "invalid_request"})
 		return
 	}
-	userID, err := db.ConsumeDeviceCode(r.Context(), s.Pool, req.DeviceCode)
+	userID, accountID, err := db.ConsumeDeviceCode(r.Context(), s.Pool, req.DeviceCode)
 	if err != nil {
 		switch {
 		case errors.Is(err, db.ErrDeviceCodePending):
@@ -152,9 +232,13 @@ func (s *Server) handleDeviceToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "issue token: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, deviceTokenReply{
+	reply := deviceTokenReply{
 		AccessToken: plaintext,
 		TokenType:   "bearer",
 		ExpiresIn:   int(bearerTTL.Seconds()),
-	})
+	}
+	if accountID != nil {
+		reply.AccountID = accountID.String()
+	}
+	writeJSON(w, http.StatusOK, reply)
 }
