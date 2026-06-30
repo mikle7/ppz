@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // All printers below match the pinned stdout in WIRE.md §8 byte-for-byte.
@@ -679,27 +681,27 @@ func writeSubsTable(w io.Writer, rows []subsRow) {
 		}
 	}
 	for _, r := range rows {
-		grow(0, len(r.namespace))
-		grow(1, len(r.pipe))
+		grow(0, dispWidth(r.namespace))
+		grow(1, dispWidth(r.pipe))
 		if r.note {
 			continue
 		}
-		grow(2, len(r.unread))
-		grow(3, len(r.buffered))
-		grow(4, len(r.last))
-		grow(5, len(r.payload))
+		grow(2, dispWidth(r.unread))
+		grow(3, dispWidth(r.buffered))
+		grow(4, dispWidth(r.last))
+		grow(5, dispWidth(r.payload))
 	}
-	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
-		widths[0], headers[0], widths[1], headers[1], widths[2], headers[2],
-		widths[3], headers[3], widths[4], headers[4], widths[5], headers[5], headers[6])
+	fmt.Fprintf(w, "%s  %s  %s  %s  %s  %s  %s\n",
+		padRightDisp(headers[0], widths[0]), padRightDisp(headers[1], widths[1]), padRightDisp(headers[2], widths[2]),
+		padRightDisp(headers[3], widths[3]), padRightDisp(headers[4], widths[4]), padRightDisp(headers[5], widths[5]), headers[6])
 	for _, r := range rows {
 		if r.note {
-			fmt.Fprintf(w, "%-*s  %s\n", widths[0], r.namespace, r.pipe)
+			fmt.Fprintf(w, "%s  %s\n", padRightDisp(r.namespace, widths[0]), r.pipe)
 			continue
 		}
-		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
-			widths[0], r.namespace, widths[1], r.pipe, widths[2], r.unread,
-			widths[3], r.buffered, widths[4], r.last, widths[5], r.payload, r.creator)
+		fmt.Fprintf(w, "%s  %s  %s  %s  %s  %s  %s\n",
+			padRightDisp(r.namespace, widths[0]), padRightDisp(r.pipe, widths[1]), padRightDisp(r.unread, widths[2]),
+			padRightDisp(r.buffered, widths[3]), padRightDisp(r.last, widths[4]), padRightDisp(r.payload, widths[5]), r.creator)
 	}
 }
 
@@ -731,23 +733,55 @@ func payloadColumn(preview string) string {
 	return preview
 }
 
-// truncateForColumn cuts s to at most maxRunes wide, replacing the
-// trailing rune with "…" when truncation actually occurred. Operates
-// on runes (not bytes) so multi-byte characters aren't sliced mid-
-// codepoint. Used by writeListTable to fit the PAYLOAD column into
-// the leftover terminal-width budget.
-func truncateForColumn(s string, maxRunes int) string {
-	if maxRunes <= 0 {
+// dispWidth reports the number of terminal columns s occupies. Unlike
+// len() (bytes) or utf8.RuneCountInString (runes), it accounts for wide
+// runes (CJK, emoji — 2 columns) and zero-width combining marks (0). All
+// table column sizing/padding goes through this so an embedded icon (e.g.
+// 📊 in a status-report payload) doesn't drift the columns to its right.
+func dispWidth(s string) int {
+	return runewidth.StringWidth(s)
+}
+
+// padRightDisp left-justifies s in a field of width display columns,
+// padding the right with spaces. fmt's "%-*s" pads by rune count, which
+// mis-sizes wide and zero-width runes — so every table cell is padded
+// here, by display width, instead of via the format verb.
+func padRightDisp(s string, width int) string {
+	if pad := width - dispWidth(s); pad > 0 {
+		return s + strings.Repeat(" ", pad)
+	}
+	return s
+}
+
+// truncateForColumn cuts s so it occupies at most maxCols terminal
+// columns, replacing the trailing content with "…" when truncation
+// actually occurred. Operates on display width (not bytes or runes) so
+// wide runes are budgeted correctly and a multi-byte rune is never sliced
+// mid-codepoint. Used by writeListTable to fit the PAYLOAD column into the
+// leftover terminal-width budget.
+func truncateForColumn(s string, maxCols int) string {
+	if maxCols <= 0 {
 		return ""
 	}
-	rs := []rune(s)
-	if len(rs) <= maxRunes {
+	if dispWidth(s) <= maxCols {
 		return s
 	}
-	if maxRunes == 1 {
+	if maxCols == 1 {
 		return "…"
 	}
-	return string(rs[:maxRunes-1]) + "…"
+	// Reserve one column for the trailing "…" (itself 1 column wide).
+	limit := maxCols - 1
+	w := 0
+	var b strings.Builder
+	for _, r := range s {
+		rw := runewidth.RuneWidth(r)
+		if w+rw > limit {
+			break
+		}
+		b.WriteRune(r)
+		w += rw
+	}
+	return b.String() + "…"
 }
 
 // writeListTable computes max widths for every column (including PAYLOAD,
@@ -773,25 +807,25 @@ func writeListTable(w io.Writer, rows []listRow) {
 	for i, r := range rows {
 		unreads[i] = fmt.Sprintf("%d", r.unread)
 		buffereds[i] = fmt.Sprintf("%d", r.buffered)
-		if w := len(r.namespace); w > widths[0] {
+		if w := dispWidth(r.namespace); w > widths[0] {
 			widths[0] = w
 		}
-		if w := len(r.pipeColumn); w > widths[1] {
+		if w := dispWidth(r.pipeColumn); w > widths[1] {
 			widths[1] = w
 		}
-		if w := len(unreads[i]); w > widths[2] {
+		if w := dispWidth(unreads[i]); w > widths[2] {
 			widths[2] = w
 		}
-		if w := len(buffereds[i]); w > widths[3] {
+		if w := dispWidth(buffereds[i]); w > widths[3] {
 			widths[3] = w
 		}
-		if w := len(r.last); w > widths[4] {
+		if w := dispWidth(r.last); w > widths[4] {
 			widths[4] = w
 		}
-		if w := len(r.payload); w > widths[5] {
+		if w := dispWidth(r.payload); w > widths[5] {
 			widths[5] = w
 		}
-		if w := len(r.creator); w > creatorMax {
+		if w := dispWidth(r.creator); w > creatorMax {
 			creatorMax = w
 		}
 	}
@@ -830,23 +864,23 @@ func writeListTable(w io.Writer, rows []listRow) {
 			rows[i].payload = truncateForColumn(rows[i].payload, budget)
 		}
 	}
-	fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
-		widths[0], headers[0],
-		widths[1], headers[1],
-		widths[2], headers[2],
-		widths[3], headers[3],
-		widths[4], headers[4],
-		widths[5], headers[5],
+	fmt.Fprintf(w, "%s  %s  %s  %s  %s  %s  %s\n",
+		padRightDisp(headers[0], widths[0]),
+		padRightDisp(headers[1], widths[1]),
+		padRightDisp(headers[2], widths[2]),
+		padRightDisp(headers[3], widths[3]),
+		padRightDisp(headers[4], widths[4]),
+		padRightDisp(headers[5], widths[5]),
 		headers[6],
 	)
 	for i, r := range rows {
-		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
-			widths[0], r.namespace,
-			widths[1], r.pipeColumn,
-			widths[2], unreads[i],
-			widths[3], buffereds[i],
-			widths[4], r.last,
-			widths[5], r.payload,
+		fmt.Fprintf(w, "%s  %s  %s  %s  %s  %s  %s\n",
+			padRightDisp(r.namespace, widths[0]),
+			padRightDisp(r.pipeColumn, widths[1]),
+			padRightDisp(unreads[i], widths[2]),
+			padRightDisp(buffereds[i], widths[3]),
+			padRightDisp(r.last, widths[4]),
+			padRightDisp(r.payload, widths[5]),
 			r.creator,
 		)
 	}
