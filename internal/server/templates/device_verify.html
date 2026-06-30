@@ -31,9 +31,12 @@
             </select>
           </div>
         {{end}}
+        <div class="device-code">
+          <span class="device-code-label">Code</span>
+          <code class="device-code-value">{{.UserCode}}</code>
+        </div>
         <button type="submit" class="btn-primary">Approve as me</button>
       </form>
-      <p class="hero-sub" style="opacity:0.6">Code: <code>{{.UserCode}}</code></p>
     {{end}}
   </header>
 </body>
