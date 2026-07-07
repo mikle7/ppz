@@ -18,6 +18,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/pipescloud/ppz/internal/db"
@@ -37,9 +38,28 @@ const (
 	maxScheduleFailures = 5
 )
 
+// isInfraTransient classifies connection-level NATS failures — the
+// unambiguously "infra is down, nothing wrong with this schedule"
+// class (the complement of the permanent ErrNoStreamResponse case;
+// same classification the daemon's resolveSendTarget applies). These
+// never count toward the drop threshold: failures accumulate one per
+// lease expiry (30s), so counting them would let a ~2.5-minute NATS
+// outage delete every due schedule, recurring ones included.
+func isInfraTransient(err error) bool {
+	return errors.Is(err, nats.ErrConnectionClosed) ||
+		errors.Is(err, nats.ErrNoServers) ||
+		errors.Is(err, nats.ErrTimeout) ||
+		errors.Is(err, context.DeadlineExceeded)
+}
+
 // dropAfterFailure is the loop's verdict on one failed publish.
 // failCount is the post-bump consecutive-failure count.
 func dropAfterFailure(err error, failCount int) bool {
+	if isInfraTransient(err) {
+		// Outage: retry via lease expiry until connectivity returns,
+		// however long that takes.
+		return false
+	}
 	if errors.Is(err, jetstream.ErrNoStreamResponse) {
 		// Target stream is gone (source/pipe destroyed after the
 		// schedule was created) — permanent, drop immediately.
@@ -81,6 +101,13 @@ func (s *Server) fireDueSchedules(ctx context.Context) {
 		d := schedule.Decide(spec, row.NextFireAt, now)
 		if d.Fire {
 			if err := s.publishScheduled(ctx, row); err != nil {
+				if isInfraTransient(err) {
+					// Don't bump fail_count either — an outage must not
+					// leave counters primed near the threshold for the
+					// first unrelated hiccup after recovery.
+					log.Printf("scheduler: publish schedule %s (infra outage, will retry): %v", row.ShortID(), err)
+					continue
+				}
 				// Count the consecutive failure; the pre-claim row carries
 				// the previous count, so fall back to it if the bump
 				// itself fails (db hiccup) rather than losing the verdict.

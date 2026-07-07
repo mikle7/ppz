@@ -103,7 +103,9 @@ e5f6a7b8  -          alerts     every 15m                     in 4 minutes  11 m
 - Failed fires are bounded (PR #139): target-stream-gone drops the
   schedule immediately; other publish failures retry via lease expiry
   and drop after 5 consecutive failures (`fail_count`, reset on
-  success).
+  success). Connection-level NATS failures are exempt — they neither
+  count nor bump the counter, so an infra outage of any length retries
+  until connectivity returns instead of deleting schedules.
 - The server re-validates everything it stores (the REST route is the
   trust boundary, whatever the daemon checked): handle/manifold names,
   kind/spec/tz, and the payload cap measured on the envelope as fired

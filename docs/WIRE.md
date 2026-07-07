@@ -298,7 +298,10 @@ duplicate. Receivers needing exactly-once should dedupe on
 (`schedule_id`, `created_at`). Failed fires are bounded: a schedule
 whose target stream is gone drops immediately; any other publish
 failure retries via lease expiry and the schedule is dropped after 5
-consecutive failures (`fail_count`, reset on success).
+consecutive failures (`fail_count`, reset on success) — EXCEPT
+connection-level NATS failures (connection closed / no servers /
+timeout), which never count: an infra outage of any length retries
+until connectivity returns rather than deleting schedules.
 
 ## 6. Server GUI (HTML, session-authenticated since Auth V2)
 

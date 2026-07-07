@@ -16,11 +16,14 @@ package server
 // permanent error can't re-lease and retry every 30s forever.
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/pipescloud/ppz/internal/cliproto"
@@ -219,5 +222,52 @@ func TestDropAfterFailure_TransientRetriesUntilThreshold(t *testing.T) {
 func TestMaxScheduleFailuresIsFive(t *testing.T) {
 	if maxScheduleFailures != 5 {
 		t.Fatalf("maxScheduleFailures = %d, want 5", maxScheduleFailures)
+	}
+}
+
+// --- follow-up review on bfe77c9: infra outages must not kill schedules ----
+
+// Failures accumulate one per lease expiry (30s), so a flat threshold
+// of 5 meant a ~2.5-minute NATS outage deleted every due schedule —
+// including long-running recurring ones. Connection-level errors are
+// unambiguously transient infra (the complement of the
+// ErrNoStreamResponse permanent case, same classification the daemon's
+// resolveSendTarget uses): they must never count toward the drop
+// threshold and retry until connectivity returns.
+func TestIsInfraTransient_ConnectionClassErrors(t *testing.T) {
+	for _, err := range []error{
+		nats.ErrConnectionClosed,
+		nats.ErrNoServers,
+		nats.ErrTimeout,
+		context.DeadlineExceeded,
+	} {
+		if !isInfraTransient(err) {
+			t.Errorf("%v: want infra-transient (never counts toward drop)", err)
+		}
+		if !isInfraTransient(fmt.Errorf("publish: %w", err)) {
+			t.Errorf("wrapped %v: errors.Is must see through wrapping", err)
+		}
+	}
+}
+
+func TestIsInfraTransient_OtherErrorsStillCount(t *testing.T) {
+	for _, err := range []error{
+		jetstream.ErrNoStreamResponse,      // permanent — handled by immediate drop
+		errors.New("nats: invalid subject"), // unclassified — bounded retries
+	} {
+		if isInfraTransient(err) {
+			t.Errorf("%v: must NOT be classed infra-transient", err)
+		}
+	}
+}
+
+func TestDropAfterFailure_InfraOutageNeverDrops(t *testing.T) {
+	// However long the outage, connection-class failures never delete a
+	// schedule — a weekly cron must survive a 3-minute NATS blip.
+	if dropAfterFailure(nats.ErrNoServers, 1000) {
+		t.Fatal("connection-class error dropped a schedule despite huge fail count")
+	}
+	if dropAfterFailure(fmt.Errorf("js publish: %w", nats.ErrConnectionClosed), maxScheduleFailures+1) {
+		t.Fatal("wrapped connection-class error dropped a schedule")
 	}
 }
