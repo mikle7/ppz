@@ -29,7 +29,24 @@ import (
 const (
 	schedulerTick  = time.Second
 	schedulerBatch = 100
+	// maxScheduleFailures bounds retries for a failing fire: after this
+	// many CONSECUTIVE failed publishes (counter resets on success) the
+	// schedule is dropped. Without it an unforeseen permanent error —
+	// anything we don't classify below — would re-lease and retry every
+	// scheduleClaimLease forever (PR #139 finding #2).
+	maxScheduleFailures = 5
 )
+
+// dropAfterFailure is the loop's verdict on one failed publish.
+// failCount is the post-bump consecutive-failure count.
+func dropAfterFailure(err error, failCount int) bool {
+	if errors.Is(err, jetstream.ErrNoStreamResponse) {
+		// Target stream is gone (source/pipe destroyed after the
+		// schedule was created) — permanent, drop immediately.
+		return true
+	}
+	return failCount >= maxScheduleFailures
+}
 
 func (s *Server) runScheduler(ctx context.Context) {
 	t := time.NewTicker(schedulerTick)
@@ -63,20 +80,24 @@ func (s *Server) fireDueSchedules(ctx context.Context) {
 		}
 		d := schedule.Decide(spec, row.NextFireAt, now)
 		if d.Fire {
-			switch err := s.publishScheduled(ctx, row); {
-			case errors.Is(err, jetstream.ErrNoStreamResponse):
-				// Target stream is gone (source/pipe destroyed after the
-				// schedule was created). The schedule can never deliver
-				// again — drop it.
-				log.Printf("scheduler: schedule %s target %s gone; dropping", row.ShortID(), row.Pipe)
-				_ = db.CompleteFire(ctx, s.Pool, row.ID, nil, time.Time{})
-				continue
-			case err != nil:
-				// Transient (NATS hiccup): leave the row leased; it
-				// re-offers when the claim lease expires and the fire
+			if err := s.publishScheduled(ctx, row); err != nil {
+				// Count the consecutive failure; the pre-claim row carries
+				// the previous count, so fall back to it if the bump
+				// itself fails (db hiccup) rather than losing the verdict.
+				failCount := row.FailCount + 1
+				if n, berr := db.BumpScheduleFailCount(ctx, s.Pool, row.ID); berr == nil {
+					failCount = n
+				}
+				if dropAfterFailure(err, failCount) {
+					log.Printf("scheduler: dropping schedule %s after %d failed fire(s): %v", row.ShortID(), failCount, err)
+					_ = db.CompleteFire(ctx, s.Pool, row.ID, nil, time.Time{})
+					continue
+				}
+				// Presumed transient (NATS hiccup): leave the row leased;
+				// it re-offers when the claim lease expires and the fire
 				// retries. One-off lateness is covered by the missfire
 				// policy; recurring rows just skip per Decide next round.
-				log.Printf("scheduler: publish schedule %s: %v", row.ShortID(), err)
+				log.Printf("scheduler: publish schedule %s (failure %d/%d, will retry): %v", row.ShortID(), failCount, maxScheduleFailures, err)
 				continue
 			}
 		}
@@ -119,6 +140,10 @@ func rowSpec(row db.Schedule) (schedule.Spec, error) {
 		}
 		loc, err := time.LoadLocation(row.TZ)
 		if err != nil {
+			// Should be impossible past create-time validation (e.g. the
+			// host lost its tzdata) — falling back silently would shift
+			// fire times without a trace, so leave a trail.
+			log.Printf("scheduler: schedule %s tz %q not loadable, falling back to UTC: %v", row.ShortID(), row.TZ, err)
 			loc = time.UTC
 		}
 		spec.Cron = row.Spec

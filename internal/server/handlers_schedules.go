@@ -8,10 +8,14 @@ package server
 //	DELETE /api/v1/schedules/{id}   remove by short id
 //
 // The daemon already ran send-grade target resolution (source/stream
-// existence); the server re-validates shape (names, kind, spec) since
-// it is the trust boundary for durable rows.
+// existence), but this route is the trust boundary for durable rows —
+// any bearer can POST directly — so the server re-validates everything
+// it stores: names (a bad handle/manifold would build a malformed or
+// wildcard NATS subject at fire time), kind/spec/tz, and the payload
+// cap as the FIRED envelope will carry it.
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -23,23 +27,42 @@ import (
 	"github.com/pipescloud/ppz/internal/schedule"
 )
 
-func (s *Server) handleCreateSchedule(w http.ResponseWriter, r *http.Request, key db.APIKey) {
-	var req cliproto.ScheduleServerCreateRequest
-	if err := readJSON(r, &req); err != nil {
-		writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "malformed json"})
-		return
+// atSkewGrace is how far in the past a kind=at instant may be at
+// create time. The CLI validates strictly-future against ITS clock;
+// network latency + clock skew can put a legitimate `--at +2s` in the
+// server's past by the time the request lands. 30s mirrors the JWT
+// nbf-backdating precedent. Slightly-past instants fire on the next
+// scheduler tick.
+const atSkewGrace = 30 * time.Second
+
+// resolveScheduleRow is the pure request→row step of
+// handleCreateSchedule: validation and next-fire computation, `now`
+// injected for testability. It returns the row ready for
+// db.InsertSchedule (ID/CreatorUsername unset).
+func resolveScheduleRow(req cliproto.ScheduleServerCreateRequest, key db.APIKey, now time.Time) (db.Schedule, *cliproto.Error) {
+	if req.Handle != "" {
+		if err := natsubj.ValidateHandle(req.Handle); err != nil {
+			return db.Schedule{}, cliproto.New(cliproto.EInvalidHandle)
+		}
+	}
+	if req.Manifold != "" {
+		for _, seg := range strings.Split(req.Manifold, ".") {
+			if err := natsubj.ValidateHandle(seg); err != nil {
+				return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidManifold, Message: "manifold segment invalid: " + seg}
+			}
+		}
 	}
 	if err := natsubj.ValidatePipe(req.Pipe); err != nil {
-		writeErr(w, cliproto.New(cliproto.EInvalidPipe))
-		return
+		return db.Schedule{}, cliproto.New(cliproto.EInvalidPipe)
 	}
-	// Size gate: the fired envelope must obey the same cap as a live
-	// send — reject at creation, not at fire time when nobody's looking.
-	now := time.Now().UTC()
+	// Size gate: probe with the shape the SCHEDULER will publish —
+	// including a schedule_id of the id8 width — so a payload that
+	// passes creation can never exceed MaxBytes at fire time (which
+	// would fail every fire; PR #139 finding #3).
 	probe := envelope.New(req.Sender, "", req.Payload, now)
+	probe.ScheduleID = "aaaaaaaa"
 	if data, err := probe.Marshal(); err != nil || len(data) > envelope.MaxBytes {
-		writeErr(w, cliproto.New(cliproto.EPayloadTooLarge))
-		return
+		return db.Schedule{}, cliproto.New(cliproto.EPayloadTooLarge)
 	}
 
 	row := db.Schedule{
@@ -58,42 +81,49 @@ func (s *Server) handleCreateSchedule(w http.ResponseWriter, r *http.Request, ke
 	case schedule.KindAt:
 		t, err := time.Parse(time.RFC3339, req.At)
 		if err != nil {
-			writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid at: " + err.Error()})
-			return
+			return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid at: " + err.Error()}
 		}
-		if !t.After(now) {
-			writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "at is in the past"})
-			return
+		if t.Before(now.Add(-atSkewGrace)) {
+			return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "at is in the past"}
 		}
 		row.Spec = req.At // display-shaped: the creator's offset survives
 		row.NextFireAt = t.UTC()
 	case schedule.KindEvery:
 		d, err := schedule.ParseEvery(req.Every)
 		if err != nil {
-			writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid every: " + err.Error()})
-			return
+			return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid every: " + err.Error()}
 		}
 		row.Spec = req.Every
 		row.NextFireAt = now.Add(d) // grid anchor = created_at
 	case schedule.KindCron:
 		if err := schedule.ParseCron(req.Cron); err != nil {
-			writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid cron: " + err.Error()})
-			return
+			return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid cron: " + err.Error()}
 		}
 		loc, err := time.LoadLocation(req.TZ)
 		if err != nil {
-			writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid tz: " + req.TZ})
-			return
+			return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "invalid tz: " + req.TZ}
 		}
 		next, ok := schedule.NextAfter(schedule.Spec{Kind: schedule.KindCron, Cron: req.Cron, Loc: loc}, now)
 		if !ok {
-			writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "cron expression never fires"})
-			return
+			return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "cron expression never fires"}
 		}
 		row.Spec = req.Cron
 		row.NextFireAt = next.UTC()
 	default:
-		writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "kind must be at, every, or cron"})
+		return db.Schedule{}, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "kind must be at, every, or cron"}
+	}
+	return row, nil
+}
+
+func (s *Server) handleCreateSchedule(w http.ResponseWriter, r *http.Request, key db.APIKey) {
+	var req cliproto.ScheduleServerCreateRequest
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule, Message: "malformed json"})
+		return
+	}
+	row, e := resolveScheduleRow(req, key, time.Now().UTC())
+	if e != nil {
+		writeErr(w, e)
 		return
 	}
 
@@ -143,6 +173,11 @@ func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request, ke
 	ctx, cancel := withTimeout(r)
 	defer cancel()
 	ok, err := db.DeleteScheduleByShortID(ctx, s.Pool, key.AccountID, id)
+	if errors.Is(err, db.ErrScheduleIDAmbiguous) {
+		writeErr(w, &cliproto.Error{Code: cliproto.EInvalidSchedule,
+			Message: "short id '" + id + "' matches multiple schedules (rare id collision); nothing was removed"})
+		return
+	}
 	if err != nil {
 		writeErr(w, &cliproto.Error{Code: "E_INTERNAL", Message: err.Error()})
 		return

@@ -31,10 +31,20 @@ CREATE TABLE IF NOT EXISTS schedules (
     tz                  text NOT NULL DEFAULT '',
     next_fire_at        timestamptz NOT NULL,
     last_fired_at       timestamptz,
+    -- Consecutive failed fires (reset to 0 on a successful publish).
+    -- The scheduler drops the row when this crosses its threshold so
+    -- an unclassified permanent error can't re-lease and retry forever.
+    fail_count          integer NOT NULL DEFAULT 0,
     created_by_user_id  uuid NOT NULL REFERENCES users(id),
     created_at          timestamptz NOT NULL DEFAULT now(),
     CHECK (kind IN ('at', 'every', 'cron'))
 );
+
+-- fail_count was added while 0004 was still unreleased (PR #139
+-- review). CREATE TABLE IF NOT EXISTS skips environments that already
+-- applied the earlier shape, so heal them additively — same
+-- re-apply-on-boot idempotency as the rest of this file.
+ALTER TABLE schedules ADD COLUMN IF NOT EXISTS fail_count integer NOT NULL DEFAULT 0;
 
 -- The firing loop polls `next_fire_at <= now()` every tick.
 CREATE INDEX IF NOT EXISTS schedules_next_fire_at_idx ON schedules (next_fire_at);

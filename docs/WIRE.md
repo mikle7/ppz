@@ -275,6 +275,15 @@ Fired one-offs and removed schedules have no row (no tombstones).
 `DELETE /api/v1/schedules/{id}` — `{id}` is the short id. 200:
 `{"id": "<id8>"}`. Errors: 401, 404 `E_SCHEDULE_NOT_FOUND`.
 
+Validation is enforced server-side regardless of what the daemon
+already checked (this route is the trust boundary): handle and
+manifold segments must pass the §1 name rules (`E_INVALID_HANDLE` /
+`E_INVALID_MANIFOLD`), and the payload cap is computed against the
+envelope as it will be FIRED — including `schedule_id`. A kind=at
+instant may be up to 30 s in the past at create time (CLI-clock skew /
+network latency grace, mirroring the JWT `nbf` backdate); it fires on
+the next tick.
+
 Firing (server-side loop, 1 s tick): due rows are claimed with
 `FOR UPDATE SKIP LOCKED` + a 30 s lease (multi-replica safe), published
 to the target subject via the org's `ppz-server-<org>` connection with
@@ -282,6 +291,14 @@ the stored `sender` stamped and `schedule_id` set (§3), then settled —
 recurring rows advance `next_fire_at`, spent one-offs delete. Missfire
 policy: one-offs fire once however late; recurring occurrences more
 than 60 s overdue are dropped (no catch-up bursts).
+
+Delivery is **at-least-once**: a crash between the publish and the
+settle re-offers the row when the lease expires, so a fire can
+duplicate. Receivers needing exactly-once should dedupe on
+(`schedule_id`, `created_at`). Failed fires are bounded: a schedule
+whose target stream is gone drops immediately; any other publish
+failure retries via lease expiry and the schedule is dropped after 5
+consecutive failures (`fail_count`, reset on success).
 
 ## 6. Server GUI (HTML, session-authenticated since Auth V2)
 

@@ -47,6 +47,12 @@ func TestSchedule_Fields(t *testing.T) {
 	if f, ok := typ.FieldByName("NextFireAt"); !ok || f.Type != reflect.TypeOf(time.Time{}) {
 		t.Error("Schedule.NextFireAt must be time.Time (always set while the row lives)")
 	}
+	// PR #139 finding #2: consecutive failed-fire counter — the
+	// scheduler drops the row when it crosses the threshold instead of
+	// re-leasing and retrying every 30s forever.
+	if f, ok := typ.FieldByName("FailCount"); !ok || f.Type.Kind() != reflect.Int {
+		t.Error("Schedule.FailCount must be int (consecutive failed fires; reset on success)")
+	}
 }
 
 // Compile-time signature pins for the repo functions the handlers and
@@ -65,8 +71,26 @@ func TestScheduleRepoSignatures(t *testing.T) {
 		// FOR UPDATE SKIP LOCKED, bounded per tick.
 		_, _ = ClaimDueSchedules(ctx, pool, now, 100)
 		// Post-fire: advance next (recurring) or delete (next == nil,
-		// one-off done), stamping last_fired_at.
+		// one-off done), stamping last_fired_at. A successful fire also
+		// resets fail_count.
 		_ = CompleteFire(ctx, pool, s.ID, nil, now)
+		// PR #139 finding #2: bump the consecutive-failure counter after
+		// a failed publish; returns the post-bump count the scheduler
+		// compares against its drop threshold.
+		_, _ = BumpScheduleFailCount(ctx, pool, s.ID)
+	}
+}
+
+// PR #139 finding #4: a short id (last-8-hex) can in principle match
+// two rows in one account. `schedule rm` must never silently delete
+// both — DeleteScheduleByShortID returns ErrScheduleIDAmbiguous
+// instead, and InsertSchedule avoids minting a colliding suffix in the
+// first place (regenerates the uuid on a per-account suffix
+// collision).
+func TestScheduleShortIDAmbiguityGuard(t *testing.T) {
+	var e error = ErrScheduleIDAmbiguous
+	if e == nil || !strings.Contains(e.Error(), "ambiguous") {
+		t.Fatalf("ErrScheduleIDAmbiguous = %v, want an error mentioning ambiguity", e)
 	}
 }
 
@@ -89,5 +113,8 @@ func TestSchedulesMigrationEmbedded(t *testing.T) {
 	}
 	if !strings.Contains(sql, "index") {
 		t.Error("schedules needs an index on next_fire_at — the firing loop polls it every tick")
+	}
+	if !strings.Contains(sql, "fail_count") {
+		t.Error("schedules must carry fail_count (PR #139 finding #2 — bounded retries for failed fires)")
 	}
 }

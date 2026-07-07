@@ -93,10 +93,22 @@ e5f6a7b8  -          alerts     every 15m                     in 4 minutes  11 m
   account, carrying resolved target parts, payload, sender, kind,
   spec, tz, `next_fire_at`, `last_fired_at`, creator.
 - Firing loop: a server ticker claims due rows with
-  `SELECT … FOR UPDATE SKIP LOCKED` (multi-replica safe), ensures the
-  pipe stream exists, publishes via the org's pooled NATS connection,
-  then advances `next_fire_at` (recurring) or deletes the row
-  (one-off).
+  `SELECT … FOR UPDATE SKIP LOCKED` plus a 30s lease bump
+  (multi-replica safe; a crashed claimer re-offers the row), publishes
+  via the org's pooled NATS connection, then advances `next_fire_at`
+  (recurring) or deletes the row (one-off).
+- Delivery is **at-least-once**: a crash between publish and settle
+  re-offers the row on lease expiry, so a fire can duplicate.
+  Receivers needing exactly-once dedupe on (schedule_id, created_at).
+- Failed fires are bounded (PR #139): target-stream-gone drops the
+  schedule immediately; other publish failures retry via lease expiry
+  and drop after 5 consecutive failures (`fail_count`, reset on
+  success).
+- The server re-validates everything it stores (the REST route is the
+  trust boundary, whatever the daemon checked): handle/manifold names,
+  kind/spec/tz, and the payload cap measured on the envelope as fired
+  (including schedule_id). A kind=at instant may be up to 30s past at
+  create time (CLI-clock skew grace); it fires on the next tick.
 
 ## Missfire policy
 

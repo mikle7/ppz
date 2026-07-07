@@ -1,0 +1,8 @@
+bad-handle=400 E_INVALID_HANDLE
+wildcard-handle=400 E_INVALID_HANDLE
+bad-manifold=400 E_INVALID_MANIFOLD
+beyond-grace=400 E_INVALID_SCHEDULE
+rows-after-rejects=0
+within-grace=200
+skew-fired=0
+exit=0
