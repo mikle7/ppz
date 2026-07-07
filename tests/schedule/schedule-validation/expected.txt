@@ -1,0 +1,16 @@
+at-plus-every=rejected
+mutually exclusive
+at-plus-cron=rejected
+mutually exclusive
+bad-every=rejected
+invalid --every
+sub-second-every=rejected
+invalid --every
+bad-cron=rejected
+invalid --cron
+past-at=rejected
+--at is in the past
+ack-with-at=rejected
+cannot combine --request-ack
+rows=0
+exit=0

@@ -1,0 +1,6 @@
+NAMESPACE PIPE SCHEDULE NEXT LAST PAYLOAD CREATOR
+- alice.inbox cron 0 10 * * MON UTC RELATIVE - weekly cron foo
+"schedule":"cron"
+"spec":"0 10 * * MON"
+"tz":"UTC"
+exit=0

@@ -1,0 +1,5 @@
+scheduled-exit=0
+daemon-k=stopped
+fired-while-stopped=0
+durable ping
+exit=0

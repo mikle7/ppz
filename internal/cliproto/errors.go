@@ -51,6 +51,18 @@ const (
 	// failure, never silent success.
 	EDeliveryUnconfirmed Code = "E_DELIVERY_UNCONFIRMED"
 
+	// EInvalidSchedule is returned by the server when a schedule
+	// create carries an unparseable kind/spec/tz. Rare in practice —
+	// the CLI validates the same specs before IPC — but the server is
+	// the trust boundary for durable rows, so it re-checks.
+	EInvalidSchedule Code = "E_INVALID_SCHEDULE"
+
+	// EScheduleNotFound is returned by `ppz schedule rm <id>` when no
+	// schedule with that short id exists in the caller's account —
+	// either a typo or an already-fired/removed schedule (fired
+	// one-offs delete their row; docs/specs/schedule.md).
+	EScheduleNotFound Code = "E_SCHEDULE_NOT_FOUND"
+
 	// ENameTaken — Phase 1.5.1 first-wins collision rule. Within a
 	// manifold, user-typed names share a namespace across source
 	// handles and uncollared pipe names; a source at manifold M also
@@ -144,6 +156,10 @@ func Message(c Code) string {
 		return "pipe with this name already exists on this source"
 	case EPipeNotFound:
 		return "pipe not found on this source"
+	case EInvalidSchedule:
+		return "invalid schedule; kind must be at/every/cron with a parseable spec"
+	case EScheduleNotFound:
+		return "schedule not found; run 'ppz schedule ls' for live ids (fired one-offs leave the table)"
 	case EInvalidSubject:
 		return "invalid subject; the 'ack:' prefix is reserved for system-emitted protocol messages"
 	case EInvalidManifold:
@@ -195,6 +211,11 @@ func NewPipeTaken(pipe, handle string) *Error {
 // NewPipeNotFound: pipe 'archive' not found on source 'foo'
 func NewPipeNotFound(pipe, handle string) *Error {
 	return &Error{Code: EPipeNotFound, Message: fmt.Sprintf("pipe '%s' not found on source '%s'", pipe, handle)}
+}
+
+// NewScheduleNotFound: schedule 'a1b2c3d4' not found
+func NewScheduleNotFound(id string) *Error {
+	return &Error{Code: EScheduleNotFound, Message: fmt.Sprintf("schedule '%s' not found; run 'ppz schedule ls' for live ids (fired one-offs leave the table)", id)}
 }
 
 // NewUncollaredPipeNotFound: uncollared pipe 'room' not found at manifold ''
@@ -287,6 +308,10 @@ func HTTPStatus(c Code) int {
 	case EPipeTaken:
 		return 409
 	case EPipeNotFound:
+		return 404
+	case EInvalidSchedule:
+		return 400
+	case EScheduleNotFound:
 		return 404
 	case EInvalidSubject:
 		return 400

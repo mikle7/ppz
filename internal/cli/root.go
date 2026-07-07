@@ -65,6 +65,8 @@ func Run(args []string) error {
 		return cmdLs(rest)
 	case "subs":
 		return cmdSubsGroup(rest)
+	case "schedule":
+		return cmdScheduleGroup(rest)
 	case "read":
 		return cmdRead(rest)
 	case "reread":

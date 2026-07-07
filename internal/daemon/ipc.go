@@ -101,6 +101,12 @@ func (d *Daemon) handleConn(ctx context.Context, conn net.Conn) {
 		d.handleDiag(ctx, conn, req.Params)
 	case cliproto.IPCWho:
 		d.handleWho(ctx, conn, req.Params)
+	case cliproto.IPCScheduleCreate:
+		d.handleScheduleCreate(ctx, conn, req.Params)
+	case cliproto.IPCScheduleList:
+		d.handleScheduleList(ctx, conn, req.Params)
+	case cliproto.IPCScheduleRemove:
+		d.handleScheduleRemove(ctx, conn, req.Params)
 	case cliproto.IPCSubsList:
 		d.handleSubsList(ctx, conn, req.Params)
 	case cliproto.IPCSubsAdd:

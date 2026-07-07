@@ -1,0 +1,14 @@
+--- table ---
+NAMESPACE PIPE SCHEDULE NEXT LAST PAYLOAD CREATOR
+- room every 1h RELATIVE - tick tock foo
+- alice.inbox at TIMESTAMP RELATIVE - one-off standup foo
+--- iso ---
+NAMESPACE PIPE SCHEDULE NEXT LAST PAYLOAD CREATOR
+- room every 1h TIMESTAMP - tick tock foo
+- alice.inbox at TIMESTAMP TIMESTAMP - one-off standup foo
+--- json ---
+2
+"schedule":"every"
+"schedule":"at"
+"last_at":null
+exit=0

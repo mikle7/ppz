@@ -54,6 +54,11 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/pipes", s.requireAPIKey(s.handleListUncollaredPipes))
 	mux.HandleFunc("DELETE /api/v1/pipes", s.requireAPIKey(s.handleDestroyUncollaredPipe))
 
+	// Scheduled sends (docs/specs/schedule.md).
+	mux.HandleFunc("POST /api/v1/schedules", s.requireAPIKey(s.handleCreateSchedule))
+	mux.HandleFunc("GET /api/v1/schedules", s.requireAPIKey(s.handleListSchedules))
+	mux.HandleFunc("DELETE /api/v1/schedules/{id}", s.requireAPIKey(s.handleDeleteSchedule))
+
 	// Auth V2 Phase 2: device-flow endpoints + GUI verify page.
 	mux.HandleFunc("POST /oauth/device/code", s.handleDeviceCode)
 	mux.HandleFunc("GET /oauth/device/verify", s.requireSession(s.handleDeviceVerifyPage))
