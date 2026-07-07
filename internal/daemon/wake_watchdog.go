@@ -75,7 +75,18 @@ func newWakeWatchdog(interval, threshold time.Duration, now func() time.Time, on
 // post-wake baseline.
 func (w *wakeWatchdog) tick() {
 	now := w.now()
-	gap := now.Sub(w.last)
+	// Measure the gap on the WALL clock, NOT the monotonic clock. time.Now()
+	// carries a monotonic reading, and time.Sub uses the monotonic delta
+	// whenever both operands have one — but macOS suspends the monotonic clock
+	// for the duration of a sleep. So a monotonic gap across a sleep reads as
+	// only the awake time (~one tick interval) and the sleep is never seen.
+	// Round(0) strips the monotonic reading from both operands, forcing the
+	// subtraction onto the wall clock, which DOES advance across sleep. Without
+	// this, the watchdog silently never fires on real hardware even though its
+	// unit tests (which feed monotonic-free time.Date values) pass — the
+	// 2026-06-30 incident logged a ~30s monotonic gap and zero wake events for
+	// an 18-minute sleep.
+	gap := now.Round(0).Sub(w.last.Round(0))
 	w.last = now
 	if gap > w.interval+w.threshold {
 		w.onWake(gap)
