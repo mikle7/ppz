@@ -382,14 +382,24 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 
 	// Block until the CLI closes the socket. We detect that by reading from
 	// the connection — the CLI never writes after the initial request, so a
-	// non-zero read or EOF means the client went away.
+	// non-zero read or EOF means the client went away. conn.Read also
+	// unblocks when closeAll() closes the conn during a swapNC (e.g. JWT
+	// rotation), so this fires on both client-gone and daemon-side eviction.
+	done := make(chan struct{})
 	go func() {
 		var b [1]byte
 		_, _ = conn.Read(b[:])
 		cctx.Stop()
+		close(done)
 	}()
 
-	<-ctx.Done()
+	// Exit when the follow conn is closed (client-gone or closeAll) or the
+	// daemon shuts down. Waiting solely on <-ctx.Done() would leak this
+	// goroutine on every NC swap, since ctx only cancels at daemon shutdown.
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 func writeReadErr(conn net.Conn, e *cliproto.Error) {
