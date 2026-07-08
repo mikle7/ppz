@@ -136,6 +136,11 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	srv.AccountPool = newAccountPool(srv)
 	defer srv.AccountPool.Close()
+	// Scheduled sends (docs/specs/schedule.md): the firing loop is the
+	// server's first background worker — it claims due schedule rows
+	// from postgres each tick and publishes them over the per-org NATS
+	// connections. Multi-replica safe via SKIP LOCKED + claim leases.
+	go srv.runScheduler(ctx)
 	// Per-org broadcast subscribers are attached when AccountPool
 	// provisions each account (see subscribeBroadcasts in
 	// broadcast_subscriber.go). No global subscriber is needed.

@@ -1,0 +1,8 @@
+send-exit=0
+scheduled id=ID8 to=bob.inbox next=TIMESTAMP
+fired=0
+delayed hello
+"sender":"alice"
+schedule_id=present
+rows-after=0
+exit=0

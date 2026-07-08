@@ -56,6 +56,7 @@ var topLevelGroups = []helpGroup{
 		{"ppz reread TGT", "replay retained messages (never moves the cursor)"},
 		{"ppz command H [INSTR]", "type INSTR into H.stdin, then a control key"},
 		{"ppz subs SUBVERB", "per-session pipe subscriptions (ls/add/rm/wait/read)"},
+		{"ppz schedule SUBVERB", "manage scheduled sends (ls/rm); create via ppz send --at/--every/--cron"},
 	}},
 	{"IDENTITIES", []helpRow{
 		{"ppz source create H", "claim a bare message handle (auto-pipe: inbox)"},
@@ -231,13 +232,19 @@ where <body> is "[subject] payload" for user subjects, "ack:read → <id8>" for 
   --raw     write payload bytes verbatim with no separator (byte-faithful; best for forensics and replay).
   --json    emit each message's full envelope as a JSON line.`,
 
-	"send": `usage: ppz send TGT PAYLOAD [--subject S] [--in-reply-to ID] [--request-ack]
+	"send": `usage: ppz send TGT PAYLOAD [--subject S] [--in-reply-to ID] [--request-ack] [--at T | --every DUR | --cron EXPR]
 
 Publish PAYLOAD to <handle>.<pipe>; a bare handle targets <handle>.inbox. The success line goes to STDERR (since v0.25 — scripts redirecting stdout no longer swallow it); exit 0 means delivery was confirmed.
 
   --subject S        envelope-level header. The 'ack:' prefix is reserved for system messages.
   --in-reply-to ID   thread / reply linkage to a prior message id.
-  --request-ack      the receiver's daemon emits an 'ack:read' back to YOUR inbox when their cursor advances past your message (best-effort, non-blocking). See 'ppz help acks'.`,
+  --request-ack      the receiver's daemon emits an 'ack:read' back to YOUR inbox when their cursor advances past your message (best-effort, non-blocking). See 'ppz help acks'.
+
+Scheduled sends (mutually exclusive; the schedule is durable server-side state — it fires with this machine asleep):
+  --at T             one-off at T: RFC3339, "YYYY-MM-DD HH:MM" (local), or +duration (+5m).
+  --every DUR        recurring on an interval: Go duration, min 1s (15m, 1h30m).
+  --cron EXPR        recurring at wall-clock times: 5-field cron ("0 10 * * MON"), in this device's timezone.
+Manage with 'ppz schedule ls' / 'ppz schedule rm ID'.`,
 
 	"reread": `usage: ppz reread TGT [-l N --skip N --since DUR --json --tty --raw --bare]
 
@@ -271,6 +278,13 @@ A curated, per-session subset of pipe subjects — the agent inbox-monitor list.
   ppz subs read [--json|--raw|--tty|--bare]   read each subscribed pipe that has unread
 
 A bare <target> is an uncollared pipe (read-style); use an explicit <handle>.<pipe> for a collared pipe such as an inbox.`,
+
+	"schedule": `usage: ppz schedule {ls|rm}
+
+Manage scheduled sends (created via 'ppz send ... --at/--every/--cron'). The schedule is durable server-side state: it fires with your machine asleep or the daemon stopped. Fired one-offs and removed schedules leave the table.
+
+  ppz schedule ls [--json|--iso]   list live schedules, soonest NEXT first
+  ppz schedule rm ID               remove a schedule by the short id 'ls' shows`,
 
 	// ---- Identities ------------------------------------------------------
 	"source": `usage: ppz source {create|destroy} ...

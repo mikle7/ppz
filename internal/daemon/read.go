@@ -261,6 +261,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 						CreatedAt:    env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 						InReplyTo:    env.InReplyTo,
 						AckRequested: env.AckRequested,
+						ScheduleID:   env.ScheduleID,
 					})
 					lastSeqSeen = md.Sequence.Stream
 				}
@@ -354,6 +355,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 			CreatedAt:    env.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			InReplyTo:    env.InReplyTo,
 			AckRequested: env.AckRequested,
+			ScheduleID:   env.ScheduleID,
 		}
 		if err := enc.Encode(cliproto.ReadEvent{Message: &rm}); err != nil {
 			// CLI has closed the connection — tear down.

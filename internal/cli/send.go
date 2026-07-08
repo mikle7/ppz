@@ -61,6 +61,9 @@ func cmdSend(args []string) error {
 	subject := fs.String("subject", "", "envelope-level subject; renders as `[subject] payload` in tabular read")
 	inReplyTo := fs.String("in-reply-to", "", "uuid of the message this one replies to (sets envelope.in_reply_to)")
 	requestAck := fs.Bool("request-ack", false, "ask the recipient's daemon to auto-emit ack:read on cursor advance (best-effort, non-blocking)")
+	atArg := fs.String("at", "", "schedule a one-off send: RFC3339, \"YYYY-MM-DD HH:MM\" (local), or +duration (e.g. +5m)")
+	everyArg := fs.String("every", "", "schedule a recurring send on an interval: Go duration, min 1s (e.g. 15m, 1h30m)")
+	cronArg := fs.String("cron", "", "schedule a recurring send at wall-clock times: 5-field cron expr (e.g. \"0 10 * * MON\")")
 	target, payload, flagArgs, err := splitSendArgs(args)
 	if err != nil {
 		printHelp(sendErr, "send")
@@ -78,6 +81,22 @@ func cmdSend(args []string) error {
 		return cliproto.New(cliproto.EInvalidSubject)
 	}
 
+	// Scheduled sends (docs/specs/schedule.md): exactly one of
+	// --at/--every/--cron flips the verb from "publish now" to
+	// "register a server-side schedule".
+	schedCount := 0
+	for _, v := range []string{*atArg, *everyArg, *cronArg} {
+		if v != "" {
+			schedCount++
+		}
+	}
+	if schedCount > 1 {
+		return fmt.Errorf("ppz send: --at, --every, and --cron are mutually exclusive")
+	}
+	if schedCount == 1 && *requestAck {
+		return fmt.Errorf("ppz send: cannot combine --request-ack with a scheduled send (a scheduled fire has no live session for the ack to return to)")
+	}
+
 	// Phase 1.5: capture the raw bare target before the .inbox sugar.
 	// The daemon uses BareTarget to fall back to uncollared pipe
 	// resolution when the source-handle lookup misses.
@@ -91,6 +110,10 @@ func cmdSend(args []string) error {
 		return cliproto.New(cliproto.EInvalidPipe)
 	}
 	handle, channel := target[:idx], target[idx+1:]
+
+	if schedCount == 1 {
+		return sendSchedule(handle, channel, bareTarget, payload, *atArg, *everyArg, *cronArg)
+	}
 
 	if *requestAck {
 		// Preflight: --request-ack is only meaningful when the sender has
@@ -193,6 +216,12 @@ func splitSendArgs(args []string) (target, payload string, flagArgs []string, er
 		"--subject":     true,
 		"-in-reply-to":  true,
 		"--in-reply-to": true,
+		"-at":           true,
+		"--at":          true,
+		"-every":        true,
+		"--every":       true,
+		"-cron":         true,
+		"--cron":        true,
 	}
 	positionals := 0
 	for i := 0; i < len(args); i++ {

@@ -44,6 +44,12 @@ type Message struct {
 	CreatedAt    time.Time `json:"created_at"`
 	InReplyTo    string    `json:"in_reply_to"`
 	AckRequested bool      `json:"ack_requested"`
+	// ScheduleID is the short id of the schedule that fired this
+	// message (docs/specs/schedule.md) — set only by the server-side
+	// scheduler, so receivers can distinguish scheduled messages from
+	// live sends. omitempty keeps plain sends wire-identical to old
+	// daemons.
+	ScheduleID string `json:"schedule_id,omitempty"`
 }
 
 func New(sender, subject, payload string, now time.Time) Message {

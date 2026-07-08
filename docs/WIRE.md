@@ -23,6 +23,11 @@ UUID v7 unless noted. All JSON request/response bodies use
   `stdout`, `stdctrl`). The `broadcast` auto-pipe was removed in v0.30.0
   (see CHANGELOG); custom pipes are created explicitly via `ppz pipe create`.
 
+- **schedule** — a durable server-side instruction to publish a message
+  later (one-off `at`, interval `every`, wall-clock `cron`). Created via
+  `ppz send --at/--every/--cron`, managed via `ppz schedule {ls|rm}`,
+  fired by the server's scheduler loop. See `docs/specs/schedule.md`.
+
 A target on the wire is `<source-handle>.<pipe-name>`.
 
 ## 1. Subject grammar (NATS)
@@ -76,7 +81,8 @@ Published payload on every `<org_id>.<handle>.<pipe>`:
   "payload": "<utf-8 string>",
   "created_at": "<rfc3339>",
   "in_reply_to": "<uuid-or-empty>",
-  "ack_requested": false
+  "ack_requested": false,
+  "schedule_id": "<id8>"          // ONLY on scheduler-fired messages; omitted otherwise
 }
 ```
 
@@ -110,10 +116,16 @@ Constraints:
   are indistinguishable). Senders requiring strict guarantees should
   layer their own re-send-on-timeout pattern. The auto-emitted
   `ack:read` envelope carries `ack_requested: false` (loop guard).
-- All envelope fields are **always serialised**, even when empty / false,
-  so receivers see a stable wire shape per release. Marshalling does
-  NOT use `omitempty` for any of `sender` / `subject` / `in_reply_to` /
-  `ack_requested`.
+- `schedule_id` (scheduled sends, docs/specs/schedule.md) is the short
+  id (last 8 hex of the schedule row's UUID) of the schedule that fired
+  this message — set only by the server-side scheduler, so receivers can
+  distinguish scheduled messages from live sends. It is the ONE
+  `omitempty` exception below: absent entirely on live sends, keeping
+  them wire-identical to pre-schedule releases.
+- All other envelope fields are **always serialised**, even when empty /
+  false, so receivers see a stable wire shape per release. Marshalling
+  does NOT use `omitempty` for any of `sender` / `subject` /
+  `in_reply_to` / `ack_requested`.
 - Pre-v0.23.0 envelopes carried a `handle` field equal to the destination
   and no `sender` / `subject`. Pre-v0.25.0 envelopes additionally lack
   `in_reply_to` / `ack_requested`. Decoders MUST silently drop unknown
@@ -124,15 +136,30 @@ Constraints:
 
 ## 4. NATS auth
 
-- Single account `PPZ` on the embedded NATS server.
-- Server signs short-lived user JWTs scoped to a single org.
-- JWT permissions: `pub.allow=["<org_id>.>"]`, `sub.allow=["<org_id>.>"]`.
-- TTL: 1 hour. Daemon refreshes at `exp − 5 min`.
+Auth V2 §Phase 3.5 — decentralized (NSC-style) JWT auth, one NATS
+account per ppz account:
+
+- Each ppz account owns a NATS Account JWT; the pub key / JWT /
+  signing seed live on the `accounts` row. The server pre-warms the
+  embedded NATS resolver with every account JWT at boot.
+- `/auth/exchange` mints a short-lived **user** JWT + nkey seed signed
+  by that account's signing key, scoped
+  `pub.allow=["<account_id>.>"]`, `sub.allow=["<account_id>.>"]`, and
+  returns both to the daemon (`nats_user_jwt` / `nats_user_seed`); the
+  server keeps no copy of the user seed.
+- TTL: 5 minutes; `nbf` is backdated 30 s for clock skew. The daemon's
+  refresh loop re-runs `/auth/exchange` at `exp − 30 s`.
+- The server itself holds a per-account `ppz-server-<org>` user with
+  full `>` pub/sub — used for JetStream stream management and the
+  scheduled-send firing loop (§5.5).
 
 ## 5. HTTP API (`/api/v1`)
 
-Auth: `Authorization: Bearer <api_key_plaintext>` on every endpoint **except**
-the GUI HTML routes (which are unauthenticated).
+Auth: `Authorization: Bearer <api_key_plaintext-or-oauth-token>` on
+every `/api/v1` endpoint except `/auth/exchange` (key in body). GUI
+HTML routes authenticate separately via browser session cookies
+(Auth V2 `requireSession`); only the landing page, `/login`, and the
+auth-flow endpoints are public.
 
 `/auth/exchange` is the only endpoint where the API key is sent in the body
 rather than the header (this allows the daemon to pre-validate the key during
@@ -144,15 +171,22 @@ Error response shape (any non-2xx):
 ```
 
 ### 5.1 POST /api/v1/auth/exchange
-Body: `{"api_key": "<plaintext>"}`
+Body: `{"api_key": "<plaintext>", "account_id": "<uuid, optional>"}`
 
-200:
+`account_id` (Phase 3.5) selects which org's NATS account to mint the
+user JWT in; the server defaults to the bearer's primary org (first
+owned, else first membership).
+
+200 (`cliproto.AuthExchangeReply`):
 ```json
 {
   "jwt": "<nats user jwt>",
   "nats_url": "nats://<host>:4222",
-  "org_id": "<uuid>",
-  "expires_at": "<rfc3339>"
+  "account_id": "<uuid>",
+  "account_name": "<name>",
+  "expires_at": "<rfc3339>",
+  "nats_user_jwt": "<short-lived user jwt>",
+  "nats_user_seed": "<nkey seed>"
 }
 ```
 
@@ -201,7 +235,75 @@ Errors: 401.
 200: same shape as a single element of `/api/v1/sources`.
 Errors: 401, 404 `E_SOURCE_NOT_FOUND`.
 
-## 6. Server GUI (HTML, unauthenticated)
+### 5.5 Schedules (scheduled sends — docs/specs/schedule.md)
+
+`POST /api/v1/schedules` — body (`cliproto.ScheduleServerCreateRequest`;
+the daemon sends the already-resolved target, `handle: ""` = uncollared):
+```json
+{
+  "manifold": "",
+  "handle": "bob",
+  "pipe": "inbox",
+  "payload": "standup in 5",
+  "sender": "alice",
+  "kind": "at",                          // "at" | "every" | "cron"
+  "at": "2026-07-08T09:55:00+01:00",     // kind=at: RFC3339, creator's offset preserved
+  "every": "",                           // kind=every: Go duration string, min 1s
+  "cron": "",                            // kind=cron: 5-field expression
+  "tz": ""                               // kind=cron: IANA zone name
+}
+```
+200 (`cliproto.ScheduleCreateReply`):
+```json
+{"id": "<id8>", "target": "bob.inbox", "next_at": "<rfc3339>"}
+```
+Errors: 401, 400 `E_INVALID_SCHEDULE` (bad kind/spec/tz), 400
+`E_INVALID_PIPE`, 413 `E_PAYLOAD_TOO_LARGE`.
+
+`GET /api/v1/schedules` — 200 (`cliproto.ScheduleListReply`), rows
+sorted `next_fire_at` ASC:
+```json
+{"schedules": [{
+  "id": "<id8>", "namespace": "", "handle": "bob", "pipe": "inbox",
+  "schedule": "at", "spec": "2026-07-08T09:55:00+01:00", "tz": "",
+  "next_at": "<rfc3339>", "last_at": null,
+  "payload": "standup in 5", "creator": "jimmy"
+}]}
+```
+Fired one-offs and removed schedules have no row (no tombstones).
+
+`DELETE /api/v1/schedules/{id}` — `{id}` is the short id. 200:
+`{"id": "<id8>"}`. Errors: 401, 404 `E_SCHEDULE_NOT_FOUND`.
+
+Validation is enforced server-side regardless of what the daemon
+already checked (this route is the trust boundary): handle and
+manifold segments must pass the §1 name rules (`E_INVALID_HANDLE` /
+`E_INVALID_MANIFOLD`), and the payload cap is computed against the
+envelope as it will be FIRED — including `schedule_id`. A kind=at
+instant may be up to 30 s in the past at create time (CLI-clock skew /
+network latency grace, mirroring the JWT `nbf` backdate); it fires on
+the next tick.
+
+Firing (server-side loop, 1 s tick): due rows are claimed with
+`FOR UPDATE SKIP LOCKED` + a 30 s lease (multi-replica safe), published
+to the target subject via the org's `ppz-server-<org>` connection with
+the stored `sender` stamped and `schedule_id` set (§3), then settled —
+recurring rows advance `next_fire_at`, spent one-offs delete. Missfire
+policy: one-offs fire once however late; recurring occurrences more
+than 60 s overdue are dropped (no catch-up bursts).
+
+Delivery is **at-least-once**: a crash between the publish and the
+settle re-offers the row when the lease expires, so a fire can
+duplicate. Receivers needing exactly-once should dedupe on
+(`schedule_id`, `created_at`). Failed fires are bounded: a schedule
+whose target stream is gone drops immediately; any other publish
+failure retries via lease expiry and the schedule is dropped after 5
+consecutive failures (`fail_count`, reset on success) — EXCEPT
+connection-level NATS failures (connection closed / no servers /
+timeout), which never count: an infra outage of any length retries
+until connectivity returns rather than deleting schedules.
+
+## 6. Server GUI (HTML, session-authenticated since Auth V2)
 
 | Method | Path | Behaviour |
 |---|---|---|
@@ -237,25 +339,41 @@ Wire format: newline-delimited JSON-RPC 2.0. One request per connection, the
 daemon writes one response and closes (simple half-duplex; long-running reads
 keep the connection open and stream `ReadEvent` lines until the client closes).
 
-Methods (Phase 1.5 reality — verbs unchanged in this phase):
+The verb strings below are the wire contract — an old CLI against a new
+daemon (or vice versa) matches on these literals. Field-level shapes
+live in `internal/cliproto` (types.go, schedule.go); the request/reply
+Go types named here are the authoritative field source. Verbs:
 
-| Method | Params | Result |
+| Method | Request / Reply (cliproto) | Purpose |
 |---|---|---|
-| `Status` | `{}` | `{"daemon_pid":int,"daemon_version":str?,"logged_in":bool,"url":str?,"key_prefix":str?,"org_id":str?,"current":str?,"nats_state":str?}` |
-| `Login` | `{"url":str,"api_key":str}` | `{"url":str,"key_prefix":str,"org_id":str}` |
-| `Create` | `{"handle":str,"kind":str}` | `{"handle":str,"subject":str,"kind":str}` |
-| `Switch` | `{"handle":str}` | `{"handle":str}` |
-| `Broadcast` | `{"handle":str?,"channel":str?,"payload":str}` | `{"id":str,"subject":str,"bytes":int}` |
-| `List` | `{"session":str?}` | `{"sources":[{"handle":str,"kind":str,"pipe_infos":[{"pipe":str,"total":int,"unread":int,"last_at":str?,"preview":str},…],"last_broadcast_at":str?,"last_broadcast_payload":str?},…]}` |
-| `Read` | `{"handle":str,"channel":str,"limit":int?,"skip":int?,"since_ms":int?,"json":bool?,"follow":bool?,"session":str?,"no_advance":bool?}` | streaming `ReadEvent` JSON lines |
-| `Diag` | `{}` | `{"nats_state":str?,"nats_drops_last_hour":int?,"nats_events":[{"type":str,"at":str,"reason":str?},…]}` |
+| `Status` | `StatusRequest` / `StatusReply` | daemon state, current handle, NATS state |
+| `Login` | `LoginRequest` / `LoginReply` | store credential, run /auth/exchange |
+| `Create` | `CreateRequest` / `CreateReply` | create a source, set session current |
+| `Switch` | `SwitchRequest` / `SwitchReply` | set session current handle |
+| `Send` | `SendRequest` / `SendReply` | publish one envelope (blocks for PubAck) |
+| `SendBatch` | `SendBatchRequest` / `SendBatchReply` | publish N envelopes, one flush |
+| `List` | `ListRequest` / `ListReply` | `ppz ls` snapshot |
+| `ListWatch` | `ListWatchRequest` / `ListReply` | block until matching pipes have unread |
+| `Subscribe` | `SubscribeRequest` / streaming | follow a pipe |
+| `Read` | `ReadRequest` / streaming `ReadEvent` lines | read / reread a pipe |
+| `Connect` / `Disconnect` | `ConnectRequest` / … | pty source attach / detach |
+| `PipeCreate` / `PipeDestroy` | `PipeCreateRequest` / … | custom pipe lifecycle |
+| `SourceDestroy` | `SourceDestroyRequest` / … | glob-destroy sources/pipes |
+| `SetNamespace` / `UnsetNamespace` | `SetNamespaceRequest` / … | session manifold state |
+| `ScheduleCreate` | `ScheduleCreateRequest` / `ScheduleCreateReply` | register a scheduled send (docs/specs/schedule.md) |
+| `ScheduleList` | `ScheduleListRequest` / `ScheduleListReply` | live schedules for `ppz schedule ls` |
+| `ScheduleRemove` | `ScheduleRemoveRequest` / `ScheduleRemoveReply` | remove by short id |
+| `SubsList` / `SubsAdd` / `SubsRemove` / `SubsWait` | `SubsListRequest` / … | per-session subscription set |
+| `Diag` | `DiagRequest` / `DiagReply` | connection-event introspection |
+| `Who` | `WhoRequest` / `WhoReply` | heartbeat-observed agents |
+| `Complete` | `CompleteRequest` / `CompleteReply` | shell tab-completion data |
 
 Errors are returned as JSON-RPC errors with `code` = the integer exit code from
 ERRORS.md and `message` = `"E_FOO: human readable"`.
 
-(Note: legacy field names `channel` on `Broadcast`/`Read` requests still carry
-the pipe name; this is preserved for IPC backward-compat within the Phase A
-rename. Phase B reorganises these.)
+(Note: the legacy field name `channel` on `Send`/`Read` requests still
+carries the pipe name — preserved for IPC backward-compat from the
+Phase A rename.)
 
 ## 8. Pinned stdout (CLI)
 
@@ -323,7 +441,7 @@ created handle=<handle> subject=<account_id>.<handle>.inbox
 handle=<handle>
 ```
 
-### `ppz send HANDLE[.PIPE] "PAYLOAD" [--subject S] [--in-reply-to ID] [--request-ack]`
+### `ppz send HANDLE[.PIPE] "PAYLOAD" [--subject S] [--in-reply-to ID] [--request-ack] [--at T | --every DUR | --cron EXPR]`
 
 Bare handle defaults to `<handle>.inbox`. Success line goes to **stderr**
 (not stdout) since v0.25.0 — scripts redirecting stdout previously
@@ -357,6 +475,43 @@ delivery acknowledgment the success line itself already provides. The
 success line is written *after* the daemon's NATS PubAck confirms the
 broker durably stored the message; `--request-ack` is asking
 specifically for read confirmation.
+
+Scheduled sends (docs/specs/schedule.md): exactly one of `--at` /
+`--every` / `--cron` flips the verb from "publish now" to "register a
+durable server-side schedule". Mutually exclusive with each other and
+with `--request-ack`. Success line (same stderr stream as `sent`):
+
+```
+scheduled id=<id8> to=<handle>.<pipe> next=<rfc3339-utc>
+```
+
+### `ppz schedule ls [--json|--iso]`
+
+Live schedules as an aligned table with the `ppz ls` conventions
+(two-space gaps, display-width padding, `-` for missing values, header
+only when rows exist), sorted soonest NEXT first:
+
+```
+ID  NAMESPACE  PIPE  SCHEDULE  NEXT  LAST  PAYLOAD  CREATOR
+```
+
+- ID — the short id `schedule rm` takes.
+- SCHEDULE — `at <rfc3339-as-typed>` / `every <dur>` / `cron <expr> <tz>`.
+- NEXT — future-relative (`in 4 minutes`) by default; LAST past-relative
+  (`11 minutes ago`) or `-` when never fired. `--iso` flips both to
+  RFC3339 UTC. `--json` and `--iso` are mutually exclusive.
+- PAYLOAD — preview truncated to 60 chars; `--json` carries it in full.
+
+`--json` emits one object per row, same order, keys `{id, namespace,
+handle, pipe, schedule, spec, tz, next_at, last_at, payload, creator}`
+(`last_at` is `null` when never fired). Fired one-offs and removed
+schedules have no row. Empty set: zero output, exit 0.
+
+### `ppz schedule rm ID`
+```
+removed schedule=<id8>
+```
+Unknown id: `E_SCHEDULE_NOT_FOUND`, non-zero exit.
 
 ### `ppz read HANDLE.PIPE [--tail --json --tty --raw --bare]`
 Default depends on the pipe (since v0.23.0):

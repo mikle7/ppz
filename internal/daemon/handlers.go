@@ -1036,6 +1036,12 @@ func uncollaredCursorKey(filterSubject string) string {
 type sendTarget struct {
 	subject string
 	sender  string
+	// Resolved subject parts, for callers that need them structured
+	// (schedule create forwards them to the server instead of
+	// publishing). source=="" means an uncollared pipe at manifold.
+	manifold string
+	source   string
+	pipe     string
 }
 
 // resolveSendTarget runs the shared pre-flight for a broadcast:
@@ -1093,8 +1099,10 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 				// CLI-supplied hints (env-resolved current) override
 				// the daemon's per-session state in a single place.
 				return sendTarget{
-					subject: natsubj.BuildSubject(accountID, manifold, "", bareTarget),
-					sender:  senderForRequest(reqSender, d.State.Current(session)),
+					subject:  natsubj.BuildSubject(accountID, manifold, "", bareTarget),
+					sender:   senderForRequest(reqSender, d.State.Current(session)),
+					manifold: manifold,
+					pipe:     bareTarget,
 				}, nil
 			case errors.Is(err, jetstream.ErrStreamNotFound):
 				// Fall through to the legacy collared interpretation.
@@ -1194,8 +1202,11 @@ func (d *Daemon) resolveSendTarget(ctx context.Context, reqHandle, reqChannel, b
 		}
 	}
 	return sendTarget{
-		subject: natsubj.BuildSubject(accountID, currentManifold, current, pipe),
-		sender:  senderForRequest(reqSender, d.State.Current(session)),
+		subject:  natsubj.BuildSubject(accountID, currentManifold, current, pipe),
+		sender:   senderForRequest(reqSender, d.State.Current(session)),
+		manifold: currentManifold,
+		source:   current,
+		pipe:     pipe,
 	}, nil
 }
 

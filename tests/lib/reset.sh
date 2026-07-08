@@ -35,6 +35,11 @@ if command -v psql >/dev/null 2>&1; then
   PGPASSWORD=ppz psql -h postgres -U postgres -d ppz -v ON_ERROR_STOP=0 >/dev/null 2>&1 <<'SQL' || true
 TRUNCATE TABLE pipes;
 TRUNCATE TABLE sources CASCADE;
+-- Scheduled sends (docs/specs/schedule.md): schedules are scenario-
+-- local, and a leaked `--every 1s` row would keep the server firing
+-- into every later scenario. Errors are tolerated (ON_ERROR_STOP=0)
+-- until the 0004_schedules migration lands.
+TRUNCATE TABLE schedules;
 -- Phase 4: invites are scenario-local; clear them so a prior run's
 -- declined/revoked rows don't bleed into the next scenario's count.
 DELETE FROM invites;

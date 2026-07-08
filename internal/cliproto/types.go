@@ -152,6 +152,10 @@ type ReadMessage struct {
 	CreatedAt    string `json:"created_at"`
 	InReplyTo    string `json:"in_reply_to"`
 	AckRequested bool   `json:"ack_requested"`
+	// ScheduleID marks messages fired by the server-side scheduler
+	// (docs/specs/schedule.md) — the short id of the originating
+	// schedule. Empty (and omitted) on live sends.
+	ScheduleID string `json:"schedule_id,omitempty"`
 }
 
 // StatusRequest carries the caller's session id so the daemon can return

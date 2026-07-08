@@ -1,0 +1,6 @@
+captured-id=yes
+rows-before=1
+removed schedule=SCHID
+rows-after=0
+rm-again=E_SCHEDULE_NOT_FOUND
+exit=0
