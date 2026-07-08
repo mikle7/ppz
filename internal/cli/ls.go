@@ -52,14 +52,26 @@ func cmdLs(args []string) error {
 	asJSON := fs.Bool("json", false, "emit one JSON object per row (agent-friendly, full payload)")
 	iso := fs.Bool("iso", false, "render last-message column as RFC3339 timestamp instead of relative duration")
 	watch := fs.Bool("watch", false, "block until matching pipes have unread messages, print, then exit")
-	if err := fs.Parse(args); err != nil {
+
+	// Go's flag package stops at the first non-flag argument, so `ls PATTERN
+	// --json` would swallow --json into the pattern list. ls's flags are all
+	// booleans (none take a value), so we can pre-separate flags from
+	// positional patterns to support any ordering. Mirrors cmdCommand.
+	var flagArgs, patterns []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			flagArgs = append(flagArgs, a)
+		} else {
+			patterns = append(patterns, a)
+		}
+	}
+	if err := fs.Parse(flagArgs); err != nil {
 		return err
 	}
 	if *asJSON && *iso {
 		os.Stderr.WriteString("ppz ls: --json and --iso are mutually exclusive\n")
 		os.Exit(2)
 	}
-	patterns := fs.Args()
 
 	// Snapshot first. It's the non-watch output, and for both modes the
 	// basis for the literal-miss warning: a fully-specified literal target

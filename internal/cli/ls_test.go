@@ -69,6 +69,38 @@ func TestCmdLs_NoArgsSendsEmptyPatterns(t *testing.T) {
 	}
 }
 
+// `ppz ls "*.heartbeat" --json` must honor --json even though the flag
+// follows the positional glob. Go's flag package stops parsing at the
+// first non-flag arg, so without pre-separating flags the --json token
+// was silently swallowed into ListRequest.Patterns (becoming a bogus
+// pattern) and the flag never took effect — the reported bug where
+// `ls --json` emitted JSON but `ls "*.heartbeat" --json` did not.
+func TestCmdLs_FlagAfterPattern(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "ppz-ls-flagpos-")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "daemon.sock")
+	t.Setenv("PPZ_IPC_SOCKET", sock)
+
+	requests := serveLsListDaemon(t, sock)
+
+	if err := cmdLs([]string{"*.heartbeat", "--json"}); err != nil {
+		t.Fatalf("cmdLs pattern then flag: %v", err)
+	}
+
+	if requests.count() != 1 {
+		t.Fatalf("IPCList request count = %d, want 1", requests.count())
+	}
+	// The flag must not leak into the pattern list: only the glob is a
+	// pattern. If --json is present here, flag parsing stopped early.
+	got := requests.at(0)
+	if len(got.Patterns) != 1 || got.Patterns[0] != "*.heartbeat" {
+		t.Fatalf("ListRequest.Patterns = %v, want [*.heartbeat] (flag leaked into patterns?)", got.Patterns)
+	}
+}
+
 func serveLsListDaemon(t *testing.T, sock string) *recorder[cliproto.ListRequest] {
 	t.Helper()
 	_ = os.Remove(sock)
