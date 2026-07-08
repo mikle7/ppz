@@ -51,7 +51,7 @@ var topLevelGroups = []helpGroup{
 	{"MESSAGING", []helpRow{
 		{"ppz status", "daemon state, current handle, last token refresh"},
 		{"ppz ls [--watch] [PATTERN]", "list handles × pipes; --watch blocks until unread"},
-		{"ppz read TGT", "read new messages (advances the cursor)"},
+		{"ppz read TGT", "read the next <=10 new messages (advances the cursor; -l N)"},
 		{"ppz send TGT PAYLOAD", "publish a message to a pipe"},
 		{"ppz reread TGT", "replay retained messages (never moves the cursor)"},
 		{"ppz command H [INSTR]", "type INSTR into H.stdin, then a control key"},
@@ -218,16 +218,19 @@ List handles × pipes. With no PATTERN, lists everything the daemon knows about;
   --json     emit one JSON object per row.
   --iso      render LAST as an RFC3339 timestamp instead of a relative age.`,
 
-	"read": `usage: ppz read TGT [--tail --json --tty --raw --bare]
+	"read": `usage: ppz read TGT [-l N --tail --json --tty --raw --bare]
 
-Read NEW messages from <handle>.<pipe> and advance the session cursor — the agent inbox poll (like 'git log' showing only new commits). 'ppz read inbox' reads <current>.inbox. The retrospective/forensic counterpart is 'ppz reread', which carries -l/--skip/--since and never moves the cursor.
+Read NEW messages from <handle>.<pipe> and advance the session cursor — the agent inbox poll (like 'git log' showing only new commits). 'ppz read inbox' reads <current>.inbox. The retrospective/forensic counterpart is 'ppz reread', which carries --skip/--since (and a tail-N -l) and never moves the cursor.
+
+Flood protection: delivers at most the next 10 unread (oldest first) per invocation. The cursor advances only past what was delivered, so nothing is skipped — a truncated read ends with a "(N more unread - run again to continue)" trailer and the next invocation picks up exactly where this one stopped. The trailer is suppressed under --raw/--json/--bare (script-stable output modes).
 
 Default output on inbox-shaped pipes is the v0.23 tabular format:
     HH:MM:SS  <sender|->  <body>
 where <body> is "[subject] payload" for user subjects, "ack:read → <id8>" for system ack messages (see 'ppz help acks'), or just the payload.
 
+  -l N      deliver at most the next N oldest unread (head-N; default 10). -l 0 removes the cap and drains everything unread. NOTE: unlike 'reread -l' (tail-N over history), read's -l never skips — it pages. Mutually exclusive with --tail.
   --bare    force legacy payload-only output (script-stable opt-out from the tabular default on inbox-shaped pipes).
-  --tail    drain unread, then keep streaming live until SIGINT, advancing the cursor as messages arrive. Mutually exclusive with --tty.
+  --tail    drain unread (uncapped), then keep streaming live until SIGINT, advancing the cursor as messages arrive. Mutually exclusive with --tty.
   --tty     render the concatenated payloads through a virtual VT100 screen (best for <handle>.stdout from a wrapped pty). Mutually exclusive with --json.
   --raw     write payload bytes verbatim with no separator (byte-faithful; best for forensics and replay).
   --json    emit each message's full envelope as a JSON line.`,
@@ -275,9 +278,11 @@ A curated, per-session subset of pipe subjects — the agent inbox-monitor list.
   ppz subs add <target>...            subscribe (idempotent)
   ppz subs rm [--force] <target>...   unsubscribe (own inbox guarded)
   ppz subs wait [--json|--iso]        block until a subscribed pipe has unread, then print only the unread row(s)
-  ppz subs read [--json|--raw|--tty|--bare]   read each subscribed pipe that has unread
+  ppz subs read [-l N] [--json|--raw|--tty|--bare]   read each subscribed pipe that has unread
 
-A bare <target> is an uncollared pipe (read-style); use an explicit <handle>.<pipe> for a collared pipe such as an inbox.`,
+A bare <target> is an uncollared pipe (read-style); use an explicit <handle>.<pipe> for a collared pipe such as an inbox.
+
+'subs read' visits pipes in sorted order and applies 'ppz read's flood cap PER PIPE: at most the next 10 unread each (oldest first; -l N to change, -l 0 to drain everything). A pipe with more unread yields with a "(N more unread - run again to continue)" trailer inside its block, so one spammed pipe can't starve the rest or flood the reader's context — run 'subs read' again to page, or 'ppz read <target>' to drain one pipe. Cursors only advance past delivered messages, so paging never skips.`,
 
 	"schedule": `usage: ppz schedule {ls|rm}
 

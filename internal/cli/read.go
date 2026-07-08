@@ -52,6 +52,7 @@ func cmdRead(args []string) error {
 	tty := fs.Bool("tty", false, "render concatenated payloads through a virtual terminal (vt10x); best for <handle>.stdout from a wrapped pty")
 	raw := fs.Bool("raw", false, "write payload bytes verbatim with no message separator; concatenates the full byte stream")
 	bare := fs.Bool("bare", false, "force legacy payload-only output (script-stable opt-out from the v0.23 tabular default on inbox-shaped pipes)")
+	headLimit := fs.Int("l", defaultReadHeadLimit, "deliver at most the next N oldest unread (flood cap); 0 = no cap")
 	target, flagArgs, err := splitReadArgs(args, false)
 	if err != nil || target == "" {
 		usageExit("read")
@@ -59,13 +60,39 @@ func cmdRead(args []string) error {
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
 	}
-	return runRead(target, *asJSON, *follow, *tty, *raw, *bare, false /* all */, 0, 0, 0)
+	if *follow {
+		// --tail streams the whole backlog anyway (the live consumer
+		// resumes right after the drain), so a head cap there would only
+		// misplace the trailer. Explicit -l with --tail is a contradiction;
+		// the default cap is silently lifted.
+		explicitL := false
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "l" {
+				explicitL = true
+			}
+		})
+		if explicitL {
+			fmt.Fprintln(os.Stderr, "ppz read: -l and --tail are mutually exclusive (--tail streams everything)")
+			os.Exit(2)
+		}
+		*headLimit = 0
+	}
+	return runRead(target, *asJSON, *follow, *tty, *raw, *bare, false /* all */, 0, *headLimit, 0, 0)
 }
+
+// defaultReadHeadLimit caps how many unread messages a single `ppz read`
+// or `ppz subs read` (per pipe) delivers by default. Flood protection for
+// agent consumers: a spammed pipe pages out ten-at-a-time with a "(N more
+// unread)" trailer instead of dumping an unbounded backlog into the
+// reader's context. Override with -l N; -l 0 restores the unbounded drain.
+const defaultReadHeadLimit = 10
 
 // runRead is the shared engine for `ppz read` and `ppz reread`. The two
 // verbs differ only in flag surface and the `all` toggle (which the
-// daemon uses to skip cursor consultation + advance).
-func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, skip int, sinceMS int64) error {
+// daemon uses to skip cursor consultation + advance). limit is reread's
+// tail-N; headLimit is read's next-N flood cap — mutually exclusive by
+// construction (each verb plumbs only its own).
+func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, headLimit, skip int, sinceMS int64) error {
 	if tty && follow {
 		fmt.Fprintln(os.Stderr, "ppz read: --tty and --tail are mutually exclusive (use 'ppz terminal watch' for live render)")
 		os.Exit(2)
@@ -122,13 +149,14 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 		Handle:     handle,
 		Channel:    channel,
 		BareTarget: bareTarget,
-		Limit:   limit,
-		Skip:    skip,
-		SinceMS: sinceMS,
-		JSON:    asJSON,
-		Follow:  follow,
-		Session: sessionID(),
-		All:     all,
+		Limit:      limit,
+		HeadLimit:  headLimit,
+		Skip:       skip,
+		SinceMS:    sinceMS,
+		JSON:       asJSON,
+		Follow:     follow,
+		Session:    sessionID(),
+		All:        all,
 		// Forward PPZ_CURRENT_HANDLE as the reader's identity hint so
 		// the daemon's ack:read auto-emitter can stamp envelope.sender
 		// when its own per-session State.Current is empty (the shared-
@@ -173,6 +201,12 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 	renderCols := cliproto.DefaultRenderCols
 	renderRows := cliproto.DefaultRenderRows
 
+	// Trailer from a head-limited drain: rendered after all messages (and
+	// after the --tty replay) so it reads as a footer. Human modes only —
+	// --raw/--json/--bare promise script-stable output, same suppression
+	// contract as the subs-read banner.
+	moreUnread := 0
+
 	dec := bufio.NewScanner(conn)
 	dec.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for dec.Scan() {
@@ -182,6 +216,10 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 		}
 		if evt.Error != nil {
 			return evt.Error
+		}
+		if evt.MoreUnread != nil {
+			moreUnread = *evt.MoreUnread
+			continue
 		}
 		if evt.Meta != nil {
 			if evt.Meta.Cols > 0 {
@@ -215,6 +253,9 @@ func runRead(target string, asJSON, follow, tty, raw, bare, all bool, limit, ski
 	if tty && len(collected) > 0 {
 		fmt.Fprint(os.Stdout, cliproto.RenderTerminal(collected, renderCols, renderRows))
 	}
+	if moreUnread > 0 && !asJSON && !raw && !bare {
+		fmt.Fprintf(os.Stdout, "(%d more unread - run again to continue)\n", moreUnread)
+	}
 	if err := dec.Err(); err != nil && !errors.Is(err, net.ErrClosed) {
 		// EOF / closed-by-server during follow on SIGINT is expected.
 		return nil
@@ -245,13 +286,13 @@ func currentInboxTarget() (string, error) {
 // splitReadArgs lets `ppz read TGT --tail` and `ppz read --tail TGT` both
 // work. Go's flag package stops at the first positional arg, so we pre-
 // extract the single target. Flags that take a value absorb the next
-// token unless written as --flag=value. `withFilters` widens the value-
-// flag set with -l/--skip/--since for the `reread` verb; `read` rejects
+// token unless written as --flag=value. -l is a value flag on both verbs
+// (tail-N on `reread`, head-N flood cap on `read`); `withFilters` widens
+// the set with --skip/--since for the `reread` verb — `read` rejects
 // those flags entirely (the flagset will error on first encounter).
 func splitReadArgs(args []string, withFilters bool) (target string, flagArgs []string, err error) {
-	valueFlags := map[string]bool{}
+	valueFlags := map[string]bool{"-l": true}
 	if withFilters {
-		valueFlags["-l"] = true
 		valueFlags["-skip"] = true
 		valueFlags["--skip"] = true
 		valueFlags["-since"] = true

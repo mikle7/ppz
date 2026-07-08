@@ -165,13 +165,16 @@ func cmdSubsWait(args []string) error {
 // knows which read table belongs to which subscription. The separator is
 // omitted under --raw and --json so those stay byte-faithful / parseable.
 // Pipes with no unread are skipped. Like `ppz read`, it advances the cursor
-// as it goes.
+// as it goes, and applies the same head-N flood cap PER PIPE (default 10,
+// -l N to change, -l 0 to drain everything) — a spammed pipe yields with a
+// "(N more unread)" trailer instead of starving the pipes sorted after it.
 func cmdSubsRead(args []string) error {
 	fs := flag.NewFlagSet("subs read", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "emit JSON envelopes per message")
 	raw := fs.Bool("raw", false, "byte-faithful payloads, no separator")
 	tty := fs.Bool("tty", false, "render concatenated payloads through a virtual terminal")
 	bare := fs.Bool("bare", false, "legacy payload-only output")
+	headLimit := fs.Int("l", defaultReadHeadLimit, "deliver at most the next N oldest unread per pipe (flood cap); 0 = no cap")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -189,7 +192,7 @@ func cmdSubsRead(args []string) error {
 		if banner {
 			fmt.Fprintf(os.Stdout, "=== %s ===\n", target)
 		}
-		if err := runRead(target, *asJSON, false /* follow */, *tty, *raw, *bare, false /* all */, 0, 0, 0); err != nil {
+		if err := runRead(target, *asJSON, false /* follow */, *tty, *raw, *bare, false /* all */, 0, *headLimit, 0, 0); err != nil {
 			return err
 		}
 	}
