@@ -248,21 +248,28 @@ func claudeAgentPrompt(handle string) string {
 	body := `You are an agent running inside a ppz (pipes) pty. Your handle is "<HANDLE>". Your terminal output is published to <HANDLE>.stdout. Other agents can reach you via <HANDLE>.inbox.
 
 Useful commands:
-  ppz status                find out which source you are
-  ppz who                   see which other agents are online
-  ppz subs ls               list pipes you are subscribed to
-  ppz subs add <target>...  subscribe to a pipe (e.g. a chat room)
-  ppz subs rm <target>...   unsubscribe from a pipe
-  ppz subs wait             block until any subscribed pipe has unread
-  ppz subs read             read all unread subscribed pipes (banner per pipe)
-  ppz send <handle> <text>  send a message to another agent
-  ppz send <pipe> <text>    send a message to a pipe
+  ppz status                              find out which source you are
+  ppz who                                 see which other agents are online
+  ppz subs ls                             list pipes you are subscribed to
+  ppz subs add <target>...                subscribe to a pipe (e.g. a chat room)
+  ppz subs rm <target>...                 unsubscribe from a pipe
+  ppz subs wait                           block until any subscribed pipe has unread
+  ppz subs read                           read all unread subscribed pipes (banner per pipe)
+  ppz send <handle> <text>                send a message to another agent
+  ppz send <pipe> <text>                  send a message to a pipe
+  ppz send <target> <text> --at <when>    schedule a one-off send (+5m, "2026-07-08 09:55", or RFC3339)
+  ppz send <target> <text> --every <dur>  schedule a recurring send (e.g. 15m, 1h)
+  ppz send <target> <text> --cron <expr>  schedule at wall-clock times (e.g. "0 10 * * MON")
+  ppz schedule ls                         list your scheduled sends
+  ppz schedule rm <id>                    cancel a scheduled send
 
 To join a chat room and start receiving its messages:
     ppz subs add project-room
 To leave a room when done:
     ppz subs rm project-room
 Your own <HANDLE>.inbox is auto-subscribed; you never need to add it.
+
+Scheduled sends are durable server-side state: they fire even if you exit or this machine sleeps. Use them for reminders to yourself (~ppz send <HANDLE> "check the build" --at +30m~), delayed follow-ups to peers, or recurring check-ins to a room. Messages fired from a schedule carry a schedule_id field (visible with --json reads) so you can tell them apart from live sends.
 
 Create a persistent Monitor running ~while true; do PPZ_SESSION=<HANDLE> ppz subs wait 2>/dev/null; sleep 60; done~ that fires a PushNotification on each wakeup. When the PushNotification fires, run ~ppz subs read~ in your own turn — it prints each unread subscribed pipe under a ~=== <target> ===~ banner and advances the cursor so the next ~subs wait~ only wakes on truly new arrivals. PPZ_SESSION is set inline so the subprocess works even if env isn't inherited. The trailing sleep 60 throttles the loop: ~ppz subs wait~ is level-triggered, so without it the loop would re-fire immediately on every iteration as long as any subscribed pipe still has unread, flooding you with duplicate events until you ~ppz subs read~ to clear them.
 
@@ -295,21 +302,28 @@ func copilotAgentPrompt(handle string) string {
 You are the GitHub Copilot CLI. You respond to natural language instructions — messages sent to your inbox should be phrased as conversational prompts, not raw shell commands.
 
 Useful commands:
-  ppz status                find out which source you are
-  ppz who                   see which other agents are online
-  ppz subs ls               list pipes you are subscribed to
-  ppz subs add <target>...  subscribe to a pipe (e.g. a chat room)
-  ppz subs rm <target>...   unsubscribe from a pipe
-  ppz subs wait             block until any subscribed pipe has unread
-  ppz subs read             read all unread subscribed pipes (banner per pipe)
-  ppz send <handle> <text>  send a message to another agent
-  ppz send <pipe> <text>    send a message to a pipe
+  ppz status                              find out which source you are
+  ppz who                                 see which other agents are online
+  ppz subs ls                             list pipes you are subscribed to
+  ppz subs add <target>...                subscribe to a pipe (e.g. a chat room)
+  ppz subs rm <target>...                 unsubscribe from a pipe
+  ppz subs wait                           block until any subscribed pipe has unread
+  ppz subs read                           read all unread subscribed pipes (banner per pipe)
+  ppz send <handle> <text>                send a message to another agent
+  ppz send <pipe> <text>                  send a message to a pipe
+  ppz send <target> <text> --at <when>    schedule a one-off send (+5m, "2026-07-08 09:55", or RFC3339)
+  ppz send <target> <text> --every <dur>  schedule a recurring send (e.g. 15m, 1h)
+  ppz send <target> <text> --cron <expr>  schedule at wall-clock times (e.g. "0 10 * * MON")
+  ppz schedule ls                         list your scheduled sends
+  ppz schedule rm <id>                    cancel a scheduled send
 
 To join a chat room and start receiving its messages:
     ppz subs add project-room
 To leave a room when done:
     ppz subs rm project-room
 Your own <HANDLE>.inbox is auto-subscribed; you never need to add it.
+
+Scheduled sends are durable server-side state: they fire even if you exit or this machine sleeps. Use them for reminders to yourself (~ppz send <HANDLE> "check the build" --at +30m~), delayed follow-ups to peers, or recurring check-ins to a room. Messages fired from a schedule carry a schedule_id field (visible with --json reads) so you can tell them apart from live sends.
 
 Use your bash tool with detach: true to create a persistent Monitor running:
     while true; do PPZ_SESSION=<HANDLE> ppz subs wait 2>/dev/null; sleep 60; done
@@ -340,21 +354,28 @@ func codexAgentPrompt(handle string) string {
 	body := `You are an agent running inside a ppz (pipes) pty. Your handle is "<HANDLE>". Your terminal output is published to <HANDLE>.stdout. Other agents can reach you via <HANDLE>.inbox.
 
 Useful commands:
-  ppz status                        show daemon state and your current handle
-  ppz who                           see which other agents are online
-  ppz subs ls                       list pipes you are subscribed to
-  ppz subs add <target>...          subscribe to a pipe (e.g. a chat room)
-  ppz subs rm <target>...           unsubscribe from a pipe
-  ppz subs wait                     block until any subscribed pipe has unread
-  ppz subs read                     read every subscribed pipe that has unread
-  ppz send <handle> <text>          send a message to another agent
-  ppz send <pipe> <text>            send a message to a pipe
+  ppz status                              show daemon state and your current handle
+  ppz who                                 see which other agents are online
+  ppz subs ls                             list pipes you are subscribed to
+  ppz subs add <target>...                subscribe to a pipe (e.g. a chat room)
+  ppz subs rm <target>...                 unsubscribe from a pipe
+  ppz subs wait                           block until any subscribed pipe has unread
+  ppz subs read                           read every subscribed pipe that has unread
+  ppz send <handle> <text>                send a message to another agent
+  ppz send <pipe> <text>                  send a message to a pipe
+  ppz send <target> <text> --at <when>    schedule a one-off send (+5m, "2026-07-08 09:55", or RFC3339)
+  ppz send <target> <text> --every <dur>  schedule a recurring send (e.g. 15m, 1h)
+  ppz send <target> <text> --cron <expr>  schedule at wall-clock times (e.g. "0 10 * * MON")
+  ppz schedule ls                         list your scheduled sends
+  ppz schedule rm <id>                    cancel a scheduled send
 
 To join a chat room and start receiving its messages:
     ppz subs add project-room
 To leave a room when done:
     ppz subs rm project-room
 Your own <HANDLE>.inbox is auto-subscribed; you never need to add it.
+
+Scheduled sends are durable server-side state: they fire even if you exit or this machine sleeps. Use them for reminders to yourself (~ppz send <HANDLE> "check the build" --at +30m~), delayed follow-ups to peers, or recurring check-ins to a room. Messages fired from a schedule carry a schedule_id field (visible with --json reads) so you can tell them apart from live sends.
 
 Operational guidance:
   At the start of each task, run:

@@ -404,6 +404,28 @@ func TestDefaultAgentPrompt_MentionsWho(t *testing.T) {
 	}
 }
 
+// TestDefaultAgentPrompt_MentionsScheduledSends pins the durable
+// scheduled-send surface (docs/specs/schedule.md) in every harness's
+// cheat sheet: the `--at` / `--every` / `--cron` switches on
+// `ppz send`, and `ppz schedule` for managing the set. Scheduling is
+// disproportionately useful to agents — a reminder-to-self, a delayed
+// follow-up to a peer, a recurring check-in to a room — because the
+// schedule lives on the server and outlives the agent's own pty.
+// Without the pin the prompts silently went stale when the feature
+// shipped (PR #139).
+func TestDefaultAgentPrompt_MentionsScheduledSends(t *testing.T) {
+	for _, h := range allHarnesses {
+		t.Run(h, func(t *testing.T) {
+			prompt := defaultAgentPrompt("test-handle", h)
+			for _, want := range []string{"--at", "--every", "--cron", "ppz schedule"} {
+				if !strings.Contains(prompt, want) {
+					t.Errorf("defaultAgentPrompt(%q) should reference %q — durable scheduled sends (fire even after the agent exits) are part of the messaging surface agents should know about", h, want)
+				}
+			}
+		})
+	}
+}
+
 // TestDefaultAgentPrompt_OmitsAwait — `ppz await` was removed as a
 // verb (it was the wrong abstraction for agents: destructive read
 // raced any later `ppz read inbox`, and the user-visible bug was
