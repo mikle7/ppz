@@ -4,10 +4,10 @@ import "time"
 
 // IPC method names. Keep in sync with WIRE.md §7.
 const (
-	IPCStatus      = "Status"
-	IPCLogin       = "Login"
-	IPCCreate      = "Create"
-	IPCSwitch      = "Switch"
+	IPCStatus = "Status"
+	IPCLogin  = "Login"
+	IPCCreate = "Create"
+	IPCSwitch = "Switch"
 	// IPCSend / IPCSendBatch — the publish-IPC verbs used by
 	// `ppz send`, `ppz command`, terminal stdin forwarding, etc.
 	// Renamed from IPCBroadcast/IPCBroadcastBatch in Phase 1.5 to
@@ -16,12 +16,12 @@ const (
 	IPCSend      = "Send"
 	IPCSendBatch = "SendBatch"
 
-	IPCList        = "List"
-	IPCListWatch   = "ListWatch"
-	IPCSubscribe   = "Subscribe"
-	IPCRead        = "Read"
-	IPCConnect     = "Connect"
-	IPCDisconnect  = "Disconnect"
+	IPCList          = "List"
+	IPCListWatch     = "ListWatch"
+	IPCSubscribe     = "Subscribe"
+	IPCRead          = "Read"
+	IPCConnect       = "Connect"
+	IPCDisconnect    = "Disconnect"
 	IPCPipeCreate    = "PipeCreate"
 	IPCPipeDestroy   = "PipeDestroy"
 	IPCSourceDestroy = "SourceDestroy"
@@ -80,11 +80,12 @@ const (
 // IPC field names alongside the verb refactor.
 type ReadRequest struct {
 	Handle    string `json:"handle"`
-	Channel   string `json:"channel"`            // pipe name: broadcast / stdin / stdout
-	Limit     int    `json:"limit,omitempty"`    // 0 = unlimited; non-zero = tail-N (reread only)
-	Skip      int    `json:"skip,omitempty"`     // drop the first N retained messages (reread only)
-	SinceMS   int64  `json:"since_ms,omitempty"` // 0 = no time filter; >0 = only msgs newer than (now − this many ms) (reread only)
-	JSON      bool   `json:"json,omitempty"`     // emit envelope as JSON instead of payload text
+	Channel   string `json:"channel"`              // pipe name: broadcast / stdin / stdout
+	Limit     int    `json:"limit,omitempty"`      // 0 = unlimited; non-zero = tail-N (reread only)
+	HeadLimit int    `json:"head_limit,omitempty"` // 0 = unlimited; non-zero = deliver at most the NEXT N oldest (read/subs read flood cap). Cursor advances only past what was delivered; a truncated drain emits a trailing MoreUnread event.
+	Skip      int    `json:"skip,omitempty"`       // drop the first N retained messages (reread only)
+	SinceMS   int64  `json:"since_ms,omitempty"`   // 0 = no time filter; >0 = only msgs newer than (now − this many ms) (reread only)
+	JSON      bool   `json:"json,omitempty"`       // emit envelope as JSON instead of payload text
 	Follow    bool   `json:"follow,omitempty"`
 	Session   string `json:"session,omitempty"`    // cursor key — defaults to "default" daemon-side
 	NoAdvance bool   `json:"no_advance,omitempty"` // observational reads (terminal view) skip cursor advance
@@ -112,7 +113,7 @@ type ReadRequest struct {
 }
 
 // ReadEvent is the wire format of one streamed line in a Read response.
-// Exactly one of Message / Error / Meta is set on each event. End-of-stream
+// Exactly one of Message / Error / Meta / MoreUnread is set on each event. End-of-stream
 // is signaled by the daemon closing the connection.
 type ReadEvent struct {
 	Message *ReadMessage `json:"msg,omitempty"`
@@ -123,6 +124,12 @@ type ReadEvent struct {
 	// `<h>.stdctrl` resize. Lets the CLI configure its --tty renderer
 	// to match the source size before consuming bytes.
 	Meta *ReadMeta `json:"meta,omitempty"`
+	// MoreUnread is an optional trailing event (sent after the last Message
+	// of a head-limited drain) carrying the count of unread messages left
+	// behind by the HeadLimit cap. The CLI renders it as a "(N more unread
+	// — run again to continue)" trailer in human modes and suppresses it
+	// under --raw/--json/--bare, which promise script-stable output.
+	MoreUnread *int `json:"more_unread,omitempty"`
 }
 
 // ReadMeta carries leading metadata about the stream. Currently a
@@ -166,8 +173,8 @@ type StatusReply struct {
 	LoggedIn           bool       `json:"logged_in"`
 	URL                string     `json:"url,omitempty"`
 	KeyPrefix          string     `json:"key_prefix,omitempty"`
-	AccountID              string     `json:"account_id,omitempty"`
-	AccountName            string     `json:"account_name,omitempty"`
+	AccountID          string     `json:"account_id,omitempty"`
+	AccountName        string     `json:"account_name,omitempty"`
 	LastTokenRefreshAt *time.Time `json:"last_token_refresh_at,omitempty"`
 	// LoginCheck is the daemon's last verification result against the
 	// server. "ok" means a recent server-touching call succeeded;
@@ -229,7 +236,7 @@ type LoginRequest struct {
 type LoginReply struct {
 	URL       string `json:"url"`
 	KeyPrefix string `json:"key_prefix"`
-	AccountID     string `json:"account_id"`
+	AccountID string `json:"account_id"`
 }
 
 type CreateRequest struct {
@@ -465,8 +472,8 @@ type ListReply struct {
 // UncollaredPipe is the wire projection of a sourceless pipe row + its
 // JetStream stats. Phase 1.5.
 type UncollaredPipe struct {
-	Manifold string `json:"manifold,omitempty"` // '' = root namespace
-	Name     string `json:"name"`
+	Manifold string   `json:"manifold,omitempty"` // '' = root namespace
+	Name     string   `json:"name"`
 	Info     PipeInfo `json:"info"`
 }
 
@@ -522,13 +529,12 @@ type ListInvitesReply struct {
 	Invites []Invite `json:"invites"`
 }
 
-
 type AuthExchangeReply struct {
-	JWT       string    `json:"jwt"`
-	NATSURL   string    `json:"nats_url"`
-	AccountID     string    `json:"account_id"`
-	AccountName   string    `json:"account_name"`
-	ExpiresAt time.Time `json:"expires_at"`
+	JWT         string    `json:"jwt"`
+	NATSURL     string    `json:"nats_url"`
+	AccountID   string    `json:"account_id"`
+	AccountName string    `json:"account_name"`
+	ExpiresAt   time.Time `json:"expires_at"`
 
 	// Auth V2 Phase 3 — short-lived NATS user credentials. The daemon
 	// uses NATSUserJWT + NATSUserSeed in nats.UserJWT(...) when
@@ -592,7 +598,7 @@ type CompleteReply struct {
 // default) is distinguishable from "explicitly zero".
 //
 // Phase 1.5 fields per locked decision #18 four-role grammar:
-//   - Manifold:     hierarchical-grouping segment string ('' = root)
+//   - Manifold:     hierarchical-grouping segment string (” = root)
 //   - SourceHandle: actor identity name; nil = uncollared (sourceless)
 //
 // Handle is retained as a backward-compat alias for SourceHandle until

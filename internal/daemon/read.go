@@ -184,6 +184,7 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	var (
 		retained    []cliproto.ReadMessage
 		lastSeqSeen uint64
+		moreUnread  int
 	)
 	// Cursor-aware vs forensic mode. `read` (default) starts at cursor+1 so
 	// the agent only sees what's new since they last looked. `reread`
@@ -238,8 +239,24 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 		defer func() { _ = stream.DeleteConsumer(ctx, consumer.CachedInfo().Name) }()
 
 		drained := 0
+	drainLoop:
 		for drained < expected {
-			batch, ferr := consumer.Fetch(expected-drained, jetstream.FetchMaxWait(5*time.Second))
+			// Head-limit (`read -l`, flood cap): fetch no more than we still
+			// intend to deliver, and stop as soon as the quota is met. Unlike
+			// the tail-N Limit below (a post-drain slice for `reread`), the
+			// cap must bound the drain itself so lastSeqSeen — and therefore
+			// the cursor advance — stops at the last DELIVERED message; the
+			// remainder stays unread and pages out on the next invocation.
+			want := expected - drained
+			if req.HeadLimit > 0 {
+				if room := req.HeadLimit - len(retained); room < want {
+					want = room
+				}
+				if want <= 0 {
+					break
+				}
+			}
+			batch, ferr := consumer.Fetch(want, jetstream.FetchMaxWait(5*time.Second))
 			if ferr != nil {
 				break
 			}
@@ -263,6 +280,10 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 						AckRequested: env.AckRequested,
 					})
 					lastSeqSeen = md.Sequence.Stream
+					if req.HeadLimit > 0 && len(retained) >= req.HeadLimit {
+						drained++
+						break drainLoop
+					}
 				}
 				drained++
 			}
@@ -272,6 +293,13 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 			if !any {
 				break
 			}
+		}
+		// Truncated by the head cap? Report what's left so the CLI can
+		// render the "(N more unread)" trailer. Sequences in a per-pipe
+		// stream are contiguous within the retained window, so the
+		// arithmetic is exact.
+		if req.HeadLimit > 0 && len(retained) >= req.HeadLimit && lastSeqSeen < historicalEnd {
+			moreUnread = int(historicalEnd - lastSeqSeen)
 		}
 	}
 	if req.Skip > 0 && req.Skip < len(retained) {
@@ -287,6 +315,11 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	for _, m := range retained {
 		mm := m
 		if err := enc.Encode(cliproto.ReadEvent{Message: &mm}); err != nil {
+			return
+		}
+	}
+	if moreUnread > 0 {
+		if err := enc.Encode(cliproto.ReadEvent{MoreUnread: &moreUnread}); err != nil {
 			return
 		}
 	}

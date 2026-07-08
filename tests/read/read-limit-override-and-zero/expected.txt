@@ -1,0 +1,10 @@
+--- read -l 2: next 2 oldest, no trailer under --bare ---
+msg-1
+msg-2
+--- read -l 0: drains all remaining ---
+msg-3
+msg-4
+msg-5
+--- ls: unread=0 ---
+chat.inbox 0 5 RELATIVE msg-5 foo
+exit=0

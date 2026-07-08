@@ -1,0 +1,26 @@
+--- separators: both pipes visited ---
+=== bar.inbox ===
+=== foo.inbox ===
+--- bar delivers only its next 10 ---
+bar-01
+bar-02
+bar-03
+bar-04
+bar-05
+bar-06
+bar-07
+bar-08
+bar-09
+bar-10
+--- bar trailer names the remainder ---
+2 more unread
+--- foo delivers everything, uncapped ---
+foo-1
+foo-2
+--- second pass -l 0: only bar has unread ---
+=== bar.inbox ===
+bar-11
+bar-12
+--- no trailer once drained ---
+0
+exit=0

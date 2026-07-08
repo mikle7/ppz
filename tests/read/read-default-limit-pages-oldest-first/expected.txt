@@ -1,0 +1,26 @@
+--- first read: next 10 oldest ---
+msg-01
+msg-02
+msg-03
+msg-04
+msg-05
+msg-06
+msg-07
+msg-08
+msg-09
+msg-10
+--- trailer names the remainder ---
+5 more unread
+--- ls after first read: unread=5 ---
+chat.inbox 5 15 RELATIVE msg-15 foo
+--- second read: remaining 5 ---
+msg-11
+msg-12
+msg-13
+msg-14
+msg-15
+--- no trailer once drained ---
+0
+--- ls after second read: unread=0 ---
+chat.inbox 0 15 RELATIVE msg-15 foo
+exit=0

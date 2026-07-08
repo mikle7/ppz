@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — read flood cap (head-N paging)
+
+**Behaviour change (CLI).** `ppz read` and `ppz subs read` now deliver at most
+the **next 10 unread** messages per invocation (per pipe for `subs read`),
+oldest first. Flood protection for agent consumers: an unbounded drain of a
+spammed pipe could dump the whole retained backlog (up to 5000 msgs / 16 MiB)
+into the reader's context, and in `subs read` one noisy pipe starved every
+pipe sorted after it.
+
+- **Head-N, not tail-N.** The cap takes the *oldest* N unread and advances the
+  session cursor only past what was delivered — nothing is skipped; repeated
+  invocations page through the backlog in order. (`reread -l` keeps its
+  tail-N replay semantics; `read`'s `-l` pages forward.)
+- **`-l N` overrides the cap; `-l 0` restores the unbounded drain.** On
+  `subs read` the cap applies per pipe. `-l` is mutually exclusive with
+  `--tail`, which still streams everything live.
+- **Truncation is loud.** A capped read ends with a
+  `(N more unread - run again to continue)` trailer. Suppressed under
+  `--raw` / `--json` / `--bare`, which promise script-stable output.
+- Wire: `ReadRequest.head_limit` (new, 0 = uncapped) and a trailing
+  `ReadEvent.more_unread` event. Older CLIs against a newer daemon are
+  unaffected (no head_limit → uncapped, no trailer emitted).
+
 ## Unreleased — remove `ppz terminal create`
 
 **Breaking (CLI surface).** Removed the `ppz terminal create HANDLE` subverb.
