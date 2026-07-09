@@ -121,6 +121,22 @@ for dir in "${scenarios[@]}"; do
         echo "    daemon| $h/credentials size=${size}B keys=$keys"
       fi
     done
+    # Daemon crash post-mortem. Scenario daemons live under their own homes
+    # (e.g. /tmp/share-inbox-logout), not just /tmp/a|b, so scan for any
+    # daemon.log touched during this scenario and dump its tail. A daemon that
+    # *exited* — the root cause behind the flaky
+    # terminal/share-*-daemon-logout, where login reforks a replacement and
+    # flips daemon_same_pid — leaves its panic/exit trace here (forked daemons
+    # redirect stderr to $PPZ_HOME/daemon.log); it was previously discarded.
+    # pidfile=/alive= directly confirms whether the process died.
+    for log in $(find /tmp -maxdepth 4 -name daemon.log -mmin -2 2>/dev/null); do
+      d=$(dirname "$log")
+      pid=$(cat "$d/daemon.pid" 2>/dev/null || echo "-")
+      alive=no; [[ "$pid" != "-" ]] && kill -0 "$pid" 2>/dev/null && alive=yes
+      echo "    daemon-log| $log  (pidfile=$pid alive=$alive), tail:"
+      tail -40 "$log" 2>/dev/null | sed 's/^/    daemon-log|   /'
+      grep -q "panic:" "$log" 2>/dev/null && echo "    daemon-log|   ^^ panic detected"
+    done
     echo "    ──────────────────────────────────────────────────────────"
     FAIL=$((FAIL + 1))
     FAILED_SCENARIOS+=("$rel")
