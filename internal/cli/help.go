@@ -57,6 +57,7 @@ var topLevelGroups = []helpGroup{
 		{"ppz command H [INSTR]", "type INSTR into H.stdin, then a control key"},
 		{"ppz subs SUBVERB", "per-session pipe subscriptions (ls/add/rm/wait/read)"},
 		{"ppz schedule SUBVERB", "manage scheduled sends (ls/rm); create via ppz send --at/--every/--cron"},
+		{"ppz chat", "live roster + per-agent/-pipe chat (full-screen)"},
 	}},
 	{"IDENTITIES", []helpRow{
 		{"ppz source create H", "claim a bare message handle (auto-pipe: inbox)"},
@@ -424,6 +425,14 @@ Destroy a pipe. --recursive removes a manifold subtree of pipes.`,
 	"who": `usage: ppz who [--json] [--online|--stale|--offline] [--harness=X] [--owner=X]
 
 List every agent the local daemon has seen a heartbeat from, with online/stale/offline status, harness, model, host, os/arch, CREATED (uptime as a relative age) and OWNER (the source's creator, resolved at query time). Filters combine OR for status, AND for harness and owner.`,
+
+	"chat": `usage: ppz chat
+
+Full-screen live roster + chat. The left menu lists agents (online/stale/offline status, like 'ppz who') plus any uncollared pipes you add; selecting one opens a conversation. Agent DMs stitch your sends to <handle>.inbox together with the replies that land in your inbox; uncollared pipes show every sender on the shared subject.
+
+  up/down or j/k  move     enter  open     a or +  add pipe     pgup/pgdn or wheel  scroll     esc  back     q  quit
+
+Set a stable $PPZ_SESSION (e.g. ppz-tui) so it doesn't share a read cursor with a CLI 'ppz read'. Alias: 'ppz tui'.`,
 
 	"diagnostics": `usage: ppz diagnostics [--json] [--since=DUR] [--bundle]
 
