@@ -1,0 +1,7 @@
+--- terminal read term --limit 2 ---
+twothree
+--- terminal read --limit 2 term (flag-first order) ---
+twothree
+--- terminal read term -l 2 (identical) ---
+twothree
+exit=0

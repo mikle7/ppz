@@ -16,6 +16,9 @@ pipe sorted after it.
 - **`-l N` overrides the cap; `-l 0` restores the unbounded drain.** On
   `subs read` the cap applies per pipe. `-l` is mutually exclusive with
   `--tail`, which still streams everything live.
+- **`--limit` is the long form of `-l`** on `read`, `reread`, and
+  `subs read` — identical semantics per verb (head-N paging on the read
+  verbs, tail-N replay on `reread`).
 - **Truncation is loud.** A capped read ends with a
   `(N more unread - run again to continue)` trailer. Suppressed under
   `--raw` / `--json` / `--bare`, which promise script-stable output.

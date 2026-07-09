@@ -175,6 +175,7 @@ func cmdSubsRead(args []string) error {
 	tty := fs.Bool("tty", false, "render concatenated payloads through a virtual terminal")
 	bare := fs.Bool("bare", false, "legacy payload-only output")
 	headLimit := fs.Int("l", defaultReadHeadLimit, "deliver at most the next N oldest unread per pipe (flood cap); 0 = no cap")
+	fs.IntVar(headLimit, "limit", defaultReadHeadLimit, "long form of -l")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

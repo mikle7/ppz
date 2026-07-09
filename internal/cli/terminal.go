@@ -71,8 +71,8 @@ func cmdTerminal(args []string) error {
 // a pty session shouldn't mark its bytes "read" from the perspective of
 // some other tool reading the same pipe.
 //
-// All reread flags (--raw / --json / -l / --skip / --since) work; passing
-// an explicit output-mode flag suppresses the --tty default.
+// All reread flags (--raw / --json / -l / --limit / --skip / --since) work;
+// passing an explicit output-mode flag suppresses the --tty default.
 //
 // Implementation: build a transformed argv (handle → handle.stdout,
 // inject --tty when appropriate) and delegate to cmdReread.
@@ -80,7 +80,8 @@ func cmdTerminalRead(args []string) error {
 	// Recognise reread's value-flags so we can step over them when finding
 	// the positional handle.
 	valueFlags := map[string]bool{
-		"-l": true, "-skip": true, "--skip": true, "-since": true, "--since": true,
+		"-l": true, "-limit": true, "--limit": true,
+		"-skip": true, "--skip": true, "-since": true, "--since": true,
 	}
 	modeFlag := func(a string) bool {
 		switch a {

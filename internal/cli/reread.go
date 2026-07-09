@@ -33,6 +33,7 @@ func cmdReread(args []string) error {
 	}
 	fs := flag.NewFlagSet("reread", flag.ExitOnError)
 	limit := fs.Int("l", 0, "limit to the N most recent messages (tail-N)")
+	fs.IntVar(limit, "limit", 0, "long form of -l")
 	skip := fs.Int("skip", 0, "skip the first N retained messages")
 	since := fs.Duration("since", 0, "only messages newer than this duration ago (e.g. 5m, 1h)")
 	asJSON := fs.Bool("json", false, "emit JSON envelopes instead of payload text")

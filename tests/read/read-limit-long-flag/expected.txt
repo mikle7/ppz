@@ -1,0 +1,12 @@
+--- read --limit 2: next 2 oldest ---
+msg-1
+msg-2
+--- read --limit 0: drains all remaining ---
+msg-3
+msg-4
+msg-5
+--- read --limit with --tail: rejected ---
+rc=2
+--- ls: unread=0 ---
+chat.inbox 0 5 RELATIVE msg-5 foo
+exit=0

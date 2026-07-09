@@ -53,6 +53,7 @@ func cmdRead(args []string) error {
 	raw := fs.Bool("raw", false, "write payload bytes verbatim with no message separator; concatenates the full byte stream")
 	bare := fs.Bool("bare", false, "force legacy payload-only output (script-stable opt-out from the v0.23 tabular default on inbox-shaped pipes)")
 	headLimit := fs.Int("l", defaultReadHeadLimit, "deliver at most the next N oldest unread (flood cap); 0 = no cap")
+	fs.IntVar(headLimit, "limit", defaultReadHeadLimit, "long form of -l")
 	target, flagArgs, err := splitReadArgs(args, false)
 	if err != nil || target == "" {
 		usageExit("read")
@@ -67,12 +68,12 @@ func cmdRead(args []string) error {
 		// the default cap is silently lifted.
 		explicitL := false
 		fs.Visit(func(f *flag.Flag) {
-			if f.Name == "l" {
+			if f.Name == "l" || f.Name == "limit" {
 				explicitL = true
 			}
 		})
 		if explicitL {
-			fmt.Fprintln(os.Stderr, "ppz read: -l and --tail are mutually exclusive (--tail streams everything)")
+			fmt.Fprintln(os.Stderr, "ppz read: -l/--limit and --tail are mutually exclusive (--tail streams everything)")
 			os.Exit(2)
 		}
 		*headLimit = 0
@@ -286,12 +287,13 @@ func currentInboxTarget() (string, error) {
 // splitReadArgs lets `ppz read TGT --tail` and `ppz read --tail TGT` both
 // work. Go's flag package stops at the first positional arg, so we pre-
 // extract the single target. Flags that take a value absorb the next
-// token unless written as --flag=value. -l is a value flag on both verbs
-// (tail-N on `reread`, head-N flood cap on `read`); `withFilters` widens
-// the set with --skip/--since for the `reread` verb — `read` rejects
-// those flags entirely (the flagset will error on first encounter).
+// token unless written as --flag=value. -l / --limit is a value flag on
+// both verbs (tail-N on `reread`, head-N flood cap on `read`);
+// `withFilters` widens the set with --skip/--since for the `reread`
+// verb — `read` rejects those flags entirely (the flagset will error on
+// first encounter).
 func splitReadArgs(args []string, withFilters bool) (target string, flagArgs []string, err error) {
-	valueFlags := map[string]bool{"-l": true}
+	valueFlags := map[string]bool{"-l": true, "-limit": true, "--limit": true}
 	if withFilters {
 		valueFlags["-skip"] = true
 		valueFlags["--skip"] = true

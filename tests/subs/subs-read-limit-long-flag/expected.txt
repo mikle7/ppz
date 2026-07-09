@@ -1,0 +1,8 @@
+--- subs read --limit 1: one message + trailer ---
+=== foo.inbox ===
+foo-1
+2 more unread
+--- subs read --limit 0: drains the rest ---
+foo-2
+foo-3
+exit=0
