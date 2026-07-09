@@ -254,7 +254,7 @@ Manage with 'ppz schedule ls' / 'ppz schedule rm ID'.`,
 Forensic / replay: re-deliver retained messages from <handle>.<pipe>. Unlike 'ppz read', it ignores and never advances the session cursor, so you can inspect history without consuming it.
 
   -l, --limit N   limit to the last N messages.
-  --skip N       skip the most recent N before applying -l.
+  --skip N       skip the most recent N before applying -l/--limit.
   --since DUR    only messages newer than DUR ago (e.g. 10m, 2h).
   --json --tty --raw --bare   output modes, shared with 'ppz read'.`,
 
