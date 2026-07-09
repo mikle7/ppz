@@ -27,6 +27,7 @@ type fakeDaemon struct {
 	inbox      []cliproto.ReadMessage // streamed to an inbox follow
 	sends      *recorder[cliproto.SendRequest]
 	reads      *recorder[cliproto.ReadRequest]
+	sendErr    bool // when set, IPCSend replies with an error
 }
 
 // startFakeDaemon serves the three IPC verbs `ppz chat` uses. IPCRead (a
@@ -69,6 +70,10 @@ func startFakeDaemon(t *testing.T, sock string, fd *fakeDaemon) {
 					var sr cliproto.SendRequest
 					_ = json.Unmarshal(req.Params, &sr)
 					fd.sends.add(sr)
+					if fd.sendErr {
+						_ = enc.Encode(map[string]any{"error": cliproto.New(cliproto.EDeliveryUnconfirmed)})
+						break
+					}
 					_ = enc.Encode(map[string]any{"result": cliproto.SendReply{
 						ID: "testid", Subject: sr.Handle + "." + sr.Channel, Bytes: len(sr.Payload),
 					}})
@@ -173,8 +178,8 @@ func TestChatE2E_RosterInboxAndSend(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter in a focused chat should return a send Cmd")
 	}
-	if _, ok := cmd().(sendErrMsg); ok {
-		t.Fatal("send Cmd reported an error against the fake daemon")
+	if res, ok := cmd().(sendResultMsg); !ok || res.err != "" {
+		t.Fatalf("send Cmd should succeed against the fake daemon: ok=%v err=%q", ok, res.err)
 	}
 
 	if fd.sends.count() != 1 {

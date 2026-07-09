@@ -3,11 +3,8 @@ package cli
 // e2e coverage that `ppz chat` persists through the chatstore: drive the real
 // chat flow (fake daemon → follow goroutines → model.Update, plus real sends),
 // then assert the on-disk store reflects it after a flush + reopen ("restart").
-//
-// These are RED until the store is wired into the model (ingest on
-// inbound/pipe/send, MarkRead on open, AddPipe on add, hydrate on launch). The
-// chat model has a `store` field but doesn't populate it yet, so every store
-// assertion below fails today — which is the point.
+// Covers history + sent messages, read markers, added pipes, failed-send
+// rollback, and durability without an explicit quit-flush.
 
 import (
 	"context"
@@ -22,7 +19,7 @@ import (
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
 
-func setupChat(t *testing.T, inbox []cliproto.ReadMessage, who []cliproto.WhoEntry) (home, sock string, store *chatstore.Store) {
+func setupChat(t *testing.T, inbox []cliproto.ReadMessage, who []cliproto.WhoEntry, sendErr bool) (home, sock string, store *chatstore.Store) {
 	t.Helper()
 	home, err := os.MkdirTemp("/tmp", "ppz-chat-store-e2e-")
 	if err != nil {
@@ -31,7 +28,7 @@ func setupChat(t *testing.T, inbox []cliproto.ReadMessage, who []cliproto.WhoEnt
 	t.Cleanup(func() { _ = os.RemoveAll(home) })
 	sock = filepath.Join(home, "d.sock")
 	startFakeDaemon(t, sock, &fakeDaemon{
-		whoEntries: who, inbox: inbox,
+		whoEntries: who, inbox: inbox, sendErr: sendErr,
 		sends: &recorder[cliproto.SendRequest]{}, reads: &recorder[cliproto.ReadRequest]{},
 	})
 	store, err = chatstore.Open(home, "james")
@@ -90,7 +87,9 @@ func sendChat(m tea.Model, text string) tea.Model {
 	var mm tea.Model = tm
 	mm, cmd := mm.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
-		cmd() // performs the real IPCSend
+		if res := cmd(); res != nil { // perform the real IPCSend, then process its result
+			mm, _ = mm.Update(res)
+		}
 	}
 	return mm
 }
@@ -110,6 +109,7 @@ func TestChatStoreE2E_HistoryPersists(t *testing.T) {
 			{ID: "i2", Sender: "alice", Payload: "you there?", CreatedAt: "2026-07-09T09:01:00Z"},
 		},
 		[]cliproto.WhoEntry{{Handle: "alice", Payload: `{"interval_sec":60}`, ArrivedAt: time.Now()}},
+		false,
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	events := make(chan tea.Msg, 256)
@@ -157,6 +157,7 @@ func TestChatStoreE2E_ReadMarkersPersist(t *testing.T) {
 			{Handle: "alice", Payload: `{"interval_sec":60}`, ArrivedAt: time.Now()},
 			{Handle: "bob", Payload: `{"interval_sec":60}`, ArrivedAt: time.Now()},
 		},
+		false,
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	events := make(chan tea.Msg, 256)
@@ -185,7 +186,7 @@ func TestChatStoreE2E_ReadMarkersPersist(t *testing.T) {
 
 // Added pipes survive a restart.
 func TestChatStoreE2E_AddedPipePersists(t *testing.T) {
-	home, sock, store := setupChat(t, nil, nil)
+	home, sock, store := setupChat(t, nil, nil, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	events := make(chan tea.Msg, 256)
@@ -206,5 +207,69 @@ func TestChatStoreE2E_AddedPipePersists(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("added pipe room-1 not persisted; windows=%+v", ws)
+	}
+}
+
+// A DM send that fails at the daemon must not stay in the log or persist — a
+// message that never left the machine must not look delivered or survive a
+// restart. (JetStream can't re-hydrate outbound DMs, so a false positive here
+// is permanent.)
+func TestChatStoreE2E_FailedSendRollsBack(t *testing.T) {
+	_, sock, store := setupChat(t,
+		[]cliproto.ReadMessage{{ID: "i1", Sender: "alice", Payload: "hi", CreatedAt: "2026-07-09T09:00:00Z"}},
+		[]cliproto.WhoEntry{{Handle: "alice", Payload: `{"interval_sec":60}`, ArrivedAt: time.Now()}},
+		true, // IPCSend fails
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	events := make(chan tea.Msg, 256)
+	startInboxFollow(ctx, sock, events)
+
+	m := chatModel(sock, store, ctx, events)
+	m = pumpUntil(m, events, func(a tuiModel) bool { return msgCount(a, "alice") >= 1 })
+	m = openChat(t, m, "alice")
+	m = sendChat(m, "never leaves")
+	cancel()
+
+	if c := msgCount(m.(tuiModel), "alice"); c != 1 {
+		t.Errorf("failed send should be rolled back in the model; want 1 (the received msg), got %d", c)
+	}
+	got, _ := store.Messages(chatstore.KindAgent, "alice")
+	for _, mm := range got {
+		if mm.Dir == chatstore.DirOut {
+			t.Errorf("a failed send must not be persisted: %+v", mm)
+		}
+	}
+	if len(got) != 1 {
+		t.Errorf("store should hold only the received message, got %d", len(got))
+	}
+}
+
+// Read markers and sent DMs persist without waiting for a clean quit-flush:
+// user actions (open, send) flush as they happen, so a hard kill can't lose the
+// very data this feature exists to keep.
+func TestChatStoreE2E_DurableWithoutQuitFlush(t *testing.T) {
+	home, sock, store := setupChat(t,
+		[]cliproto.ReadMessage{{ID: "i1", Sender: "alice", Payload: "hi", CreatedAt: "2026-07-09T09:00:00Z"}},
+		[]cliproto.WhoEntry{{Handle: "alice", Payload: `{"interval_sec":60}`, ArrivedAt: time.Now()}},
+		false,
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	events := make(chan tea.Msg, 256)
+	startInboxFollow(ctx, sock, events)
+
+	m := chatModel(sock, store, ctx, events)
+	m = pumpUntil(m, events, func(a tuiModel) bool { return msgCount(a, "alice") >= 1 })
+	m = openChat(t, m, "alice") // mark read
+	m = sendChat(m, "hi back")  // send ok
+	cancel()
+
+	// Deliberately NO store.Flush() — simulate a crash-y exit.
+	reopened, _ := chatstore.Open(home, "james")
+	got, _ := reopened.Messages(chatstore.KindAgent, "alice")
+	if len(got) != 2 {
+		t.Fatalf("want received + sent persisted without an explicit flush, got %d", len(got))
+	}
+	if u, _ := reopened.Unread(chatstore.KindAgent, "alice"); u != 0 {
+		t.Errorf("read marker not persisted without explicit flush, unread=%d", u)
 	}
 }

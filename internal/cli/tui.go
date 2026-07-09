@@ -79,6 +79,7 @@ const (
 )
 
 type tMsg struct {
+	id     string // set for optimistic outbound echoes, so a failed send can roll it back
 	t      string
 	sender string
 	text   string
@@ -91,6 +92,10 @@ type tItem struct {
 	label  string
 	status string // agent liveness: online/stale/offline; "" until first beat
 	state  string // agent_state: idle/working/blocked
+	// unread is the live in-session display counter. The store's read marker
+	// (chatstore last_read_at) is authoritative across restarts and reconciles
+	// this on hydrate; within a session the two are kept in step at the call
+	// sites (routeInbound/routePipe bump, markRead zeroes both).
 	unread int
 	msgs   []tMsg
 }
@@ -187,8 +192,18 @@ type pipeInMsg struct {
 	m    cliproto.ReadMessage
 }
 type streamErrMsg struct{ scope, err string }
-type sendErrMsg struct{ err string }
-type sendOKMsg struct{}
+
+// sendResultMsg carries an async send's outcome back to Update. On success an
+// agent DM is persisted (it can't be re-hydrated from the wire); on failure the
+// optimistic echo is rolled back so a message that never left doesn't look
+// delivered or survive a restart.
+type sendResultMsg struct {
+	kind   string            // chatstore kind for agent DMs; "" for pipe sends
+	name   string            // window key
+	echoID string            // id of the optimistic echo tMsg (for rollback)
+	msg    chatstore.Message // outbound to persist on success
+	err    string
+}
 
 func waitForEvent(ch chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-ch }
@@ -231,11 +246,17 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = msg.scope + ": " + msg.err
 		return m, waitForEvent(m.events)
 
-	// --- results of a send Cmd (not from the channel) ---
-	case sendErrMsg:
-		m.toast = "send failed: " + msg.err
-		return m, nil
-	case sendOKMsg:
+	// --- result of a send Cmd (not from the channel) ---
+	case sendResultMsg:
+		if msg.err != "" {
+			m.toast = "send failed: " + msg.err
+			m.rollbackOutbound(msg.kind, msg.name, msg.echoID)
+			return m, nil
+		}
+		if msg.kind == chatstore.KindAgent && m.store != nil {
+			_, _ = m.store.Ingest(msg.kind, msg.name, msg.name, msg.msg)
+			m.persist() // durable now, not just on a clean quit
+		}
 		return m, nil
 
 	case tea.MouseMsg:
@@ -376,6 +397,7 @@ func (m *tuiModel) markRead() {
 	it.unread = 0
 	if m.store != nil {
 		_ = m.store.MarkRead(storeKind(it.kind), it.key)
+		m.persist()
 	}
 }
 
@@ -444,6 +466,7 @@ func (m *tuiModel) addPipe(name string) {
 	m.sel = len(m.agents) + len(m.pipes) - 1
 	if m.store != nil {
 		_ = m.store.AddPipe(name, name)
+		m.persist()
 	}
 	if !m.followed[name] {
 		m.followed[name] = true
@@ -474,6 +497,7 @@ func (m *tuiModel) removePipe(flatIdx int) {
 	delete(m.followed, name)
 	if m.store != nil {
 		_ = m.store.RemovePipe(name)
+		m.persist()
 	}
 	m.pipes = append(m.pipes[:j], m.pipes[j+1:]...)
 
@@ -501,29 +525,70 @@ func (m tuiModel) send() (tea.Model, tea.Cmd) {
 	}
 	it := m.flatPtr(m.sel)
 	m.chatTi.SetValue("")
-	if it.kind == kAgent {
-		// Outbound DMs go to <agent>.inbox, which we don't read back — so the
-		// store is the only record of them. (Pipe sends echo back via the
-		// follow and are stored in routePipe, so they're not echoed here.)
-		now := time.Now().UTC()
-		created := now.Format("2006-01-02T15:04:05Z")
-		if m.store != nil {
-			_, _ = m.store.Ingest(chatstore.KindAgent, it.key, it.key, chatstore.Message{
-				ID: "local-" + now.Format(time.RFC3339Nano), Dir: chatstore.DirOut,
-				Sender: m.me, Payload: text, CreatedAt: created,
-			})
-		}
-		it.msgs = append(it.msgs, tMsg{t: hm(created), sender: "you", text: text, you: true})
-	}
-	m.refreshViewport()
-	req := buildSend(it.key, text, m.session, m.me)
 	sock := m.sock
+	req := buildSend(it.key, text, m.session, m.me)
+
+	// Pipe sends aren't echoed or stored here — the follow echoes them back and
+	// routePipe records them. A failed pipe send just toasts.
+	if it.kind != kAgent {
+		return m, func() tea.Msg {
+			var reply cliproto.SendReply
+			if err := daemon.Call(sock, cliproto.IPCSend, req, &reply); err != nil {
+				return sendResultMsg{err: err.Error()}
+			}
+			return sendResultMsg{}
+		}
+	}
+
+	// Agent DM: echo optimistically for responsiveness, but persist only once
+	// the send is confirmed, and roll the echo back if it fails. The store is
+	// the sole record of outbound DMs (<agent>.inbox isn't read back), so a
+	// failed send must neither look delivered nor survive a restart.
+	now := time.Now().UTC()
+	out := chatstore.Message{
+		ID: "local-" + now.Format(time.RFC3339Nano), Dir: chatstore.DirOut,
+		Sender: m.me, Payload: text, CreatedAt: now.Format("2006-01-02T15:04:05Z"),
+	}
+	it.msgs = append(it.msgs, tMsg{id: out.ID, t: hm(out.CreatedAt), sender: "you", text: text, you: true})
+	m.refreshViewport()
+	name := it.key
 	return m, func() tea.Msg {
 		var reply cliproto.SendReply
 		if err := daemon.Call(sock, cliproto.IPCSend, req, &reply); err != nil {
-			return sendErrMsg{err.Error()}
+			return sendResultMsg{kind: chatstore.KindAgent, name: name, echoID: out.ID, err: err.Error()}
 		}
-		return sendOKMsg{}
+		return sendResultMsg{kind: chatstore.KindAgent, name: name, msg: out}
+	}
+}
+
+// rollbackOutbound removes an optimistic echo from its window after the send
+// failed (agent DMs only — pipe sends aren't echoed).
+func (m *tuiModel) rollbackOutbound(kind, name, echoID string) {
+	if kind != chatstore.KindAgent || echoID == "" {
+		return
+	}
+	for i := range m.agents {
+		if m.agents[i].key != name {
+			continue
+		}
+		a := &m.agents[i]
+		for j := range a.msgs {
+			if a.msgs[j].id == echoID {
+				a.msgs = append(a.msgs[:j], a.msgs[j+1:]...)
+				break
+			}
+		}
+		break
+	}
+	m.refreshViewport()
+}
+
+// persist flushes the store after an off-hot-path user action (open, send,
+// add/remove pipe) so read markers and outbound DMs survive a hard kill, not
+// just a clean quit. Inbound stays buffered — it re-hydrates from JetStream.
+func (m *tuiModel) persist() {
+	if m.store != nil {
+		_ = m.store.Flush()
 	}
 }
 
@@ -545,6 +610,9 @@ func (m *tuiModel) applyWho(entries []cliproto.WhoEntry) {
 // upsertAgent updates an existing agent row's status/state or appends a new
 // one. Appending shifts the flat indices of the pipe rows, so nudge the
 // selection when it was pointing at a pipe (keeps the highlighted row stable).
+// Rows are never pruned: a handle that ages out of the who reply keeps its last
+// status (who keeps returning it as offline until its cache entry drops), and a
+// DM's history should outlive the agent's presence anyway.
 func (m *tuiModel) upsertAgent(handle, status, state string) {
 	for i := range m.agents {
 		if m.agents[i].key == handle {
