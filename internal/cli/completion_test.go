@@ -147,6 +147,7 @@ func TestComplete_TopLevel_MatchesDispatchTable(t *testing.T) {
 	excluded := map[string]bool{
 		"__complete": true, // hidden — invoked by the shell hook itself
 		"completion": true, // one-shot setup verb
+		"tui":        true, // hidden alias for `chat`
 		"-h":         true, // shell-idiom flags, not ppz verbs
 		"--help":     true,
 		"help":       true,

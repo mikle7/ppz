@@ -79,6 +79,7 @@ func cmdCompletion(args []string) error {
 // touching this list fails CI.
 var topLevelVerbs = []string{
 	"agent",
+	"chat",
 	"command",
 	"daemon",
 	"diagnostics",

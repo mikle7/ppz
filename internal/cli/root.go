@@ -51,6 +51,9 @@ func Run(args []string) error {
 		return cmdDiagnostics(rest)
 	case "who":
 		return cmdWho(rest)
+	case "chat", "tui":
+		// `tui` is a hidden alias for the original verb name.
+		return cmdChat(rest)
 	case "set":
 		return cmdSet(rest)
 	case "unset":
