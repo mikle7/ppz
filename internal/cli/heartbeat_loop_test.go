@@ -138,9 +138,9 @@ func TestRunHeartbeat_TickProducesMoreBeats(t *testing.T) {
 	}
 }
 
-// PPZ_AGENT_HARNESS and PPZ_AGENT_MODEL come from the env reader at
-// beat time — so a beat reflects whatever the wrapper saw at startup
-// (no stale snapshot).
+// PPZ_AGENT_HARNESS, PPZ_AGENT_MODEL and PPZ_AGENT_PROJECT come from the
+// env reader at beat time — so a beat reflects whatever the wrapper saw
+// at startup (no stale snapshot).
 func TestRunHeartbeat_PicksUpHarnessFromEnv(t *testing.T) {
 	pub := newFakePublisher()
 	tick := make(chan time.Time, 1)
@@ -149,6 +149,7 @@ func TestRunHeartbeat_PicksUpHarnessFromEnv(t *testing.T) {
 	env := map[string]string{
 		"PPZ_AGENT_HARNESS": "claude",
 		"PPZ_AGENT_MODEL":   "opus",
+		"PPZ_AGENT_PROJECT": "pixel-studios",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -176,6 +177,9 @@ func TestRunHeartbeat_PicksUpHarnessFromEnv(t *testing.T) {
 	}
 	if p.Model != "opus" {
 		t.Errorf("model = %q, want opus", p.Model)
+	}
+	if p.Project != "pixel-studios" {
+		t.Errorf("project = %q, want pixel-studios", p.Project)
 	}
 }
 

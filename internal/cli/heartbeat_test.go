@@ -23,6 +23,7 @@ func TestBuildHeartbeatPayload_PopulatesAllFields(t *testing.T) {
 		PPZVersion:  "0.32.0",
 		StartedAt:   started,
 		IntervalSec: 60,
+		Project:     "pixel-studios",
 	}
 
 	got := buildHeartbeatPayload(in)
@@ -60,6 +61,9 @@ func TestBuildHeartbeatPayload_PopulatesAllFields(t *testing.T) {
 	if got.IntervalSec != 60 {
 		t.Errorf("interval_sec = %d, want 60", got.IntervalSec)
 	}
+	if got.Project != "pixel-studios" {
+		t.Errorf("project = %q, want pixel-studios", got.Project)
+	}
 }
 
 func TestBuildHeartbeatPayload_JSONShape(t *testing.T) {
@@ -89,7 +93,7 @@ func TestBuildHeartbeatPayload_JSONShape(t *testing.T) {
 	wantKeys := []string{
 		"agent_state", "arch", "child_pid", "harness", "harness_source",
 		"hostname", "interval_sec", "model",
-		"os", "pid", "ppz_version", "seq", "started_at", "ts",
+		"os", "pid", "ppz_version", "project", "seq", "started_at", "ts",
 	}
 	gotKeys := make([]string, 0, len(m))
 	for k := range m {
@@ -117,6 +121,7 @@ func TestBuildHeartbeatPayload_EmptyHarnessAndModel(t *testing.T) {
 		PPZVersion:  "0.0.0",
 		StartedAt:   time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
 		IntervalSec: 60,
+		Project:     "",
 	}
 	got := buildHeartbeatPayload(in)
 	if got.Harness != "" {
@@ -124,6 +129,9 @@ func TestBuildHeartbeatPayload_EmptyHarnessAndModel(t *testing.T) {
 	}
 	if got.Model != "" {
 		t.Errorf("model = %q, want empty", got.Model)
+	}
+	if got.Project != "" {
+		t.Errorf("project = %q, want empty", got.Project)
 	}
 
 	raw, _ := json.Marshal(got)
@@ -134,5 +142,8 @@ func TestBuildHeartbeatPayload_EmptyHarnessAndModel(t *testing.T) {
 	}
 	if _, ok := m["model"]; !ok {
 		t.Errorf("model key missing from JSON when empty")
+	}
+	if _, ok := m["project"]; !ok {
+		t.Errorf("project key missing from JSON when empty")
 	}
 }
