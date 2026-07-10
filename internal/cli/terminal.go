@@ -1145,6 +1145,13 @@ func attachStdinChunk(buf []byte) (forward []byte, detach bool) {
 	return buf, false
 }
 
+// attachStdinEmbedded is the --embedded counterpart: never detaches, and
+// strips every Ctrl-\ byte so a raw 0x1c never crosses the mesh (it'd be
+// SIGQUIT to the remote pty's foreground process). Everything else forwards.
+func attachStdinEmbedded(buf []byte) []byte {
+	return bytes.ReplaceAll(buf, []byte{attachDetachByte}, nil)
+}
+
 // cmdTerminalAttach: ppz terminal attach <handle>
 //
 // The bidirectional sibling of `terminal watch`. Watch renders <handle>.stdout
@@ -1162,10 +1169,24 @@ func attachStdinChunk(buf []byte) (forward []byte, detach bool) {
 // (sendStreamBatch) only if paste throughput ever becomes a problem. Multiple
 // concurrent attachers to one handle is a real design question, deferred past v1.
 func cmdTerminalAttach(args []string) error {
-	if len(args) != 1 {
+	// --embedded: persistent-proxy mode (muster's sidebar). Ctrl-\ no longer
+	// detaches — it's swallowed so the connection can't be broken by a
+	// keystroke — and the raw byte is stripped so it never reaches the remote
+	// pty as SIGQUIT. Detach/exit in this mode is the caller's job (kill the
+	// session), not a key.
+	embedded := false
+	var rest []string
+	for _, a := range args {
+		if a == "--embedded" {
+			embedded = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	if len(rest) != 1 {
 		usageExit("terminal attach")
 	}
-	handle := args[0]
+	handle := rest[0]
 	if handle == "" || strings.Contains(handle, ".") {
 		// attach takes a bare handle — channels are implicit.
 		return cliproto.New(cliproto.EInvalidHandle)
@@ -1241,13 +1262,19 @@ func cmdTerminalAttach(args []string) error {
 			}
 			n, err := stdin.Read(buf)
 			if n > 0 {
-				fwd, detach := attachStdinChunk(buf[:n])
-				if len(fwd) > 0 {
-					_ = sendStreamLine(handle, "stdin", string(fwd))
-				}
-				if detach {
-					cancel()
-					return
+				if embedded {
+					if fwd := attachStdinEmbedded(buf[:n]); len(fwd) > 0 {
+						_ = sendStreamLine(handle, "stdin", string(fwd))
+					}
+				} else {
+					fwd, detach := attachStdinChunk(buf[:n])
+					if len(fwd) > 0 {
+						_ = sendStreamLine(handle, "stdin", string(fwd))
+					}
+					if detach {
+						cancel()
+						return
+					}
 				}
 			}
 			if err != nil {

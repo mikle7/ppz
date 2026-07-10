@@ -28,6 +28,25 @@ func TestAttachStdinChunk(t *testing.T) {
 	}
 }
 
+// --embedded (persistent proxy) mode: never detaches, strips every Ctrl-\ so a
+// raw 0x1c can't reach the remote as SIGQUIT, forwards everything else.
+func TestAttachStdinEmbedded(t *testing.T) {
+	cc := string(rune(attachDetachByte))
+	cases := []struct{ in, want string }{
+		{"ls -la\n", "ls -la\n"},   // plain bytes untouched
+		{"\x03", "\x03"},           // Ctrl-C still passes through
+		{"ab" + cc + "cd", "abcd"}, // Ctrl-\ stripped, rest forwarded (not dropped)
+		{cc, ""},                   // lone Ctrl-\ -> nothing to forward
+		{cc + cc, ""},              // multiple stripped
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := string(attachStdinEmbedded([]byte(c.in))); got != c.want {
+			t.Errorf("attachStdinEmbedded(%q) = %q; want %q", c.in, got, c.want)
+		}
+	}
+}
+
 // Guards the self-attach footgun (wren's repro): attaching to your own handle
 // loops stdout into stdin. The empty-self case is the important edge — a bare
 // shell with no PPZ_SESSION must NOT be blocked from a legitimate attach.

@@ -330,9 +330,11 @@ Run CMD (or $SHELL) in a pty bound to handle H — bidirectional: H.stdout is pu
 
 Follow H.stdout live in an alt-screen TUI. Interactive — for scripted/agent use prefer 'ppz terminal read H' (a one-shot render).`,
 
-	"terminal attach": `usage: ppz terminal attach H
+	"terminal attach": `usage: ppz terminal attach H [--embedded]
 
-Like 'terminal watch' but bidirectional: local keystrokes are forwarded raw to H.stdin and local terminal resizes to H.stdctrl, so you drive the wrapped session over the mesh from anywhere. Ctrl-C passes through to the remote (interrupts a running command); Ctrl-\ detaches. Requires H to be a live 'terminal share'.`,
+Like 'terminal watch' but bidirectional: local keystrokes are forwarded raw to H.stdin and local terminal resizes to H.stdctrl, so you drive the wrapped session over the mesh from anywhere. Ctrl-C passes through to the remote (interrupts a running command); Ctrl-\ detaches. Requires H to be a live 'terminal share'.
+
+--embedded: persistent-proxy mode (for hosts like muster that keep an attach alive in the background). Ctrl-\ no longer detaches — it's swallowed, and the raw byte is stripped so it never reaches the remote as SIGQUIT. The connection can't be broken by a keystroke; exiting is the host's job (kill the session).`,
 
 	"terminal read": `usage: ppz terminal read H [reread-flags]
 
