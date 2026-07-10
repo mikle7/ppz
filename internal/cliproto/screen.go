@@ -77,6 +77,52 @@ func splitTrailingPartialRune(b []byte) (complete, partial []byte) {
 	return b, nil
 }
 
+// InputModeReassertSeq returns an escape sequence that re-establishes the
+// wrapped program's current input-affecting private modes — mouse reporting
+// (X10/button/motion/any + SGR extended coords), focus events, and
+// application-cursor keys — on a freshly-connected viewer. Returns "" when
+// none of those modes is set.
+//
+// Why it exists: a viewer that joins mid-session (ppz terminal attach/watch)
+// only replays whatever's still in JetStream retention. On a long-running
+// agent, the program's original mode-enable sequences (emitted once at
+// startup) have long since aged out of the ring, so the viewer's local
+// terminal never learns the program wants mouse/focus input — wheel scrolls
+// and clicks are swallowed as local scrollback instead of being forwarded
+// (mikle7/muster#17). The source, which sees every byte, always knows the
+// live mode state; re-emitting it to .stdout on connect closes the gap. All
+// sequences are idempotent, so re-asserting to viewers already in sync is
+// harmless.
+func (s *LiveScreen) InputModeReassertSeq() string {
+	s.mu.Lock()
+	m := s.term.Mode()
+	s.mu.Unlock()
+
+	var b strings.Builder
+	if m&vt10x.ModeMouseX10 != 0 {
+		b.WriteString("\x1b[?9h")
+	}
+	if m&vt10x.ModeMouseButton != 0 {
+		b.WriteString("\x1b[?1000h")
+	}
+	if m&vt10x.ModeMouseMotion != 0 {
+		b.WriteString("\x1b[?1002h")
+	}
+	if m&vt10x.ModeMouseMany != 0 {
+		b.WriteString("\x1b[?1003h")
+	}
+	if m&vt10x.ModeMouseSgr != 0 {
+		b.WriteString("\x1b[?1006h")
+	}
+	if m&vt10x.ModeFocus != 0 {
+		b.WriteString("\x1b[?1004h")
+	}
+	if m&vt10x.ModeAppCursor != 0 {
+		b.WriteString("\x1b[?1h")
+	}
+	return b.String()
+}
+
 // Resize changes the grid size (wrapper calls this on SIGWINCH,
 // mirroring the size it propagates to the child PTY).
 func (s *LiveScreen) Resize(cols, rows int) {

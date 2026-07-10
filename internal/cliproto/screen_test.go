@@ -74,6 +74,43 @@ func TestLiveScreen_CarriesPartialUTF8AcrossWrites(t *testing.T) {
 	}
 }
 
+// InputModeReassertSeq mirrors the wrapped program's live input-mode
+// state so a late-joining viewer (whose retention replay may have lost
+// the original enable sequences) re-enters mouse/focus/app-cursor mode
+// and forwards wheel/click input (mikle7/muster#17). Empty when no such
+// mode is set; each set mode contributes its idempotent enable sequence;
+// a later reset clears it.
+func TestLiveScreen_InputModeReassertSeq(t *testing.T) {
+	s := NewLiveScreen(80, 24)
+	if got := s.InputModeReassertSeq(); got != "" {
+		t.Fatalf("fresh screen: got %q, want \"\"", got)
+	}
+
+	// claude's typical enable: SGR-extended button+motion mouse reporting.
+	_, _ = s.Write([]byte("\x1b[?1002h\x1b[?1006h"))
+	got := s.InputModeReassertSeq()
+	for _, want := range []string{"\x1b[?1002h", "\x1b[?1006h"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("after mouse enable: %q missing %q", got, want)
+		}
+	}
+
+	// Focus + application-cursor keys also round-trip.
+	_, _ = s.Write([]byte("\x1b[?1004h\x1b[?1h"))
+	got = s.InputModeReassertSeq()
+	for _, want := range []string{"\x1b[?1004h", "\x1b[?1h"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("after focus/app-cursor enable: %q missing %q", got, want)
+		}
+	}
+
+	// Disabling mouse reporting drops it from the reassert.
+	_, _ = s.Write([]byte("\x1b[?1002l\x1b[?1006l"))
+	if got := s.InputModeReassertSeq(); strings.Contains(got, "\x1b[?1002h") || strings.Contains(got, "\x1b[?1006h") {
+		t.Errorf("after mouse disable: %q still asserts mouse", got)
+	}
+}
+
 // Text uses RenderTerminal's exact trim semantics so the two paths
 // stay interchangeable: per-row trailing whitespace stripped, trailing
 // blank rows dropped, single trailing newline, empty screen → "".
