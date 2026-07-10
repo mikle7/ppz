@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -67,8 +68,9 @@ var (
 type tKind int
 
 const (
-	kAgent tKind = iota
-	kPipe
+	kAgent  tKind = iota // pty source: live terminal/harness, heartbeats, DM
+	kSource              // message source: a bare inbox (human/service), DM
+	kPipe                // uncollared pipe: shared room
 )
 
 type tFocus int
@@ -107,8 +109,18 @@ type tuiModel struct {
 	events  chan tea.Msg
 	ctx     context.Context
 
-	agents   []tItem
-	pipes    []tItem
+	agents  []tItem // pty sources (from who + inbound); menu section AGENTS
+	sources []tItem // message sources (from the source list); menu section INBOXES
+	pipes   []tItem // uncollared pipes; menu section PIPES
+
+	// sourceSet classifies which handles are message-kind sources, so an
+	// inbound DM is routed to INBOXES vs AGENTS by its sender's kind.
+	sourceSet map[string]bool
+	// sourcesLoaded flips true on the first source list; until then the INBOXES
+	// header shows a loading spinner (they load asynchronously).
+	sourcesLoaded bool
+	spin          spinner.Model
+
 	followed    map[string]bool               // pipe targets we already hold a follow on
 	pipeCancels map[string]context.CancelFunc // stops a pipe's follow when it's removed
 
@@ -146,28 +158,42 @@ func newTUIModel(me, session, sock string, events chan tea.Msg, ctx context.Cont
 	add.Prompt = "add pipe › "
 	add.CharLimit = 128
 
+	sp := spinner.New()
+	sp.Spinner = spinner.Spinner{Frames: []string{"◰", "◳", "◲", "◱"}, FPS: time.Second / 8}
+	sp.Style = lipgloss.NewStyle().Foreground(tcDim)
+
 	return tuiModel{
 		me: me, session: session, sock: sock, events: events, ctx: ctx,
+		sourceSet: map[string]bool{}, spin: sp,
 		followed: map[string]bool{}, pipeCancels: map[string]context.CancelFunc{},
 		chatTi: ti, addTi: add,
 		vp: viewport.New(1, 1),
 	}
 }
 
-func (m tuiModel) count() int { return len(m.agents) + len(m.pipes) }
+func (m tuiModel) count() int { return len(m.agents) + len(m.sources) + len(m.pipes) }
 
+// flat index runs AGENTS ++ INBOXES(sources) ++ PIPES.
 func (m tuiModel) flatItem(i int) tItem {
 	if i < len(m.agents) {
 		return m.agents[i]
 	}
-	return m.pipes[i-len(m.agents)]
+	i -= len(m.agents)
+	if i < len(m.sources) {
+		return m.sources[i]
+	}
+	return m.pipes[i-len(m.sources)]
 }
 
 func (m *tuiModel) flatPtr(i int) *tItem {
 	if i < len(m.agents) {
 		return &m.agents[i]
 	}
-	return &m.pipes[i-len(m.agents)]
+	i -= len(m.agents)
+	if i < len(m.sources) {
+		return &m.sources[i]
+	}
+	return &m.pipes[i-len(m.sources)]
 }
 
 func (m tuiModel) isSelected(flatIdx int) bool { return flatIdx == m.sel }
@@ -191,6 +217,7 @@ type pipeInMsg struct {
 	pipe string
 	m    cliproto.ReadMessage
 }
+type sourcesMsg struct{ sources []cliproto.Source }
 type streamErrMsg struct{ scope, err string }
 
 // sendResultMsg carries an async send's outcome back to Update. On success an
@@ -209,7 +236,7 @@ func waitForEvent(ch chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-ch }
 }
 
-func (m tuiModel) Init() tea.Cmd { return waitForEvent(m.events) }
+func (m tuiModel) Init() tea.Cmd { return tea.Batch(waitForEvent(m.events), m.spin.Tick) }
 
 // ---- update ----------------------------------------------------------------
 
@@ -242,6 +269,18 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.routePipe(msg.pipe, msg.m)
 		m.refreshViewport()
 		return m, waitForEvent(m.events)
+	case sourcesMsg:
+		m.applySources(msg.sources)
+		m.sourcesLoaded = true // stops the INBOXES loading spinner
+		m.refreshViewport()
+		return m, waitForEvent(m.events)
+	case spinner.TickMsg:
+		if m.sourcesLoaded {
+			return m, nil // done loading — let the spinner rest
+		}
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
 	case streamErrMsg:
 		m.toast = msg.scope + ": " + msg.err
 		return m, waitForEvent(m.events)
@@ -253,7 +292,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rollbackOutbound(msg.kind, msg.name, msg.echoID)
 			return m, nil
 		}
-		if msg.kind == chatstore.KindAgent && m.store != nil {
+		if (msg.kind == chatstore.KindAgent || msg.kind == chatstore.KindSource) && m.store != nil {
 			_, _ = m.store.Ingest(msg.kind, msg.name, msg.name, msg.msg)
 			m.persist() // durable now, not just on a clean quit
 		}
@@ -349,7 +388,7 @@ func (m tuiModel) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.startAdd()
 		return m, textinput.Blink
 	case "-":
-		if m.count() > 0 && m.sel >= len(m.agents) {
+		if m.count() > 0 && m.sel >= len(m.agents)+len(m.sources) {
 			m.removePipe(m.sel)
 		} else {
 			m.toast = "only pipes can be removed"
@@ -402,10 +441,115 @@ func (m *tuiModel) markRead() {
 }
 
 func storeKind(k tKind) string {
-	if k == kPipe {
+	switch k {
+	case kPipe:
 		return chatstore.KindPipe
+	case kSource:
+		return chatstore.KindSource
+	default:
+		return chatstore.KindAgent
 	}
-	return chatstore.KindAgent
+}
+
+// applySources populates the INBOXES section from the source list: message-kind
+// sources (excluding self) become DM windows, and sourceSet records them so
+// inbound DMs from a message source route to INBOXES instead of AGENTS.
+func (m *tuiModel) applySources(srcs []cliproto.Source) {
+	for _, s := range srcs {
+		if s.Kind != string(cliproto.KindMessage) || s.Handle == m.me {
+			continue
+		}
+		m.sourceSet[s.Handle] = true
+		m.upsertSource(s.Handle)
+	}
+}
+
+// upsertSource ensures a message source has an INBOXES window. If a DM from it
+// already landed in AGENTS (it arrived before we knew its kind), migrate that
+// history into the source window.
+func (m *tuiModel) upsertSource(handle string) {
+	agentIdx, srcIdx := -1, -1
+	for i := range m.agents {
+		if m.agents[i].key == handle {
+			agentIdx = i
+			break
+		}
+	}
+	for i := range m.sources {
+		if m.sources[i].key == handle {
+			srcIdx = i
+			break
+		}
+	}
+	if agentIdx == -1 && srcIdx != -1 {
+		return // already a source, nothing stray to fold in
+	}
+
+	// Fold any stray AGENTS window (a DM that arrived before classification)
+	// into the source window in the STORE too, not just the model — otherwise a
+	// restart rebuilds two windows for one counterparty.
+	if m.store != nil && agentIdx != -1 {
+		_ = m.store.Migrate(chatstore.KindAgent, chatstore.KindSource, handle)
+		m.persist()
+	}
+
+	// Build the source item. Prefer the store (authoritative, merged, sorted);
+	// fall back to the migrated agent item when there's no store.
+	it := tItem{kind: kSource, key: handle, label: handle}
+	if m.store != nil {
+		msgs, _ := m.store.Messages(chatstore.KindSource, handle)
+		for _, sm := range msgs {
+			it.msgs = append(it.msgs, toTMsg(sm))
+		}
+		it.unread, _ = m.store.Unread(chatstore.KindSource, handle)
+	} else if agentIdx != -1 {
+		it.msgs, it.unread = m.agents[agentIdx].msgs, m.agents[agentIdx].unread
+	}
+
+	selKey, hadSel := m.selectedKey()
+	if agentIdx != -1 {
+		m.agents = append(m.agents[:agentIdx], m.agents[agentIdx+1:]...)
+	}
+	if srcIdx != -1 {
+		m.sources[srcIdx] = it
+	} else {
+		m.sources = append(m.sources, it)
+	}
+	// Keep the highlight on the same logical row across the reshuffle (the
+	// migrated handle follows its move from AGENTS to INBOXES).
+	if hadSel {
+		m.reselectByKey(selKey)
+	} else {
+		m.clampSel()
+	}
+}
+
+// selectedKey returns the key of the currently-selected row (for preserving the
+// selection across a section reshuffle).
+func (m tuiModel) selectedKey() (string, bool) {
+	if m.count() == 0 {
+		return "", false
+	}
+	return m.flatItem(m.sel).key, true
+}
+
+func (m *tuiModel) reselectByKey(key string) {
+	for i := 0; i < m.count(); i++ {
+		if m.flatItem(i).key == key {
+			m.sel = i
+			return
+		}
+	}
+	m.clampSel()
+}
+
+func (m *tuiModel) clampSel() {
+	if n := m.count(); m.sel > n-1 {
+		m.sel = n - 1
+	}
+	if m.sel < 0 {
+		m.sel = 0
+	}
 }
 
 func toTMsg(sm chatstore.Message) tMsg {
@@ -435,7 +579,8 @@ func (m *tuiModel) hydrate() {
 		for _, sm := range msgs {
 			it.msgs = append(it.msgs, toTMsg(sm))
 		}
-		if w.Kind == chatstore.KindPipe {
+		switch w.Kind {
+		case chatstore.KindPipe:
 			it.kind = kPipe
 			m.pipes = append(m.pipes, it)
 			if !m.followed[w.Name] {
@@ -446,7 +591,11 @@ func (m *tuiModel) hydrate() {
 				go streamRead(pctx, m.sock, buildFollowReq(name, m.session),
 					func(rm cliproto.ReadMessage) tea.Msg { return pipeInMsg{name, rm} }, m.events)
 			}
-		} else {
+		case chatstore.KindSource:
+			it.kind = kSource
+			m.sourceSet[w.Name] = true
+			m.sources = append(m.sources, it)
+		default:
 			it.kind = kAgent
 			m.agents = append(m.agents, it)
 		}
@@ -458,12 +607,12 @@ func (m *tuiModel) hydrate() {
 func (m *tuiModel) addPipe(name string) {
 	for j := range m.pipes {
 		if m.pipes[j].key == name {
-			m.sel = len(m.agents) + j
+			m.sel = len(m.agents) + len(m.sources) + j
 			return
 		}
 	}
 	m.pipes = append(m.pipes, tItem{kind: kPipe, key: name, label: name})
-	m.sel = len(m.agents) + len(m.pipes) - 1
+	m.sel = len(m.agents) + len(m.sources) + len(m.pipes) - 1
 	if m.store != nil {
 		_ = m.store.AddPipe(name, name)
 		m.persist()
@@ -482,10 +631,7 @@ func (m *tuiModel) addPipe(name string) {
 // follow stream, and keeps the selection in range. No-op for agent rows
 // (agents come from who/DMs and can't be removed).
 func (m *tuiModel) removePipe(flatIdx int) {
-	if flatIdx < len(m.agents) {
-		return
-	}
-	j := flatIdx - len(m.agents)
+	j := flatIdx - len(m.agents) - len(m.sources)
 	if j < 0 || j >= len(m.pipes) {
 		return
 	}
@@ -530,7 +676,7 @@ func (m tuiModel) send() (tea.Model, tea.Cmd) {
 
 	// Pipe sends aren't echoed or stored here — the follow echoes them back and
 	// routePipe records them. A failed pipe send just toasts.
-	if it.kind != kAgent {
+	if it.kind == kPipe {
 		return m, func() tea.Msg {
 			var reply cliproto.SendReply
 			if err := daemon.Call(sock, cliproto.IPCSend, req, &reply); err != nil {
@@ -540,10 +686,12 @@ func (m tuiModel) send() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Agent DM: echo optimistically for responsiveness, but persist only once
-	// the send is confirmed, and roll the echo back if it fails. The store is
-	// the sole record of outbound DMs (<agent>.inbox isn't read back), so a
-	// failed send must neither look delivered nor survive a restart.
+	// DM (agent OR message source): echo optimistically, but persist only once
+	// the send is confirmed and roll the echo back if it fails. The store is the
+	// sole record of outbound DMs (<handle>.inbox isn't read back — the reply
+	// returns on our own inbox), so a failed send must neither look delivered
+	// nor survive a restart.
+	kind := storeKind(it.kind)
 	now := time.Now().UTC()
 	out := chatstore.Message{
 		ID: "local-" + now.Format(time.RFC3339Nano), Dir: chatstore.DirOut,
@@ -555,23 +703,32 @@ func (m tuiModel) send() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		var reply cliproto.SendReply
 		if err := daemon.Call(sock, cliproto.IPCSend, req, &reply); err != nil {
-			return sendResultMsg{kind: chatstore.KindAgent, name: name, echoID: out.ID, err: err.Error()}
+			return sendResultMsg{kind: kind, name: name, echoID: out.ID, err: err.Error()}
 		}
-		return sendResultMsg{kind: chatstore.KindAgent, name: name, msg: out}
+		return sendResultMsg{kind: kind, name: name, msg: out}
 	}
 }
 
-// rollbackOutbound removes an optimistic echo from its window after the send
-// failed (agent DMs only — pipe sends aren't echoed).
+// rollbackOutbound removes an optimistic echo from its DM window after the send
+// failed (agent or source DMs — pipe sends aren't echoed).
 func (m *tuiModel) rollbackOutbound(kind, name, echoID string) {
-	if kind != chatstore.KindAgent || echoID == "" {
+	if echoID == "" {
 		return
 	}
-	for i := range m.agents {
-		if m.agents[i].key != name {
+	var slice []tItem
+	switch kind {
+	case chatstore.KindAgent:
+		slice = m.agents
+	case chatstore.KindSource:
+		slice = m.sources
+	default:
+		return
+	}
+	for i := range slice {
+		if slice[i].key != name {
 			continue
 		}
-		a := &m.agents[i]
+		a := &slice[i]
 		for j := range a.msgs {
 			if a.msgs[j].id == echoID {
 				a.msgs = append(a.msgs[:j], a.msgs[j+1:]...)
@@ -623,7 +780,7 @@ func (m *tuiModel) upsertAgent(handle, status, state string) {
 	}
 	oldLen := len(m.agents)
 	m.agents = append(m.agents, tItem{kind: kAgent, key: handle, label: handle, status: status, state: state})
-	if len(m.pipes) > 0 && m.sel >= oldLen {
+	if m.sel >= oldLen && (len(m.sources)+len(m.pipes)) > 0 {
 		m.sel++
 	}
 }
@@ -636,8 +793,14 @@ func (m *tuiModel) routeInbound(rm cliproto.ReadMessage) {
 	if sender == "" {
 		sender = "(unknown)"
 	}
+	// A DM from a known message source belongs in INBOXES; everyone else
+	// (agents, and unclassified senders) defaults to AGENTS.
+	kind := kAgent
+	if m.sourceSet[sender] {
+		kind = kSource
+	}
 	if m.store != nil {
-		added, _ := m.store.Ingest(chatstore.KindAgent, sender, sender, chatstore.Message{
+		added, _ := m.store.Ingest(storeKind(kind), sender, sender, chatstore.Message{
 			ID: rm.ID, Dir: chatstore.DirIn, Sender: sender,
 			Subject: rm.Subject, Payload: rm.Payload, CreatedAt: rm.CreatedAt,
 		})
@@ -645,26 +808,50 @@ func (m *tuiModel) routeInbound(rm cliproto.ReadMessage) {
 			return // already stored (e.g. a follow replay) → don't duplicate in the model
 		}
 	}
-	idx := -1
-	for i := range m.agents {
-		if m.agents[i].key == sender {
-			idx = i
-			break
-		}
+	it := m.upsertDM(kind, sender)
+	it.msgs = append(it.msgs, tMsg{t: hm(rm.CreatedAt), sender: sender, text: rm.Payload})
+	if !(m.dmSelected(kind, sender) && m.focus == fChat) {
+		it.unread++
 	}
-	if idx == -1 {
-		oldLen := len(m.agents)
-		m.agents = append(m.agents, tItem{kind: kAgent, key: sender, label: sender})
-		if len(m.pipes) > 0 && m.sel >= oldLen {
+}
+
+// upsertDM returns the DM window for (kind, name) — agent or source — creating
+// it (and nudging the selection past the insert) if absent.
+func (m *tuiModel) upsertDM(kind tKind, name string) *tItem {
+	if kind == kSource {
+		for i := range m.sources {
+			if m.sources[i].key == name {
+				return &m.sources[i]
+			}
+		}
+		insertPos := len(m.agents) + len(m.sources)
+		m.sources = append(m.sources, tItem{kind: kSource, key: name, label: name})
+		if m.sel >= insertPos && len(m.pipes) > 0 {
 			m.sel++
 		}
-		idx = len(m.agents) - 1
+		return &m.sources[len(m.sources)-1]
 	}
-	a := &m.agents[idx]
-	a.msgs = append(a.msgs, tMsg{t: hm(rm.CreatedAt), sender: sender, text: rm.Payload})
-	if !(m.isSelected(idx) && m.focus == fChat) {
-		a.unread++
+	for i := range m.agents {
+		if m.agents[i].key == name {
+			return &m.agents[i]
+		}
 	}
+	oldLen := len(m.agents)
+	m.agents = append(m.agents, tItem{kind: kAgent, key: name, label: name})
+	if m.sel >= oldLen && (len(m.sources)+len(m.pipes)) > 0 {
+		m.sel++
+	}
+	return &m.agents[len(m.agents)-1]
+}
+
+// dmSelected reports whether the (kind, name) window is the one currently open
+// and focused (so its incoming messages don't bump unread).
+func (m tuiModel) dmSelected(kind tKind, name string) bool {
+	if m.count() == 0 {
+		return false
+	}
+	it := m.flatItem(m.sel)
+	return it.kind == kind && it.key == name
 }
 
 func (m *tuiModel) routePipe(pipe string, rm cliproto.ReadMessage) {
@@ -700,16 +887,24 @@ func (m *tuiModel) routePipe(pipe string, rm cliproto.ReadMessage) {
 
 // ---- mouse hit-testing (mirrors renderMenu's layout) -----------------------
 
+// itemAtY mirrors renderMenu's layout across three sections. Screen rows:
+// title(0) box-top(1) "AGENTS"(2) agents(3..) blank "INBOXES" sources blank
+// "PIPES" pipes blank "[+ add pipe]". A=agents, S=sources, P=pipes.
 func (m tuiModel) itemAtY(y, x int) int {
 	if x >= m.menuW() {
 		return -1
 	}
-	if y >= 3 && y < 3+len(m.agents) {
+	a, s := len(m.agents), len(m.sources)
+	if y >= 3 && y < 3+a {
 		return y - 3
 	}
-	pstart := 5 + len(m.agents)
-	if y >= pstart && y < pstart+len(m.pipes) {
-		return len(m.agents) + (y - pstart)
+	ss := 5 + a // first source row
+	if y >= ss && y < ss+s {
+		return a + (y - ss)
+	}
+	ps := 7 + a + s // first pipe row
+	if y >= ps && y < ps+len(m.pipes) {
+		return a + s + (y - ps)
 	}
 	return -1
 }
@@ -718,7 +913,7 @@ func (m tuiModel) isAddY(y, x int) bool {
 	if x >= m.menuW() {
 		return false
 	}
-	return y == 6+len(m.agents)+len(m.pipes)
+	return y == 8+len(m.agents)+len(m.sources)+len(m.pipes)
 }
 
 // ---- view ------------------------------------------------------------------
@@ -742,9 +937,17 @@ func (m tuiModel) renderMenu(w, h int) string {
 	for i, a := range m.agents {
 		lines = append(lines, m.renderRow(a, i, inner))
 	}
+	inboxHeader := tSectionHeader("INBOXES")
+	if !m.sourcesLoaded {
+		inboxHeader += " " + m.spin.View() // loading square while the source list fetches
+	}
+	lines = append(lines, "", inboxHeader)
+	for j, s := range m.sources {
+		lines = append(lines, m.renderRow(s, len(m.agents)+j, inner))
+	}
 	lines = append(lines, "", tSectionHeader("PIPES"))
-	for j, p := range m.pipes {
-		lines = append(lines, m.renderRow(p, len(m.agents)+j, inner))
+	for k, p := range m.pipes {
+		lines = append(lines, m.renderRow(p, len(m.agents)+len(m.sources)+k, inner))
 	}
 	lines = append(lines, "", m.addRow())
 	box := lipgloss.NewStyle().
@@ -773,9 +976,12 @@ func (m tuiModel) renderRow(it tItem, flatIdx, w int) string {
 	}
 
 	var icon string
-	if it.kind == kAgent {
+	switch it.kind {
+	case kAgent:
 		icon = tStatusDot(it.status)
-	} else {
+	case kSource:
+		icon = lipgloss.NewStyle().Foreground(tcDim).Render("@")
+	default:
 		icon = lipgloss.NewStyle().Foreground(tcDim).Render("#")
 	}
 	count := ""
@@ -789,8 +995,11 @@ func (m tuiModel) renderRow(it tItem, flatIdx, w int) string {
 // statusGlyph is the uncoloured status marker, for rows that carry their own
 // emphasis (the reverse-video selected row) instead of a coloured dot.
 func statusGlyph(it tItem) string {
-	if it.kind == kPipe {
+	switch it.kind {
+	case kPipe:
 		return "#"
+	case kSource:
+		return "@"
 	}
 	switch it.status {
 	case "online":
@@ -1001,7 +1210,8 @@ func tStatusDot(status string) string {
 }
 
 func tChatTitle(it tItem) string {
-	if it.kind == kAgent {
+	switch it.kind {
+	case kAgent:
 		st := it.status
 		if st == "" {
 			st = "—"
@@ -1010,6 +1220,8 @@ func tChatTitle(it tItem) string {
 			st += "|" + it.state
 		}
 		return fmt.Sprintf("%s · dm · %s", it.label, st)
+	case kSource:
+		return fmt.Sprintf("%s · dm · inbox", it.label)
 	}
 	return fmt.Sprintf("#%s · pipe (uncollared)", it.label)
 }
@@ -1074,6 +1286,30 @@ func whoPoller(ctx context.Context, sock string, ch chan tea.Msg) {
 	}
 	poll()
 	t := time.NewTicker(2500 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			poll()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// sourcePoller refreshes the INBOXES section: it lists sources (same call as
+// `ppz ls`) and pushes the message-kind ones. Slower cadence than who — sources
+// change rarely (created/destroyed), not every heartbeat.
+func sourcePoller(ctx context.Context, sock, session string, ch chan tea.Msg) {
+	poll := func() {
+		var lr cliproto.ListReply
+		if err := daemon.Call(sock, cliproto.IPCList, cliproto.ListRequest{Session: session}, &lr); err != nil {
+			return
+		}
+		emit(ctx, ch, sourcesMsg{lr.Sources})
+	}
+	poll()
+	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -1214,6 +1450,7 @@ func cmdChat(args []string) error {
 	events := make(chan tea.Msg, 256)
 
 	go whoPoller(ctx, sock, events)
+	go sourcePoller(ctx, sock, session, events)
 	go streamRead(ctx, sock,
 		cliproto.ReadRequest{Handle: me, Channel: "inbox", Follow: true, Session: session, Sender: me},
 		func(rm cliproto.ReadMessage) tea.Msg { return inboundMsg{rm} }, events)
@@ -1227,6 +1464,11 @@ func cmdChat(args []string) error {
 	m := newTUIModel(me, session, sock, events, ctx)
 	m.store = store
 	m.hydrate() // render history + read state immediately; the follow reconciles
+
+	// INBOXES load asynchronously via sourcePoller (started above) so the UI
+	// paints immediately rather than blocking on a server round-trip. A source
+	// DM that arrives before the first source list lands is routed to AGENTS and
+	// migrated to INBOXES on classification (see upsertSource).
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err = p.Run()

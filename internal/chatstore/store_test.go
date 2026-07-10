@@ -146,3 +146,45 @@ func hasWindow(t *testing.T, s *Store, kind, name string) bool {
 	}
 	return false
 }
+
+// Migrate re-keys an agent window to a source window when there's no existing
+// target: the message moves, the old kind is gone, and it survives a reopen.
+func TestMigrate_RekeysWindow(t *testing.T) {
+	home := t.TempDir()
+	s, _ := Open(home, "james")
+	s.Ingest(KindAgent, "laurent", "laurent", msg("a", "in", "laurent", "hi", "2026-07-10T09:00:00Z"))
+	if err := s.Migrate(KindAgent, KindSource, "laurent"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Messages(KindAgent, "laurent"); len(got) != 0 {
+		t.Errorf("agent window should be gone after migrate, got %d msgs", len(got))
+	}
+	if got, _ := s.Messages(KindSource, "laurent"); len(got) != 1 {
+		t.Fatalf("source window should hold the migrated message, got %d", len(got))
+	}
+	s.Flush()
+	s2, _ := Open(home, "james")
+	if got, _ := s2.Messages(KindAgent, "laurent"); len(got) != 0 {
+		t.Errorf("reopen: stray agent window persisted, %d msgs", len(got))
+	}
+	if got, _ := s2.Messages(KindSource, "laurent"); len(got) != 1 {
+		t.Errorf("reopen: source window missing, %d msgs", len(got))
+	}
+}
+
+// Migrate merges into an existing target window (dedup by id), removing the old.
+func TestMigrate_MergesIntoExisting(t *testing.T) {
+	s, _ := Open(t.TempDir(), "james")
+	s.Ingest(KindAgent, "laurent", "laurent", msg("a", "in", "laurent", "before", "2026-07-10T09:00:00Z"))
+	s.Ingest(KindSource, "laurent", "laurent", msg("b", "in", "laurent", "after", "2026-07-10T09:02:00Z"))
+	if err := s.Migrate(KindAgent, KindSource, "laurent"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Messages(KindAgent, "laurent"); len(got) != 0 {
+		t.Errorf("agent window not removed after merge, %d msgs", len(got))
+	}
+	got, _ := s.Messages(KindSource, "laurent")
+	if len(got) != 2 {
+		t.Fatalf("merged source should hold both messages, got %d", len(got))
+	}
+}
