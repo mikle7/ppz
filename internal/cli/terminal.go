@@ -435,7 +435,7 @@ func cmdTerminalShare(args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		forwardResize(ctx, handle, ptmx)
+		forwardResize(ctx, handle, ptmx, screen)
 	}()
 
 	wg.Add(1)
@@ -753,12 +753,12 @@ func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer
 // publishes via publishWinsize), so there's no feedback loop; only
 // viewer-sent "setsize" messages take effect. Resizing the child PTY
 // raises SIGWINCH inside it, so the wrapped program re-renders.
-func forwardResize(ctx context.Context, handle string, ptmx *os.File) {
+func forwardResize(ctx context.Context, handle string, ptmx *os.File, screen *cliproto.LiveScreen) {
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		streamForwardResizeOnce(ctx, handle, ptmx)
+		streamForwardResizeOnce(ctx, handle, ptmx, screen)
 		if ctx.Err() != nil {
 			return
 		}
@@ -770,7 +770,7 @@ func forwardResize(ctx context.Context, handle string, ptmx *os.File) {
 	}
 }
 
-func streamForwardResizeOnce(ctx context.Context, handle string, ptmx *os.File) {
+func streamForwardResizeOnce(ctx context.Context, handle string, ptmx *os.File, screen *cliproto.LiveScreen) {
 	conn, err := net.Dial("unix", ipcSocket())
 	if err != nil {
 		return
@@ -810,7 +810,24 @@ func streamForwardResizeOnce(ctx context.Context, handle string, ptmx *os.File) 
 			Cols int    `json:"cols"`
 			Rows int    `json:"rows"`
 		}
-		if json.Unmarshal([]byte(evt.Message.Payload), &msg) != nil || msg.Type != "setsize" {
+		if json.Unmarshal([]byte(evt.Message.Payload), &msg) != nil {
+			continue
+		}
+		if msg.Type == "hello" {
+			// A viewer just connected. Re-emit the wrapped program's live
+			// input-mode state (mouse/focus/app-cursor) to .stdout so the
+			// viewer's terminal forwards wheel/click input even when the
+			// original enable sequences have aged out of retention (#17).
+			// Idempotent, so replayed hellos on a daemon-restart redial are
+			// harmless.
+			if screen != nil {
+				if seq := screen.InputModeReassertSeq(); seq != "" {
+					_ = sendStreamLine(handle, "stdout", seq)
+				}
+			}
+			continue
+		}
+		if msg.Type != "setsize" {
 			continue // ignore "resize" (our own) and anything else
 		}
 		if msg.Cols <= 0 || msg.Rows <= 0 {
@@ -1235,6 +1252,12 @@ func cmdTerminalAttach(args []string) error {
 	// forwardResize on the source honours "setsize" and ignores its own
 	// "resize", so there's no feedback loop.
 	publishAttachSize(handle, stdin)
+	// Announce ourselves so the source re-emits its live input-mode state
+	// (mouse/focus/app-cursor) to .stdout — the retention replay we just
+	// subscribed to may have aged out the program's original mode-enable
+	// sequences, which would otherwise leave our terminal unaware it should
+	// forward wheel/click input (mikle7/muster#17).
+	publishAttachHello(handle)
 	winch := make(chan os.Signal, 1)
 	signal.Notify(winch, syscall.SIGWINCH)
 	defer signal.Stop(winch)
@@ -1314,6 +1337,19 @@ func publishAttachSize(handle string, tty *os.File) {
 		"cols": cols,
 		"rows": rows,
 	})
+	if err != nil {
+		return
+	}
+	_ = sendStreamLine(handle, "stdctrl", string(payload))
+}
+
+// publishAttachHello sends a one-shot {"type":"hello"} to <handle>.stdctrl on
+// connect. The source's resize handler treats it as a "viewer joined" signal
+// and re-emits its live input-mode state to .stdout (see
+// LiveScreen.InputModeReassertSeq). Best-effort; a failed send just means the
+// viewer misses the mode re-assert, same as before this existed.
+func publishAttachHello(handle string) {
+	payload, err := json.Marshal(map[string]any{"type": "hello"})
 	if err != nil {
 		return
 	}
