@@ -20,8 +20,9 @@ import (
 // Window kinds. A window is uniquely identified by (Kind, Name): an agent DM
 // keyed by the counterparty handle, or an uncollared pipe keyed by its target.
 const (
-	KindAgent = "agent"
-	KindPipe  = "pipe"
+	KindAgent  = "agent"
+	KindSource = "source" // message-kind source: a bare inbox (human/service)
+	KindPipe   = "pipe"
 )
 
 // Message directions.

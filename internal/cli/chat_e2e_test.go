@@ -24,6 +24,7 @@ import (
 
 type fakeDaemon struct {
 	whoEntries []cliproto.WhoEntry
+	sources    []cliproto.Source      // returned by IPCList (INBOXES discovery)
 	inbox      []cliproto.ReadMessage // streamed to an inbox follow
 	sends      *recorder[cliproto.SendRequest]
 	reads      *recorder[cliproto.ReadRequest]
@@ -66,6 +67,8 @@ func startFakeDaemon(t *testing.T, sock string, fd *fakeDaemon) {
 				switch req.Method {
 				case cliproto.IPCWho:
 					_ = enc.Encode(map[string]any{"result": cliproto.WhoReply{Entries: fd.whoEntries}})
+				case cliproto.IPCList:
+					_ = enc.Encode(map[string]any{"result": cliproto.ListReply{Sources: fd.sources}})
 				case cliproto.IPCSend:
 					var sr cliproto.SendRequest
 					_ = json.Unmarshal(req.Params, &sr)
