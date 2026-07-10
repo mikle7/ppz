@@ -1116,6 +1116,24 @@ func cmdTerminalView(args []string) error {
 // watch: it lets you interrupt a running command over the mesh.
 const attachDetachByte = 0x1c
 
+// ownSessionHandle reports the handle this process is running AS, if any —
+// the value muster / terminalShareEnv inject as PPZ_SESSION (falling back to
+// PPZ_CURRENT_HANDLE). Empty when run from a bare shell that isn't a session.
+func ownSessionHandle() string {
+	if h := os.Getenv("PPZ_SESSION"); h != "" {
+		return h
+	}
+	return os.Getenv("PPZ_CURRENT_HANDLE")
+}
+
+// isSelfAttach guards the self-referential footgun: attaching to your own
+// handle feeds your stdout straight back into your stdin — a render loop that
+// can wedge the session. Only fires when we actually know our own handle;
+// an unknown self (bare shell, self == "") never blocks a legitimate attach.
+func isSelfAttach(target, self string) bool {
+	return self != "" && target == self
+}
+
 // attachStdinChunk decides what to do with one raw stdin read: it returns the
 // bytes to forward to <handle>.stdin (everything up to the first Ctrl-\) and
 // whether a detach byte was seen. On detach we forward the prefix, then tear
@@ -1151,6 +1169,11 @@ func cmdTerminalAttach(args []string) error {
 	if handle == "" || strings.Contains(handle, ".") {
 		// attach takes a bare handle — channels are implicit.
 		return cliproto.New(cliproto.EInvalidHandle)
+	}
+	if isSelfAttach(handle, ownSessionHandle()) {
+		return fmt.Errorf("refusing to attach to %q: that's this session's own handle — "+
+			"attaching to yourself feeds stdout back into stdin (a render loop). "+
+			"Attach a different agent's handle.", handle)
 	}
 
 	conn, err := net.Dial("unix", ipcSocket())

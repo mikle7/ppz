@@ -27,3 +27,23 @@ func TestAttachStdinChunk(t *testing.T) {
 		}
 	}
 }
+
+// Guards the self-attach footgun (wren's repro): attaching to your own handle
+// loops stdout into stdin. The empty-self case is the important edge — a bare
+// shell with no PPZ_SESSION must NOT be blocked from a legitimate attach.
+func TestIsSelfAttach(t *testing.T) {
+	cases := []struct {
+		target, self string
+		want         bool
+	}{
+		{"wren", "wren", true},  // attaching to self
+		{"wren", "chud", false}, // different agent — fine
+		{"wren", "", false},     // unknown self — never block
+		{"", "", false},         // both empty
+	}
+	for _, c := range cases {
+		if got := isSelfAttach(c.target, c.self); got != c.want {
+			t.Errorf("isSelfAttach(%q, %q) = %v; want %v", c.target, c.self, got, c.want)
+		}
+	}
+}
