@@ -1159,7 +1159,8 @@ func tStatusDot(status string) string {
 }
 
 func tChatTitle(it tItem) string {
-	if it.kind == kAgent {
+	switch it.kind {
+	case kAgent:
 		st := it.status
 		if st == "" {
 			st = "—"
@@ -1168,6 +1169,8 @@ func tChatTitle(it tItem) string {
 			st += "|" + it.state
 		}
 		return fmt.Sprintf("%s · dm · %s", it.label, st)
+	case kSource:
+		return fmt.Sprintf("%s · dm · inbox", it.label)
 	}
 	return fmt.Sprintf("#%s · pipe (uncollared)", it.label)
 }

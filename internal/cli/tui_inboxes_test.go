@@ -56,6 +56,19 @@ func newInboxModel(t *testing.T) tuiModel {
 	return mm.(tuiModel)
 }
 
+// A message source's chat title renders as a DM, never as a pipe.
+func TestChatTitle_ByKind(t *testing.T) {
+	if got := tChatTitle(tItem{kind: kSource, key: "laurent", label: "laurent"}); strings.Contains(got, "pipe") || !strings.Contains(got, "dm") {
+		t.Errorf("a message source must render as a DM, not a pipe: %q", got)
+	}
+	if got := tChatTitle(tItem{kind: kPipe, label: "room"}); !strings.Contains(got, "pipe") {
+		t.Errorf("a pipe should render as a pipe: %q", got)
+	}
+	if got := tChatTitle(tItem{kind: kAgent, label: "alice", status: "online"}); !strings.Contains(got, "dm") {
+		t.Errorf("an agent should render as a DM: %q", got)
+	}
+}
+
 // INBOXES shows a loading square while the source list is fetching, and it
 // clears once loaded.
 func TestInboxes_LoadingSquare(t *testing.T) {
