@@ -1389,13 +1389,10 @@ func cmdChat(args []string) error {
 	m.store = store
 	m.hydrate() // render history + read state immediately; the follow reconciles
 
-	// Classify message sources up front so a source's DM routes to INBOXES from
-	// its first message (the poller above keeps it fresh). Runs before p.Run, so
-	// classification precedes any inbound the follow queued.
-	var lr cliproto.ListReply
-	if e := daemon.Call(sock, cliproto.IPCList, cliproto.ListRequest{Session: session}, &lr); e == nil {
-		m.applySources(lr.Sources)
-	}
+	// INBOXES load asynchronously via sourcePoller (started above) so the UI
+	// paints immediately rather than blocking on a server round-trip. A source
+	// DM that arrives before the first source list lands is routed to AGENTS and
+	// migrated to INBOXES on classification (see upsertSource).
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err = p.Run()
