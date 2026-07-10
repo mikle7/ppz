@@ -139,7 +139,12 @@ func TestRouteInbound_UnknownSenderStaysInAgents(t *testing.T) {
 // the source window, and the send targets <handle>.inbox as a KindSource
 // outbound (its reply comes back on our inbox, never via a follow).
 func TestSend_ToMessageSource_EchoesAndPersistsAsSource(t *testing.T) {
+	store, err := chatstore.Open(t.TempDir(), "james")
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := newInboxModel(t)
+	m.store = store
 	m.applySources([]cliproto.Source{{Handle: "laurent", Kind: "message"}})
 	idx := sourceFlatIndex(m, "laurent")
 	if idx < 0 {
@@ -163,6 +168,64 @@ func TestSend_ToMessageSource_EchoesAndPersistsAsSource(t *testing.T) {
 		t.Fatalf("send should return a sendResultMsg")
 	}
 	if res.kind != chatstore.KindSource || res.name != "laurent" {
-		t.Errorf("send should persist as a KindSource DM to laurent, got kind=%q name=%q", res.kind, res.name)
+		t.Fatalf("send should target a KindSource DM to laurent, got kind=%q name=%q", res.kind, res.name)
+	}
+
+	// The real Cmd would hit the daemon; with no daemon here it errors, so feed
+	// a *successful* result of the same kind through Update to exercise the
+	// persist-on-success branch (the bug: it only fired for KindAgent).
+	out := chatstore.Message{ID: "o1", Dir: chatstore.DirOut, Sender: "james", Payload: "hi laurent", CreatedAt: "2026-07-10T09:00:00Z"}
+	mm, _ = mm.Update(sendResultMsg{kind: chatstore.KindSource, name: "laurent", msg: out})
+
+	// The outbound must be persisted under KindSource (it can't be re-hydrated
+	// from the wire), so it survives a restart.
+	got, _ := store.Messages(chatstore.KindSource, "laurent")
+	if len(got) != 1 || got[0].Dir != chatstore.DirOut || got[0].Payload != "hi laurent" {
+		t.Fatalf("outbound not persisted as KindSource: %+v", got)
+	}
+}
+
+// A DM from a source that arrives before it's classified lands in AGENTS (and
+// is stored as KindAgent); once classified, upsertSource must migrate it in the
+// store too — not just the model — so a restart doesn't rebuild two windows.
+func TestUpsertSource_ReconcilesAgentWindowIntoSource(t *testing.T) {
+	home := t.TempDir()
+	store, err := chatstore.Open(home, "james")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newInboxModel(t)
+	m.store = store
+
+	// Inbound arrives before classification → AGENTS + stored as KindAgent.
+	m.routeInbound(cliproto.ReadMessage{ID: "x1", Sender: "laurent", Payload: "early", CreatedAt: "2026-07-10T09:00:00Z"})
+	if _, ok := findAgent(m, "laurent"); !ok {
+		t.Fatal("precondition: laurent should be in AGENTS before classification")
+	}
+
+	// Now classify → migrate model AND store.
+	m.applySources([]cliproto.Source{{Handle: "laurent", Kind: "message"}})
+	if _, ok := findAgent(m, "laurent"); ok {
+		t.Error("laurent should have left AGENTS after migration")
+	}
+	if _, ok := findSource(m, "laurent"); !ok {
+		t.Error("laurent should be in INBOXES after migration")
+	}
+	if got, _ := store.Messages(chatstore.KindAgent, "laurent"); len(got) != 0 {
+		t.Errorf("store still holds a KindAgent window after migration: %d msgs", len(got))
+	}
+	if got, _ := store.Messages(chatstore.KindSource, "laurent"); len(got) != 1 {
+		t.Errorf("store KindSource window should hold the migrated message, got %d", len(got))
+	}
+
+	// A fresh reopen must see laurent once (as a source), never split across
+	// AGENTS and INBOXES.
+	store.Flush()
+	s2, _ := chatstore.Open(home, "james")
+	if got, _ := s2.Messages(chatstore.KindAgent, "laurent"); len(got) != 0 {
+		t.Errorf("restart: stray KindAgent window persisted: %d msgs", len(got))
+	}
+	if got, _ := s2.Messages(chatstore.KindSource, "laurent"); len(got) != 1 {
+		t.Errorf("restart: KindSource window missing/wrong: %d msgs", len(got))
 	}
 }

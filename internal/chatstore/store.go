@@ -267,6 +267,43 @@ func (s *Store) Flush() error {
 	return nil
 }
 
+// Migrate re-keys a window from fromKind to toKind (same name): a simple
+// re-key when the target is absent, or a merge (dedup by id, keeping the later
+// read marker) when it exists. The old file is deleted; the target is written
+// on the next Flush. Used when chat learns a handle it first saw as an agent DM
+// is actually a message source, so a restart can't rebuild two windows for one
+// counterparty.
+func (s *Store) Migrate(fromKind, toKind, name string) error {
+	fromKey := makeKey(fromKind, name)
+	from := s.wins[fromKey]
+	if from == nil {
+		return nil
+	}
+	if to := s.wins[makeKey(toKind, name)]; to != nil {
+		// Merge from → to: dedup by id, keep the later read marker.
+		for _, m := range from.messages {
+			if !to.ids[m.ID] {
+				to.ids[m.ID] = true
+				to.messages = append(to.messages, m)
+			}
+		}
+		if from.lastReadAt > to.lastReadAt {
+			to.lastReadAt = from.lastReadAt
+		}
+		to.dirty = true
+	} else {
+		// Simple re-key: move the window under the new kind.
+		from.kind = toKind
+		from.dirty = true
+		s.wins[makeKey(toKind, name)] = from
+	}
+	delete(s.wins, fromKey)
+	if err := os.Remove(filepath.Join(s.dir, fileName(fromKind, name))); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func (s *Store) writeWindow(ws *windowState) error {
 	b, err := json.MarshalIndent(windowFile{
 		Kind: ws.kind, Name: ws.name, Label: ws.label,

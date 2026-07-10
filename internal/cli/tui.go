@@ -292,7 +292,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rollbackOutbound(msg.kind, msg.name, msg.echoID)
 			return m, nil
 		}
-		if msg.kind == chatstore.KindAgent && m.store != nil {
+		if (msg.kind == chatstore.KindAgent || msg.kind == chatstore.KindSource) && m.store != nil {
 			_, _ = m.store.Ingest(msg.kind, msg.name, msg.name, msg.msg)
 			m.persist() // durable now, not just on a clean quit
 		}
@@ -468,28 +468,79 @@ func (m *tuiModel) applySources(srcs []cliproto.Source) {
 // already landed in AGENTS (it arrived before we knew its kind), migrate that
 // history into the source window.
 func (m *tuiModel) upsertSource(handle string) {
-	for i := range m.sources {
-		if m.sources[i].key == handle {
-			return
-		}
-	}
-	it := tItem{kind: kSource, key: handle, label: handle}
-	migrated := false
+	agentIdx, srcIdx := -1, -1
 	for i := range m.agents {
 		if m.agents[i].key == handle {
-			it.msgs, it.unread = m.agents[i].msgs, m.agents[i].unread
-			m.agents = append(m.agents[:i], m.agents[i+1:]...)
-			migrated = true
+			agentIdx = i
 			break
 		}
 	}
-	insertPos := len(m.agents) + len(m.sources)
-	m.sources = append(m.sources, it)
-	if migrated {
-		m.clampSel()
-	} else if m.sel >= insertPos && len(m.pipes) > 0 {
-		m.sel++
+	for i := range m.sources {
+		if m.sources[i].key == handle {
+			srcIdx = i
+			break
+		}
 	}
+	if agentIdx == -1 && srcIdx != -1 {
+		return // already a source, nothing stray to fold in
+	}
+
+	// Fold any stray AGENTS window (a DM that arrived before classification)
+	// into the source window in the STORE too, not just the model — otherwise a
+	// restart rebuilds two windows for one counterparty.
+	if m.store != nil && agentIdx != -1 {
+		_ = m.store.Migrate(chatstore.KindAgent, chatstore.KindSource, handle)
+		m.persist()
+	}
+
+	// Build the source item. Prefer the store (authoritative, merged, sorted);
+	// fall back to the migrated agent item when there's no store.
+	it := tItem{kind: kSource, key: handle, label: handle}
+	if m.store != nil {
+		msgs, _ := m.store.Messages(chatstore.KindSource, handle)
+		for _, sm := range msgs {
+			it.msgs = append(it.msgs, toTMsg(sm))
+		}
+		it.unread, _ = m.store.Unread(chatstore.KindSource, handle)
+	} else if agentIdx != -1 {
+		it.msgs, it.unread = m.agents[agentIdx].msgs, m.agents[agentIdx].unread
+	}
+
+	selKey, hadSel := m.selectedKey()
+	if agentIdx != -1 {
+		m.agents = append(m.agents[:agentIdx], m.agents[agentIdx+1:]...)
+	}
+	if srcIdx != -1 {
+		m.sources[srcIdx] = it
+	} else {
+		m.sources = append(m.sources, it)
+	}
+	// Keep the highlight on the same logical row across the reshuffle (the
+	// migrated handle follows its move from AGENTS to INBOXES).
+	if hadSel {
+		m.reselectByKey(selKey)
+	} else {
+		m.clampSel()
+	}
+}
+
+// selectedKey returns the key of the currently-selected row (for preserving the
+// selection across a section reshuffle).
+func (m tuiModel) selectedKey() (string, bool) {
+	if m.count() == 0 {
+		return "", false
+	}
+	return m.flatItem(m.sel).key, true
+}
+
+func (m *tuiModel) reselectByKey(key string) {
+	for i := 0; i < m.count(); i++ {
+		if m.flatItem(i).key == key {
+			m.sel = i
+			return
+		}
+	}
+	m.clampSel()
 }
 
 func (m *tuiModel) clampSel() {
