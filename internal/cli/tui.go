@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -114,7 +115,12 @@ type tuiModel struct {
 
 	// sourceSet classifies which handles are message-kind sources, so an
 	// inbound DM is routed to INBOXES vs AGENTS by its sender's kind.
-	sourceSet   map[string]bool
+	sourceSet map[string]bool
+	// sourcesLoaded flips true on the first source list; until then the INBOXES
+	// header shows a loading spinner (they load asynchronously).
+	sourcesLoaded bool
+	spin          spinner.Model
+
 	followed    map[string]bool               // pipe targets we already hold a follow on
 	pipeCancels map[string]context.CancelFunc // stops a pipe's follow when it's removed
 
@@ -152,10 +158,14 @@ func newTUIModel(me, session, sock string, events chan tea.Msg, ctx context.Cont
 	add.Prompt = "add pipe › "
 	add.CharLimit = 128
 
+	sp := spinner.New()
+	sp.Spinner = spinner.Spinner{Frames: []string{"◰", "◳", "◲", "◱"}, FPS: time.Second / 8}
+	sp.Style = lipgloss.NewStyle().Foreground(tcDim)
+
 	return tuiModel{
 		me: me, session: session, sock: sock, events: events, ctx: ctx,
-		sourceSet: map[string]bool{},
-		followed:  map[string]bool{}, pipeCancels: map[string]context.CancelFunc{},
+		sourceSet: map[string]bool{}, spin: sp,
+		followed: map[string]bool{}, pipeCancels: map[string]context.CancelFunc{},
 		chatTi: ti, addTi: add,
 		vp: viewport.New(1, 1),
 	}
@@ -226,7 +236,7 @@ func waitForEvent(ch chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-ch }
 }
 
-func (m tuiModel) Init() tea.Cmd { return waitForEvent(m.events) }
+func (m tuiModel) Init() tea.Cmd { return tea.Batch(waitForEvent(m.events), m.spin.Tick) }
 
 // ---- update ----------------------------------------------------------------
 
@@ -261,8 +271,16 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.events)
 	case sourcesMsg:
 		m.applySources(msg.sources)
+		m.sourcesLoaded = true // stops the INBOXES loading spinner
 		m.refreshViewport()
 		return m, waitForEvent(m.events)
+	case spinner.TickMsg:
+		if m.sourcesLoaded {
+			return m, nil // done loading — let the spinner rest
+		}
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
 	case streamErrMsg:
 		m.toast = msg.scope + ": " + msg.err
 		return m, waitForEvent(m.events)
@@ -868,7 +886,11 @@ func (m tuiModel) renderMenu(w, h int) string {
 	for i, a := range m.agents {
 		lines = append(lines, m.renderRow(a, i, inner))
 	}
-	lines = append(lines, "", tSectionHeader("INBOXES"))
+	inboxHeader := tSectionHeader("INBOXES")
+	if !m.sourcesLoaded {
+		inboxHeader += " " + m.spin.View() // loading square while the source list fetches
+	}
+	lines = append(lines, "", inboxHeader)
 	for j, s := range m.sources {
 		lines = append(lines, m.renderRow(s, len(m.agents)+j, inner))
 	}

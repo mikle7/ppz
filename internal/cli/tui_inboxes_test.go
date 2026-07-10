@@ -2,13 +2,25 @@ package cli
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pipescloud/ppz/internal/chatstore"
 	"github.com/pipescloud/ppz/internal/cliproto"
 )
+
+func menuHasLoadingSquare(m tuiModel) bool {
+	menu := ansi.Strip(m.renderMenu(m.menuW(), m.h-2))
+	for _, ln := range strings.Split(menu, "\n") {
+		if strings.Contains(ln, "INBOXES") {
+			return strings.ContainsAny(ln, "◰◳◲◱")
+		}
+	}
+	return false
+}
 
 func findSource(m tuiModel, name string) (tItem, bool) {
 	for _, s := range m.sources {
@@ -42,6 +54,19 @@ func newInboxModel(t *testing.T) tuiModel {
 	var mm tea.Model = m
 	mm, _ = mm.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return mm.(tuiModel)
+}
+
+// INBOXES shows a loading square while the source list is fetching, and it
+// clears once loaded.
+func TestInboxes_LoadingSquare(t *testing.T) {
+	m := newInboxModel(t) // sourcesLoaded == false
+	if !menuHasLoadingSquare(m) {
+		t.Error("expected a loading square in the INBOXES header while sources load")
+	}
+	m.sourcesLoaded = true
+	if menuHasLoadingSquare(m) {
+		t.Error("loading square should clear once sources are loaded")
+	}
 }
 
 // The source list populates INBOXES with message-kind sources only, excluding
