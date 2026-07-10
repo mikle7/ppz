@@ -313,10 +313,11 @@ Glob-destroy sources or pipes:
 
 Examples: destroy '*' · destroy 'agent-*' · destroy '*.stdout' · destroy apple`,
 
-	"terminal": `usage: ppz terminal {share|watch|read} ...
+	"terminal": `usage: ppz terminal {share|watch|attach|read} ...
 
   ppz terminal share H [-- CMD...]  run CMD (or $SHELL) in a pty bound to H
-  ppz terminal watch H              follow H.stdout in an alt-screen TUI
+  ppz terminal watch H              follow H.stdout in an alt-screen TUI (read-only)
+  ppz terminal attach H             like watch, but keystrokes drive H (Ctrl-\ detaches)
   ppz terminal read H [flags]       render H.stdout (reread with --tty default)
 
 Run 'ppz terminal <subverb> --help' for details.`,
@@ -328,6 +329,10 @@ Run CMD (or $SHELL) in a pty bound to handle H — bidirectional: H.stdout is pu
 	"terminal watch": `usage: ppz terminal watch H
 
 Follow H.stdout live in an alt-screen TUI. Interactive — for scripted/agent use prefer 'ppz terminal read H' (a one-shot render).`,
+
+	"terminal attach": `usage: ppz terminal attach H
+
+Like 'terminal watch' but bidirectional: local keystrokes are forwarded raw to H.stdin and local terminal resizes to H.stdctrl, so you drive the wrapped session over the mesh from anywhere. Ctrl-C passes through to the remote (interrupts a running command); Ctrl-\ detaches. Requires H to be a live 'terminal share'.`,
 
 	"terminal read": `usage: ppz terminal read H [reread-flags]
 

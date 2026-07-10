@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -53,6 +54,8 @@ func cmdTerminal(args []string) error {
 		return cmdTerminalShare(args[1:])
 	case "watch":
 		return cmdTerminalView(args[1:])
+	case "attach":
+		return cmdTerminalAttach(args[1:])
 	case "read":
 		return cmdTerminalRead(args[1:])
 	}
@@ -1104,6 +1107,167 @@ func cmdTerminalView(args []string) error {
 		}
 	}
 	return nil
+}
+
+// attachDetachByte is Ctrl-\ (0x1c) — the local escape that ends a
+// `terminal attach` session. It's intercepted client-side and never
+// forwarded, so every OTHER byte (Ctrl-C included) reaches the remote
+// session. Ctrl-C mattering to the remote is the whole point of attach vs
+// watch: it lets you interrupt a running command over the mesh.
+const attachDetachByte = 0x1c
+
+// attachStdinChunk decides what to do with one raw stdin read: it returns the
+// bytes to forward to <handle>.stdin (everything up to the first Ctrl-\) and
+// whether a detach byte was seen. On detach we forward the prefix, then tear
+// down — anything the user typed after Ctrl-\ in the same chunk is dropped.
+func attachStdinChunk(buf []byte) (forward []byte, detach bool) {
+	if i := bytes.IndexByte(buf, attachDetachByte); i >= 0 {
+		return buf[:i], true
+	}
+	return buf, false
+}
+
+// cmdTerminalAttach: ppz terminal attach <handle>
+//
+// The bidirectional sibling of `terminal watch`. Watch renders <handle>.stdout
+// read-only and drains local keystrokes to /dev/null; attach additionally
+// forwards local keystrokes to <handle>.stdin (raw, byte-for-byte) and local
+// terminal resizes to <handle>.stdctrl as "setsize" events. The source
+// `terminal share` already consumes both (forwardStdin writes stdin payloads
+// straight to the pty master; forwardResize applies "setsize" via pty.Setsize,
+// raising a real SIGWINCH in the child) — so this is a CLIENT-ONLY verb: no
+// daemon or protocol change. The stdout-follow + raw-mode + alt-screen setup
+// mirrors cmdTerminalView exactly.
+//
+// ponytail: single-attacher, one IPC publish per stdin read — fine for
+// interactive typing; a large paste fans out into many small messages. Batch
+// (sendStreamBatch) only if paste throughput ever becomes a problem. Multiple
+// concurrent attachers to one handle is a real design question, deferred past v1.
+func cmdTerminalAttach(args []string) error {
+	if len(args) != 1 {
+		usageExit("terminal attach")
+	}
+	handle := args[0]
+	if handle == "" || strings.Contains(handle, ".") {
+		// attach takes a bare handle — channels are implicit.
+		return cliproto.New(cliproto.EInvalidHandle)
+	}
+
+	conn, err := net.Dial("unix", ipcSocket())
+	if err != nil {
+		return cliproto.New(cliproto.EDaemonNotRunning)
+	}
+	defer conn.Close()
+
+	body, _ := json.Marshal(cliproto.ReadRequest{
+		Handle:    handle,
+		Channel:   "stdout",
+		Follow:    true,
+		Session:   sessionID(),
+		NoAdvance: true,
+	})
+	if err := json.NewEncoder(conn).Encode(map[string]any{
+		"method": cliproto.IPCRead,
+		"params": json.RawMessage(body),
+	}); err != nil {
+		return err
+	}
+
+	// Capture stdio locals, same rationale as cmdTerminalView: goroutines
+	// below reference these and reassigning the globals in a test would race.
+	stdin, stdout := os.Stdin, os.Stdout
+
+	restoreRaw := setLocalRawMode(stdin.Fd())
+	defer restoreRaw()
+
+	_, _ = io.WriteString(stdout, "\x1b[?1049h\x1b[H\x1b[2J")
+	defer func() { _, _ = io.WriteString(stdout, "\x1b[?1049l") }()
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	go func() { <-ctx.Done(); _ = conn.Close() }()
+
+	// Size the remote pty to our terminal now, and on every local resize.
+	// forwardResize on the source honours "setsize" and ignores its own
+	// "resize", so there's no feedback loop.
+	publishAttachSize(handle, stdin)
+	winch := make(chan os.Signal, 1)
+	signal.Notify(winch, syscall.SIGWINCH)
+	defer signal.Stop(winch)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-winch:
+				publishAttachSize(handle, stdin)
+			}
+		}
+	}()
+
+	// Forward local keystrokes to <handle>.stdin raw. Ctrl-\ detaches
+	// (intercepted here, never forwarded); everything else — Ctrl-C, arrows,
+	// escape sequences — passes straight through to drive the remote session.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			n, err := stdin.Read(buf)
+			if n > 0 {
+				fwd, detach := attachStdinChunk(buf[:n])
+				if len(fwd) > 0 {
+					_ = sendStreamLine(handle, "stdin", string(fwd))
+				}
+				if detach {
+					cancel()
+					return
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	dec := bufio.NewScanner(conn)
+	dec.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for dec.Scan() {
+		var evt cliproto.ReadEvent
+		if err := json.Unmarshal(dec.Bytes(), &evt); err != nil {
+			continue
+		}
+		if evt.Error != nil {
+			return evt.Error
+		}
+		if evt.Message != nil {
+			_, _ = io.WriteString(stdout, evt.Message.Payload)
+		}
+	}
+	return nil
+}
+
+// publishAttachSize sends the local terminal geometry to <handle>.stdctrl as
+// a "setsize" event, which forwardResize on the source turns into a real
+// pty.Setsize + SIGWINCH. Best-effort — a non-tty local end (piped/scripted
+// attach, e.g. the smoke test) has no size and simply sends nothing.
+func publishAttachSize(handle string, tty *os.File) {
+	rows, cols, err := pty.Getsize(tty)
+	if err != nil {
+		return
+	}
+	payload, err := json.Marshal(map[string]any{
+		"type": "setsize",
+		"cols": cols,
+		"rows": rows,
+	})
+	if err != nil {
+		return
+	}
+	_ = sendStreamLine(handle, "stdctrl", string(payload))
 }
 
 // envDurationMS reads an integer-millisecond env var, returning the

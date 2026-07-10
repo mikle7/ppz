@@ -115,7 +115,7 @@ var subverbs = map[string][]string{
 	"source":   {"create", "destroy"},
 	"schedule": {"ls", "rm"},
 	"subs":     {"ls", "add", "rm", "wait", "read"},
-	"terminal": {"share", "watch", "read"},
+	"terminal": {"share", "watch", "attach", "read"},
 	"set":      {"handle", "namespace"},
 	"unset":    {"handle", "namespace"},
 	"get":      {"handle"},
@@ -134,9 +134,10 @@ var targetTakingVerbs = map[string]bool{
 // `share` creates a new pty source — completing existing handles is
 // still useful as a "remember what I called the other one" hint.
 var terminalHandleSubverbs = map[string]bool{
-	"share": true,
-	"watch": true,
-	"read":  true,
+	"share":  true,
+	"watch":  true,
+	"attach": true,
+	"read":   true,
 }
 
 // pipeSubverbsTakingTargets: subverbs of `ppz pipe` whose first
