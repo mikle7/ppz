@@ -219,6 +219,55 @@ corroborating:
   under-reports). Not yet confirmed — next person picking this up should
   start there rather than back in `read.go`/`ordered.go`.
 
+## Update 2 (2026-07-11, ~17:10): git archaeology + subsSnapshot lead ruled out
+
+Per Michael's question (relayed by greg): is either bug pre-existing
+upstream, or introduced by this fork's own work (terminal attach,
+heartbeat-project, muster integration, etc.)? Answer, via git
+archaeology (both remotes already configured — `origin`=fork,
+`upstream`=pipescloud/ppz):
+
+- `reportNATSFailure`: `git blame upstream/main` attributes it to James
+  Miles (the original author) in `e986007d` (2026-06-09) and
+  `48bf9253` (2026-06-16) — both predate this fork's divergence point
+  (`git merge-base origin/main upstream/main` = `bc23e16`).
+  `git log bc23e16..origin/main -- internal/daemon/daemon.go` shows the
+  *only* fork-side commit touching that file since divergence is this
+  investigation's own fix. **Pre-existing upstream bug, not
+  fork-introduced.**
+- `internal/daemon/watch_registry.go`, `handlers_subs.go`,
+  `list_watch.go`: byte-for-byte identical between `origin/main` and
+  `upstream/main` (`diff` exit 0 on all three). Untouched by any fork
+  feature work. Whatever the swap-cycle mechanism turns out to be, it's
+  pre-existing too.
+
+Then chased the `subsSnapshot` lead one step further: wrote a stress
+test (`internal/daemon/watch_registry_swap_race_test.go`,
+`TestPublishDuringSwapWindowStillWakesWatch`) that fires a publish on an
+*independent* connection concurrently with each of 40 `swapNC` calls in
+a tight loop, checking whether the armed watch entry (the exact
+mechanism behind `subs wait` / the nudge pump) ever misses one.
+**Result: 0/40 misses.** Combined with the already-solid
+`rearmAll`/`swapNCLocked` dual-subscribe-then-flush-then-close-old
+design (extensive existing comments reference a prior "fix plan §Race
+analysis" + PR #115) and its passing test suite, this rules out
+`watch_registry`'s rearm as the mechanism behind echo's precisely
+timestamp-correlated lost messages.
+
+Remaining open question: since the actual wakeup-delivery mechanism
+tests airtight under direct adversarial racing, either (a) the real
+bug is somewhere I haven't checked yet (the unsynchronized `d.NC` reads
+in `buildFilteredList`/most other handlers are a real, confirmable
+latent data race — `go test -race` doesn't currently catch it, so
+inconclusive — but this pattern is pervasive across nearly every
+handler in the package, not unique to this path, so it's a weak signal
+on its own), or (b) the swap-window timestamp correlation the team
+found tonight is coincidental rather than causal — plausible given how
+frequently swaps recur (~4m30s), a decent fraction of any busy
+window's message timestamps will land near *some* swap boundary by
+chance. Not resolved either way; flagging both possibilities for
+whoever continues.
+
 ## Artifacts
 
 - `internal/daemon/report_nats_failure_follows_test.go` — permanent
