@@ -340,12 +340,23 @@ func (d *Daemon) swapNCLocked(caller string, newNC *nats.Conn) {
 // temporarily overloaded). Closing the NC transitions its Status to CLOSED
 // so natsStateString stops lying "connected" and the next ensureNATS call
 // rebuilds rather than coalescing on the stale connection.
+//
+// Evicts live Follows FIRST, same as swapNCLocked — a JetStream
+// OrderedConsumer anchored to this NC treats the close as terminal (no
+// self-heal, unlike every other recovery trigger it handles), so without
+// this a live `Follow: true` IPC conn (e.g. `terminal share`'s
+// forwardStdin) goes silently dead: no error reaches the CLI, so its
+// redial loop never fires, even though sends keep succeeding against
+// whatever NC is current by the time they run (mikle7/ppz#1).
 func (d *Daemon) reportNATSFailure() {
 	d.ncMu.Lock()
 	nc := d.NC
 	d.ncMu.Unlock()
 	if nc == nil || !nc.IsConnected() {
 		return
+	}
+	if d.Follows != nil {
+		d.Follows.closeAll()
 	}
 	nc.Close()
 	// A closed NC never recovers by itself (nats.go's CLOSED state is
