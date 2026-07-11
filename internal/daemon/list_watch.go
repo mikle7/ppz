@@ -133,7 +133,11 @@ func (d *Daemon) buildFilteredList(ctx context.Context, accountID uuid.UUID, ses
 	}
 	d.refreshSourceCache(lr.Sources)
 
-	js, err := jetstream.New(d.NC)
+	// currentNC (not a bare d.NC read): a JWT-refresh swap writes d.NC under
+	// ncMu concurrently with this handler — a bare read is a data race
+	// (confirmed via -race). The captured conn can still be closed by a swap
+	// mid-request; buildFilteredListRetrying handles that transient failure.
+	js, err := jetstream.New(d.currentNC())
 	if err != nil {
 		return cliproto.ListReply{}, cliproto.New(cliproto.ENATSUnreachable)
 	}
@@ -167,6 +171,25 @@ func (d *Daemon) buildFilteredList(ctx context.Context, accountID uuid.UUID, ses
 	}
 
 	return cliproto.ListReply{Sources: enriched, UncollaredPipes: uncollared}, nil
+}
+
+// buildFilteredListRetrying calls buildFilteredList, retrying ONCE if the
+// first attempt fails with ENATSUnreachable. A routine ~270s JWT-refresh
+// swapNC closes the shared NC; a JetStream request (ListStreams/GetMsg) in
+// flight on it at that instant fails, and buildFilteredList surfaces it as
+// ENATSUnreachable (confirmed reproduction in reqreply_swap_race_test.go).
+// swapNCLocked installs a healthy new NC *before* closing the old one, so by
+// the time the failure is observed d.NC already points at the good conn — one
+// retry rides out the transient window instead of forcing the caller (e.g.
+// `ppz subs read`) to error and manually retry. A genuine outage still fails
+// after the retry, so this masks a routine swap, not a real problem. The
+// retried callServer GETs are idempotent, so repeating them is harmless.
+func (d *Daemon) buildFilteredListRetrying(ctx context.Context, accountID uuid.UUID, session string, patterns []string) (cliproto.ListReply, *cliproto.Error) {
+	reply, e := d.buildFilteredList(ctx, accountID, session, patterns)
+	if e != nil && e.Code == cliproto.ENATSUnreachable {
+		reply, e = d.buildFilteredList(ctx, accountID, session, patterns)
+	}
+	return reply, e
 }
 
 // matchAnyTarget returns true if any pattern matches the row's full
