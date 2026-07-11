@@ -678,14 +678,31 @@ func publishWinsize(handle string, ptmx *os.File) {
 // already written to the PTY by tracking message IDs in a bounded
 // ring. Without dedupe, every reconnect would replay history into
 // the wrapped child.
+//
+// Because NoAdvance means this session's cursor for <handle>.stdin
+// never moves, a BRAND NEW process (fresh seenIDRing, e.g. after
+// `muster resume`/respawn) has no local memory of what it's already
+// delivered — the daemon would redeliver the full retained backlog
+// (up to 24h/5000 msgs of prior stdin, real input AND anything sent
+// while the process was dead) straight into the newly wrapped child,
+// which reads as the child having "typed" all of it. We anchor a
+// SinceMS cutoff to when this forwardStdin call started: the daemon
+// still walks the full backlog server-side (needed to correctly
+// position the live-follow consumer at the true end of the stream),
+// but filters out anything older than the cutoff before it ever
+// reaches us. Redials within the same process keep using the same
+// start time (SinceMS grows with elapsed time), so input that
+// legitimately arrives during a brief daemon hiccup still comes
+// through — only genuinely pre-process-start history is dropped.
 func forwardStdin(ctx context.Context, handle string, master io.Writer) {
 	seen := newSeenIDRing(1024)
+	start := time.Now()
 
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		streamForwardStdinOnce(ctx, handle, master, seen)
+		streamForwardStdinOnce(ctx, handle, master, seen, start)
 		if ctx.Err() != nil {
 			return
 		}
@@ -700,7 +717,7 @@ func forwardStdin(ctx context.Context, handle string, master io.Writer) {
 	}
 }
 
-func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer, seen *seenIDRing) {
+func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer, seen *seenIDRing, start time.Time) {
 	conn, err := net.Dial("unix", ipcSocket())
 	if err != nil {
 		return
@@ -712,6 +729,7 @@ func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer
 		Channel:   "stdin",
 		Follow:    true,
 		NoAdvance: true,
+		SinceMS:   time.Since(start).Milliseconds() + 1,
 	})
 	if err := json.NewEncoder(conn).Encode(map[string]any{"method": cliproto.IPCRead, "params": json.RawMessage(body)}); err != nil {
 		return
