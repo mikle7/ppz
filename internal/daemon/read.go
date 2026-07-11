@@ -207,11 +207,18 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 			startSeq = cursor + 1
 		}
 	}
+	// Computed unconditionally (not just when there's a retained backlog to
+	// drain) so it's also available to the live-follow consumer below —
+	// an OrderedConsumer that has to internally recover (NATS reconnect,
+	// consumer-deleted-due-to-inactivity, etc.) can redeliver messages
+	// older than intended even though nothing here explicitly redialed;
+	// without this, that redelivery would bypass the historical-drain
+	// filter entirely and land in the caller unfiltered.
+	var sinceCutoff time.Time
+	if req.SinceMS > 0 {
+		sinceCutoff = time.Now().Add(-time.Duration(req.SinceMS) * time.Millisecond)
+	}
 	if info.State.Msgs > 0 && startSeq <= info.State.LastSeq {
-		var sinceCutoff time.Time
-		if req.SinceMS > 0 {
-			sinceCutoff = time.Now().Add(-time.Duration(req.SinceMS) * time.Millisecond)
-		}
 		// Drain via a single Fetch() on an ephemeral pull consumer
 		// instead of N synchronous stream.GetMsg(seq) calls. Fetch
 		// pulls the entire window in one batch, so 200 messages take
@@ -377,6 +384,18 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 	cctx, err := consumer.Consume(func(msg jetstream.Msg) {
 		env, err := envelope.Unmarshal(msg.Data())
 		if err != nil {
+			_ = msg.Ack()
+			return
+		}
+		// Guards against an OrderedConsumer internal recovery (NATS
+		// reconnect, server-side consumer recreated after
+		// InactiveThreshold, etc.) redelivering messages older than
+		// this request's SinceMS cutoff through the live path, which
+		// has no other age filter — see the sinceCutoff comment above.
+		// Ack (it's a real, already-processed message from the
+		// stream's point of view) but don't forward or advance the
+		// cursor for it.
+		if !sinceCutoff.IsZero() && env.CreatedAt.Before(sinceCutoff) {
 			_ = msg.Ack()
 			return
 		}
