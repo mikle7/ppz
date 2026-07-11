@@ -679,7 +679,28 @@ func publishWinsize(handle string, ptmx *os.File) {
 // ring. Without dedupe, every reconnect would replay history into
 // the wrapped child.
 func forwardStdin(ctx context.Context, handle string, master io.Writer) {
-	seen := newSeenIDRing(1024)
+	// stdinSeenRingCap must exceed the .stdin stream's retention window
+	// (defaultStreamMaxMsgs = 5000; internal/server/streams.go) so that no
+	// still-retained ID is ever evicted from the ring and wrongly re-written
+	// on a redial replay. 8192 covers the default with headroom; a stdin
+	// pipe with --max-msgs raised above this would fall back to the old
+	// replay behaviour for the overflow (option 1, the durable acking
+	// consumer, removes this bound entirely).
+	const stdinSeenRingCap = 8192
+
+	seen := newSeenIDRing(stdinSeenRingCap)
+
+	// Fresh-source-start guard (muster stdin-replay fix): pre-seed the ring
+	// with every currently-retained .stdin message so the follow loop's
+	// retention replay skips them. A resumed agent must NOT re-execute input
+	// its previous incarnation already consumed — or input sent while it was
+	// dead (meaningless; the sender should resend, not have it surface hours
+	// later out of context). Within-process daemon redials keep this same
+	// ring, so genuinely new messages published during a redial gap have
+	// unseen IDs and are still delivered exactly once.
+	for _, id := range retainedStdinIDs(ctx, handle) {
+		seen.add(id)
+	}
 
 	for {
 		if ctx.Err() != nil {
@@ -698,6 +719,60 @@ func forwardStdin(ctx context.Context, handle string, master io.Writer) {
 		case <-time.After(250 * time.Millisecond):
 		}
 	}
+}
+
+// retainedStdinIDs enumerates the IDs of every message currently retained on
+// <handle>.stdin via a one-shot forensic read (All=true: deliver everything,
+// ignore + never advance the cursor, emit no acks; Follow=false so it drains
+// and closes). Used once at source start to pre-seed forwardStdin's dedup
+// ring. Bounded by a 5s deadline so a wedged daemon can't stall startup;
+// returns whatever it collected (best-effort — a miss just means those IDs
+// aren't pre-seeded, degrading to the old replay behaviour for them, never a
+// crash).
+func retainedStdinIDs(ctx context.Context, handle string) []string {
+	conn, err := net.Dial("unix", ipcSocket())
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+
+	body, _ := json.Marshal(cliproto.ReadRequest{
+		Handle:  handle,
+		Channel: "stdin",
+		All:     true,
+	})
+	if err := json.NewEncoder(conn).Encode(map[string]any{
+		"method": cliproto.IPCRead,
+		"params": json.RawMessage(body),
+	}); err != nil {
+		return nil
+	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-time.After(5 * time.Second):
+			_ = conn.Close()
+		case <-stop:
+		}
+	}()
+
+	var ids []string
+	dec := bufio.NewScanner(conn)
+	dec.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for dec.Scan() {
+		var evt cliproto.ReadEvent
+		if err := json.Unmarshal(dec.Bytes(), &evt); err != nil {
+			continue
+		}
+		if evt.Message != nil && evt.Message.ID != "" {
+			ids = append(ids, evt.Message.ID)
+		}
+	}
+	return ids
 }
 
 func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer, seen *seenIDRing) {
