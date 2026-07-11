@@ -694,6 +694,26 @@ func publishWinsize(handle string, ptmx *os.File) {
 // start time (SinceMS grows with elapsed time), so input that
 // legitimately arrives during a brief daemon hiccup still comes
 // through — only genuinely pre-process-start history is dropped.
+//
+// The cutoff is capped at stdinRelayMaxLookback: for a LONG-LIVED wrapper
+// (hours old) an unbounded SinceMS pins the cutoff at process-start, so the
+// whole day of retained stdin is "newer than the cutoff" and gets re-read on
+// every redial. A backlog larger than the seenIDRing (1024) then cascades
+// through the ring and replays into the child as fresh keystrokes (mikle7/ppz#1
+// duplicate variant). Capping keeps the redial window to a ring-sized slice.
+const stdinRelayMaxLookback = 60 * time.Second
+
+// stdinRelaySinceMS is the SinceMS forwardStdin sends on each dial: this
+// process's age, capped at stdinRelayMaxLookback so the cutoff never predates
+// now-maxLookback no matter how long the wrapper has run.
+func stdinRelaySinceMS(start time.Time) int64 {
+	elapsed := time.Since(start)
+	if elapsed > stdinRelayMaxLookback {
+		elapsed = stdinRelayMaxLookback
+	}
+	return elapsed.Milliseconds() + 1
+}
+
 func forwardStdin(ctx context.Context, handle string, master io.Writer) {
 	seen := newSeenIDRing(1024)
 	start := time.Now()
@@ -729,7 +749,7 @@ func streamForwardStdinOnce(ctx context.Context, handle string, master io.Writer
 		Channel:   "stdin",
 		Follow:    true,
 		NoAdvance: true,
-		SinceMS:   time.Since(start).Milliseconds() + 1,
+		SinceMS:   stdinRelaySinceMS(start),
 	})
 	if err := json.NewEncoder(conn).Encode(map[string]any{"method": cliproto.IPCRead, "params": json.RawMessage(body)}); err != nil {
 		return
