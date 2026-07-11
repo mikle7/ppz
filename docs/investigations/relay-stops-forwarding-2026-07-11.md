@@ -277,3 +277,58 @@ The two throwaway scratch tests used while building the hypothesis
 (`diagnose_reset_scratch_test.go`, `diagnose_ncclose_scratch_test.go`)
 were deleted once the permanent test above superseded them; their
 findings are summarized inline above ("Ruled out" / root-cause steps).
+
+## Update 3 (2026-07-11, chud/opus): transient variant ROOT-CAUSED + FIXED
+
+Fresh pickup (greg reassigned). The team saw two symptom classes; this
+resolves the **transient** one — `ppz subs read` no-shows a message then
+works on retry (greg + chud reproduced live). Distinct from arthur's
+*persistent* one-then-stops-until-refresh (the forwardStdin/Follow orphan
+covered above).
+
+### Root cause (confirmed by reproduction + -race)
+The subscription/ARRIVAL path is swap-safe (rearmAll dual-subscribes +
+flushes before closing oldNC — proven 40/40 above). But the REQUEST-REPLY
+JetStream path behind `ppz subs read`
+(`subsSnapshot` → `buildFilteredList` → `streamInfoByName`/`ListStreams`,
+`enrichSourcesWithPipeInfo`'s `GetMsg`) is NOT. `buildFilteredList` read
+`d.NC` **unlocked** (`list_watch.go:136`) and ran a ListStreams request on
+it; a routine ~270s JWT-refresh `swapNC` closes that NC mid-request. The
+request fails → `buildFilteredList` returns `ENATSUnreachable` → `subs
+read` errors → the human/agent retries and it works.
+
+Reproduction (`reqreply_swap_race_test.go`): a reader mirroring
+`buildFilteredList`'s access pattern, tight-looping against 60 back-to-back
+swaps, saw ~28 `ENATSUnreachable` errors and **0 silent under-reports** —
+so it errors (surfaced), it does not silently report 0 unread. Under
+`-race` the detector flagged the exact `d.NC` read vs `swapNCLocked`'s
+write (`daemon.go` `d.NC = newNC`) — proving the "unsynchronized d.NC
+reads" lead (flagged as unproven in Update-2) is real and reachable from
+the read path.
+
+Not the a134977 `reportNATSFailure` gap (every close tonight was
+`OnRefreshed-callback`); not `rearmAll` (arrival path, proven safe); not a
+silent snapshot under-report (the failure surfaces as an error).
+
+### Fix (this branch → PR, human review before merge)
+- **Part A (race):** `d.currentNC()` accessor reads `d.NC` under `ncMu`;
+  `buildFilteredList` uses it. Scoped to the proven read/snapshot race —
+  the pervasive `d.NC` reads elsewhere (publish/read/heartbeat/send) are a
+  flagged follow-up, deliberately NOT swept here (lock-ordering risk,
+  keep the diff reviewable).
+- **Part B (symptom):** `buildFilteredListRetrying` retries once on
+  `ENATSUnreachable`; `subsSnapshot` uses it. `swapNCLocked` installs the
+  new NC *before* closing the old, so by the time the failure is seen
+  `d.NC` is already healthy and one retry rides out the window. A genuine
+  outage still fails after the retry.
+- **Regression test** (`reqreply_swap_race_test.go`): real
+  `buildFilteredList`/`buildFilteredListRetrying` racing a real `swapNC`
+  loop via the fake-server + embedded-JS harness. Phase 1 shows bare
+  single attempts still hit the window (informational); Phase 2 asserts
+  `buildFilteredListRetrying` surfaces **0** errors across the storm; the
+  whole test is `-race`-clean (proving Part A).
+
+### Still open
+arthur's persistent variant (one-then-stops on a warm process, needs a
+`muster refresh` to recover) is a different mechanism (forwardStdin/Follow
+orphan) and is not addressed here.

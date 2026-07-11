@@ -218,6 +218,21 @@ func (d *Daemon) swapNC(caller string, newNC *nats.Conn) {
 	d.swapNCLocked(caller, newNC)
 }
 
+// currentNC returns the live NATS connection, read under ncMu. Handlers that
+// touch d.NC concurrently with a JWT-refresh swap MUST use this rather than a
+// bare d.NC read: swapNCLocked writes d.NC under ncMu (see the write below),
+// so a bare read races it — confirmed via -race in the list/snapshot
+// request-reply path (buildFilteredList). Returns only the pointer; the
+// caller can still race a subsequent Close() of that conn if a swap fires
+// mid-request, which is why swap-sensitive request-reply callers additionally
+// retry on ENATSUnreachable (see buildFilteredListRetrying). Must NOT be
+// called while already holding ncMu (mutexes aren't reentrant).
+func (d *Daemon) currentNC() *nats.Conn {
+	d.ncMu.Lock()
+	defer d.ncMu.Unlock()
+	return d.NC
+}
+
 // swapNCLocked performs the actual close-old / install-new / evict-follows
 // swap. The caller MUST hold d.ncMu.
 //

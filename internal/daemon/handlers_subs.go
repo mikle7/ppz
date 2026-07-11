@@ -256,7 +256,11 @@ func (d *Daemon) subsSnapshot(ctx context.Context, sessionID string) (cliproto.L
 	// only the uncollared `room` pipe — not a collared `<handle>.room`. (To
 	// follow a collared pipe, subscribe to the explicit `<handle>.<pipe>` or
 	// a glob like `*.room`.)
-	reply, e := d.buildFilteredList(ctx, accountID, sessionID, subjects)
+	// Retrying variant: `ppz subs read`/`subs wait` is the hot path a routine
+	// JWT-refresh swap most visibly breaks (message no-shows, works on retry).
+	// One retry rides out the swap window so the CLI doesn't surface a
+	// transient error for a routine refresh. See buildFilteredListRetrying.
+	reply, e := d.buildFilteredListRetrying(ctx, accountID, sessionID, subjects)
 	if e != nil {
 		return cliproto.ListReply{}, e
 	}
