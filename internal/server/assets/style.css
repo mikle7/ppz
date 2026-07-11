@@ -151,6 +151,36 @@ ul.tidy li:hover { background: var(--row-hover); }
 }
 
 /* Tables */
+/* Data tables scroll horizontally inside their own box on narrow screens,
+   instead of overflowing the page (the pipes table has 5 columns). */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 6px;
+}
+.table-scroll > table { min-width: 32rem; }
+
+@media (max-width: 720px) {
+  /* Trim the pipes table to essentials on mobile: drop namespace (col 1) and
+     payload (col 5), keeping source / pipe / last message. */
+  #pipes th:nth-child(1), #pipes td:nth-child(1),
+  #pipes th:nth-child(5), #pipes td:nth-child(5) { display: none; }
+  .table-scroll > #pipes { min-width: 0; }
+  /* Fixed layout with explicit widths — without the elastic payload cell, auto
+     layout gave each row different column widths (nothing lined up). Fixed +
+     percentages keep columns consistent and left-aligned; overflow ellipsises. */
+  #pipes { table-layout: fixed; }
+  #pipes th:nth-child(2), #pipes td:nth-child(2) { width: 28%; }
+  #pipes th:nth-child(3), #pipes td:nth-child(3) { width: 38%; }
+  #pipes th:nth-child(4), #pipes td:nth-child(4) { width: 34%; }
+  #pipes td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 0;
+  }
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -820,17 +850,68 @@ header.chat-brand {
   word-break: break-word;
 }
 
+/* Composer — full-width text field with the send button below-right (Slack-
+   style). flex:0 0 auto docks it at the bottom of the chat pane; the log above
+   takes the remaining space and scrolls, so the composer is always visible. */
 .chat-composer {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
   padding: 0.6rem 0.75rem;
   border-top: 1px solid var(--border);
   margin: 0;
+  flex: 0 0 auto;
 }
-.chat-composer input {
-  flex: 1 1 auto;
-  min-width: 0;
+.chat-composer textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  min-height: 2.4rem;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  line-height: 1.4;
 }
+.chat-composer textarea:focus { outline: none; border-color: var(--accent); }
+.chat-composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+/* Small Slack-style icon send button — just an arrow. Subtle grey by default;
+   turns accent once there's text to send (.ready). */
+.chat-send {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.chat-send:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.chat-send.ready {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08222a;
+}
+.chat-send.ready:hover { background: var(--accent-hover); }
+.chat-send:disabled { opacity: 0.4; cursor: default; }
 /* "Send as" handle picker — the acting identity, TUI current-handle analog. */
 .chat-handle {
   flex: 0 0 auto;
@@ -849,7 +930,7 @@ header.chat-brand {
   color: var(--muted);
 }
 .chat-status {
-  padding: 0.2rem 0.85rem 0.5rem;
+  padding: 0;
   font: 12px/1.4 ui-monospace, monospace;
   color: var(--muted);
 }
@@ -879,9 +960,23 @@ header.chat-brand {
      conversation, and "‹ menu" swaps back. */
   .chat-shell { flex-direction: column; height: auto; }
   .chat-roster { flex-basis: auto; max-height: none; overflow: visible; }
-  .chat-main { min-height: 85vh; display: none; }
+  .chat-main { display: none; min-height: 0; }
   .chat-shell[data-view="chat"] .chat-roster { display: none; }
-  .chat-shell[data-view="chat"] .chat-main { display: flex; }
+  /* Conversation = a fixed full-screen panel sized to the *dynamic* viewport
+     (100dvh accounts for the mobile browser's address bar), so the log scrolls
+     internally and the composer is pinned to the bottom of the screen — never
+     bumped off. */
+  .chat-shell[data-view="chat"] .chat-main {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    height: 100vh;
+    height: 100dvh;
+    z-index: 40;
+    border: 0;
+    border-radius: 0;
+  }
+  .chat-log { min-height: 0; }
 
   .chat-back {
     display: inline-block;
