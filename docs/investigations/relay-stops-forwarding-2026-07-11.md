@@ -428,3 +428,44 @@ resulted from this round, so there is nothing for a permanent
 regression test to pin. Re-derive from the descriptions in Update 3 if
 needed; all three used the `read_live_since_ms_test.go`/
 `startEmbeddedJS` pattern already established in this package.
+
+## Update 4 (2026-07-12): diagnostic-only instrumentation shipped, per
+greg's go-ahead
+
+Greg approved converting the unconfirmed lead from Update 3 into
+observability, explicitly scoped as log-only/no-behavior-change: "Go
+ahead and add the diagnostic-only ConsumeErrHandler ... that's a
+sound, low-risk way to convert an unconfirmed hypothesis into a
+confirmed one."
+
+Shipped: `internal/daemon/read.go`'s live-follow `consumer.Consume(...)`
+call now also passes `jetstream.ConsumeErrHandler(...)`, which records a
+`warn`/`handleRead-liveFollowConsume` `NATSEvent` (existing ring +
+on-disk sink, `d.recordNATSEvent` — the same mechanism `ppz
+diagnostics` already reads) with nats.go's raw error string in
+`Reason`. It does not reset, retry, close, or otherwise touch delivery
+— purely observational. Documented as a new `warn` source in
+`docs/diagnostics.md` §4/§5, per that file's own extend-with-care
+contract.
+
+Permanent regression test:
+`internal/daemon/read_live_follow_consume_err_test.go`
+(`TestHandleRead_Follow_ConsumeErrIsRecordedAndSelfHealStillWorks`) —
+forces a real `ErrConsumerDeleted` (deletes the live OrderedConsumer's
+underlying ephemeral consumer server-side, same technique as the
+original "Ruled out: generic consumer recycling" test) and asserts
+both halves of the contract: message #2 still arrives (self-heal
+unaffected) AND the new warn event was recorded with a non-empty
+reason. Full `internal/daemon` suite green, `go vet` clean, `gofmt`
+clean.
+
+**Next step, not yet done**: this needs to actually be running on a
+daemon likely to hit the real recurrence (echo/herald/chorus/relay's
+sessions, or whichever is next to reproduce) — a deploy decision, not
+just a code change, left to greg per his message. Once it's live and
+this fires for real, `ppz diagnostics` will show whether the `Reason`
+string names one of the "doesn't self-heal" shapes hypothesized in
+Update 3 (a malformed pending-count header, an unrecognized 409
+description) or something not considered yet. Report back here and to
+the team either way — this doc stays open until a confirmed root cause
+lands a real fix.

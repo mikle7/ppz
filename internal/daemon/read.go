@@ -428,7 +428,26 @@ func (d *Daemon) handleRead(ctx context.Context, conn net.Conn, params json.RawM
 			go emitAcks(accountID, senderForRequest(req.Sender, d.State.Current(req.Session)), []cliproto.ReadMessage{rm}, clock.Now(), d.publishEnvelope)
 		}
 		_ = msg.Ack()
-	})
+	}, jetstream.ConsumeErrHandler(func(_ jetstream.ConsumeContext, cerr error) {
+		// Diagnostic-only, no behavior change: mikle7/ppz#1 ("forwards once
+		// then silently stops") recurred after every previously-confirmed
+		// cause was fixed or ruled out (see docs/investigations/
+		// relay-stops-forwarding-2026-07-11.md, Update 3). Before this
+		// handler existed, ANY error the underlying OrderedConsumer hit
+		// outside its 5 self-heal-triggering sentinel types
+		// (nats.go@v1.51.0 jetstream/ordered.go:209) was invisible —
+		// nothing logged it, nothing reset, and the IPC socket stayed open
+		// so the CLI never redialed. This just records what nats.go reports
+		// so the next natural recurrence leaves a trace in `ppz diagnostics`;
+		// it does not reset, retry, or otherwise alter delivery.
+		d.recordNATSEvent(NATSEvent{
+			Type:   "warn",
+			At:     time.Now(),
+			Caller: "handleRead-liveFollowConsume",
+			NCID:   ncID(d.NC),
+			Reason: cerr.Error(),
+		})
+	}))
 	if err != nil {
 		return
 	}

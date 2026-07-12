@@ -139,7 +139,7 @@ the new type.
 | `reconnect`     | nats.go ReconnectHandler **or** ensureNATS | Connection (re)established. `caller="nats.go"` for the library callback; otherwise the daemon function that rebuilt it. |
 | `closed`        | nats.go ClosedHandler                     | Connection fully closed; will not auto-retry.          |
 | `swap`          | daemon `swapNC`                           | Daemon code installed a new NC and closed the old one. The most useful single event for "who replaced this connection?" — see §6. |
-| `warn`          | non-fatal failure paths                   | Today: `subscribeOrgHeartbeats` failure. Add new sources sparingly. |
+| `warn`          | non-fatal failure paths                   | Today: `subscribeOrgHeartbeats` failure; `handleRead-liveFollowConsume` (below). Add new sources sparingly. |
 | `daemon_start`  | `Daemon.Run` enters                       | Process began.                                         |
 | `daemon_stop`   | `Daemon.Run` defer                        | Process exited cleanly. Absence = crash.               |
 
@@ -159,6 +159,7 @@ library-initiated ones. Today's set:
 | `OnRefreshed-callback`       | Refresh-loop callback proactively rebuilt NC after rotation.              |
 | `watchState-creds-gone`      | File-watcher dropped NC because creds were deleted out-of-band.            |
 | `subscribeOrgHeartbeats`     | (warn only) heartbeat subscription failed.                                 |
+| `handleRead-liveFollowConsume` | (warn only) a live `Follow: true` read's `jetstream.OrderedConsumer` reported an error via `ConsumeErrHandler` — added 2026-07-12 as diagnostic-only instrumentation for mikle7/ppz#1 ("forwards once, then silently stops"). `reason` holds nats.go's error string verbatim. This does not by itself mean delivery stopped (the ordered consumer self-heals 5 specific error types automatically) — but if `ppz diagnostics` shows one of these immediately preceding a reported stall with no subsequent `reconnect`/`swap` event, that error string is very likely the root cause. See §Workflows below and the investigation doc for the exact error types nats.go does *not* self-heal from. |
 | `?`                          | Pre-Phase-0 event reloaded from disk with no caller stamped.              |
 
 When you read a trace: every NC transition should be attributable to
