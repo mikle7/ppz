@@ -3,10 +3,15 @@
 Tracking issue: mikle7/ppz#1
 Branch: `investigate/relay-stops-forwarding`
 Agent: diagnose (sonnet)
-Status: `reportNATSFailure` gap confirmed, fixed, and regression-tested
-(see "Fix applied" below) — **but team-gathered diagnostics show this is
-probably NOT what triggered tonight's specific incidents.** See "Update"
-at the bottom before treating this as closed.
+Status: OPEN, unresolved as of 2026-07-12. `reportNATSFailure` gap is a
+real, fixed, regression-tested bug (see "Fix applied") but confirmed
+NOT to be the trigger for either night's incidents. Recurred fresh on
+4 more sessions (echo/herald/chorus/relay) on 2026-07-12 despite that
+fix plus two more (`5ebf59c`, `463a7c8`) already being on `main`. Three
+more candidate mechanisms tested and ruled out empirically in "Update 3"
+— read that section first; it has the current best lead (an untested,
+unconfirmed error-path gap) and the recommended next step
+(instrumentation, not another blind fix).
 
 ## Symptom (recap)
 
@@ -268,6 +273,142 @@ window's message timestamps will land near *some* swap boundary by
 chance. Not resolved either way; flagging both possibilities for
 whoever continues.
 
+**Since this doc was written**: chud found and fixed the two concrete
+bugs this thread was chasing — a transient `subs read` race
+(`buildFilteredList` reading `d.NC` unlocked; PR mikle7/ppz#2,
+`fix/reqreply-swap-race`) and a duplicate/replay bug for long-lived
+`forwardStdin` wrappers (SinceMS not degrading with process age; PR
+mikle7/ppz#3, `fix/stdin-relay-replay`). **Both PRs are still OPEN,
+unmerged, as of this update** (confirmed via `gh pr list`) — held
+pending Michael per the release-process finding below. Neither fixes
+the symptom this doc opened with (`forwardStdin` under-*delivering*
+after message #1); #2 is a different subsystem (`subs wait`) and #3
+fixes over-delivery (duplicates), not under-delivery. Separately: ppz's
+auto-upgrade only ships tagged releases, and none of that night's
+fixes (including the `reportNATSFailure` fix in *this* doc) were ever
+released — so no daemon restart that night could have picked any of
+this up regardless of root cause. Audit for "is a box actually
+patched" should check for a git-describe `vX.Y.Z-N-g<sha>` shape (N>0
+commits past the tag), not just `ppz status` self-reporting "latest".
+
+## Update 3 (2026-07-12): symptom recurs on 4 fresh sessions; three more
+hypotheses tested and ruled out empirically
+
+Reopened by fresh, independent reports from echo/herald/chorus/relay —
+same signature as the original symptom (`forwardStdin` relays message
+#1 into the wrapped pty correctly, then goes permanently silent; no
+error either side; a subsequent send still reports success) — despite
+`5ebf59c` (backlog-replay-on-fresh-process fix), `463a7c8` (SinceMS
+filter on the live-follow path), `a134977` (`reportNATSFailure`
+Follows eviction), and `764557a` (swap-race stress coverage) all
+already being on `main`. This confirms the "Ruled out" list above is
+real but incomplete — the actual trigger for repeated real-world
+recurrence is still unidentified.
+
+Rather than re-derive the same static-analysis leads, this round built
+three more targeted reproductions against the real embedded-NATS
+daemon harness (`startEmbeddedJS`, same pattern as
+`read_live_since_ms_test.go`), each driving the exact wire protocol
+`forwardStdin`/`streamForwardStdinOnce` use (`IPCRead{Follow:true,
+NoAdvance:true, SinceMS:<elapsed-since-process-start>+1}`, redial with
+a *grown* SinceMS anchored to the same start time — never reset per
+reconnect, matching the real code). All three **passed** — genuine
+negative results, not gaps in coverage:
+
+1. **Idle past the pull consumer's Expires window.** Hypothesis: after
+   1 message out of nats.go's default 500-message batch, `checkPending`
+   only re-arms a new pull once `pending.msgCount` drops below
+   `ThresholdMessages` (250) — nowhere near after just 1 delivery — so
+   if the batch's 30s `Expires` lapses with true silence in between (the
+   normal shape of an interactive ping, one message then a human/agent-
+   paced gap), delivery could stall until *something else* forces a
+   reset. Real wall-clock test: publish message #1, confirm delivery,
+   wait 35s of genuine silence (past both the 10s `ErrNoHeartbeat`
+   threshold and the 30s `Expires`), publish message #2. **Message #2
+   arrived cleanly** — the ordered consumer's heartbeat-loss self-heal
+   (`ErrNoHeartbeat` is one of the 5 sentinel errors `orderedConsumer`'s
+   `errHandler` resets on) genuinely works end-to-end in this exact
+   configuration. Rules out plain idle-timeout mishandling as a
+   single-cycle cause.
+2. **Single routine-swap eviction + client redial.** The team's own
+   `ppz diagnostics` corroboration (see "Update" above) already showed
+   every `closed` event that night was a routine JWT-refresh
+   `swapNCLocked`, which *does* call `Follows.closeAll()` (unlike the
+   separately-fixed `reportNATSFailure` gap) — so this forcibly closes
+   `forwardStdin`'s live Follow roughly every 4m30s as a matter of
+   normal operation, not a bug. Untested until now: does the *client*
+   side actually recover from that closure and keep receiving? Test:
+   deliver message #1, force a real `swapNC` (fresh `*nats.Conn`,
+   `Follows.closeAll()` fires), confirm the pre-swap conn observes
+   EOF, redial exactly like `forwardStdin`'s outer loop (fresh conn,
+   fresh Follow request, SinceMS grown from the same anchor), publish
+   message #2. **Delivered cleanly** on the first redial.
+3. **8 repeated swap+redial cycles against the same long-lived
+   stream/session** (reconnecting to the *same* embedded server each
+   time — the real shape of a JWT refresh, not a different backend),
+   to check for accumulation/drift a single-cycle test can't see
+   (consumer-name collisions across many resets, growing-SinceMS
+   interaction with a real growing sequence number, fd/goroutine
+   exhaustion). All 8 cycles delivered their expected message,
+   including the by-design retained-backlog replay each redial's
+   historical drain re-surfaces (confirming `forwardStdin`'s real
+   `seenIDRing` dedup — not replicated by a naive version of this test,
+   which initially mis-fired on cycle 2 by grabbing the replayed
+   message #1 instead of draining to the new one — is genuinely
+   load-bearing for correctness under this protocol's by-design
+   NoAdvance-redelivers-everything contract, worth remembering if
+   anyone re-derives this test).
+
+**Net effect on the hypothesis space**: every mechanism that goes
+through the OrderedConsumer's *documented* recovery paths (heartbeat
+loss, connection-closed-then-redial, repeated eviction) has now been
+directly tested and confirmed working. What remains untested (couldn't
+be forced through the public `jetstream` API in a reasonable test):
+any status/error the underlying pull consumer receives that *isn't*
+one of the 5 sentinel types `orderedConsumer.errHandler`
+(`nats.go@v1.51.0/jetstream/ordered.go:209`) recognizes as reset-worthy
+(`ErrNoHeartbeat`, `errOrderedSequenceMismatch`, `ErrConsumerDeleted`,
+`errConnected`, `nats.ErrNoResponders`). Concretely, `pull.go`'s
+`handleStatusMsg` treats a handful of other server responses as
+*terminal* — e.g. a malformed `Nats-Pending-Messages`/`Nats-Pending-Bytes`
+header on an otherwise-ordinary 408 timeout (`message.go:468/476`), or
+a `409` conflict whose `Description` doesn't match any of the five
+hardcoded substrings `checkMsg` looks for (`message.go:427-458`, falls
+through to a generic `fmt.Errorf`) — which call the underlying
+`pullSubscription.Stop()` with **no reset**. Combined with
+`internal/daemon/read.go:384`'s `consumer.Consume(handler)` call
+passing **no `jetstream.ConsumeErrHandler`**, any such error is
+currently invisible on both sides: nothing logs it, nothing resets,
+the IPC socket stays open (so the CLI never redials), and a later send
+still succeeds (publish is decoupled from any one reader's broken
+pull). This is a real, confirmed-by-code-reading gap in error-path
+*coverage and observability* — but unlike the three mechanisms above,
+it could not be forced to fire against the embedded test server (its
+error responses are well-formed), so it remains an unconfirmed
+hypothesis, not a demonstrated root cause. A public nats-server issue
+(`nats-io/nats-server#5839`, still open) describes the same class
+of symptom independent of this codebase ("consumer status shows active
+but not pulling, requires client restart") — consistent with, but not
+proof of, this being the mechanism here.
+
+**Recommendation — instrumentation before another fix attempt.**
+Per the standing rule from earlier tonight (two half-understood fixes
+collided once already), do not patch this blind. The single highest-
+value next step is to add a temporary `jetstream.ConsumeErrHandler`
+to `internal/daemon/read.go`'s live-follow `consumer.Consume(...)` call
+that just logs (via `d.Diag`/whatever `nats_events.go` already uses) —
+not resets, not changes behaviour, purely observability — and get it
+onto one daemon that's actually likely to reproduce this, then wait for
+the next natural recurrence. That single log line will say definitively
+whether an unrecognized status/error precedes the silence (confirming
+this hypothesis and pointing at the exact fix: recognize more error
+types, or stop trusting the ordered consumer's internal self-heal
+entirely and add an application-level idle-watchdog redial in
+`streamForwardStdinOnce` instead — the CLI side currently has *zero*
+idle-based liveness check; it relies entirely on the connection
+erroring, which this bug class may never do) — or rules it out too, in
+which case the search moves to a dimension not considered yet.
+
 ## Artifacts
 
 - `internal/daemon/report_nats_failure_follows_test.go` — permanent
@@ -277,3 +418,13 @@ The two throwaway scratch tests used while building the hypothesis
 (`diagnose_reset_scratch_test.go`, `diagnose_ncclose_scratch_test.go`)
 were deleted once the permanent test above superseded them; their
 findings are summarized inline above ("Ruled out" / root-cause steps).
+
+Three more throwaway scratch tests from Update 3
+(`diagnose_idle_expiry_scratch_test.go`,
+`diagnose_swap_redial_scratch_test.go`,
+`diagnose_repeated_swap_scratch_test.go`) were deleted after their
+(all-negative) findings were folded into Update 3 above — no fix
+resulted from this round, so there is nothing for a permanent
+regression test to pin. Re-derive from the descriptions in Update 3 if
+needed; all three used the `read_live_since_ms_test.go`/
+`startEmbeddedJS` pattern already established in this package.
