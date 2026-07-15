@@ -1,0 +1,7 @@
+--- as desk ---
+data-chat-entry="inbox:ops"
+--- as ops ---
+data-chat-entry="inbox:desk"
+--- selected ---
+<span class="chat-picker-current">ops</span>
+exit=0

@@ -1,37 +1,41 @@
 /* ppz server GUI — minimal, modern, readable. No framework. */
 
+/* Terminal palette — matches the `ppz chat` TUI (deep blue-black bg, cyan
+   accents, dim blue-grey secondary text). Applied in BOTH light and dark OS
+   modes so ppz-server reads as one system with the terminal UI. */
 :root {
-  --bg: #fafaf9;
-  --surface: #ffffff;
-  --border: #e5e5e3;
-  --text: #1c1c1a;
-  --muted: #71716e;
-  /* Sampled from the logo's pipe blue — a deeper royal that gives
-     enough contrast against white button text. Used by buttons,
-     active tab markers, and the primary CTA. */
-  --accent: #1d4ed8;
-  --accent-hover: #1e40af;
-  /* Buttons stay this saturated cobalt in BOTH light and dark mode
-     so they match the pipe in the logo. --accent itself shifts in
-     dark mode (for link legibility on near-black bg) — buttons do
-     not, because they always have white text on top. */
-  --btn-bg: #1d4ed8;
-  --btn-bg-hover: #1e40af;
-  --code-bg: #f1f1ef;
-  --row-hover: #f5f5f3;
+  --bg: #0c1119;
+  --surface: #121a24;
+  --border: #26454f;
+  --text: #c8d0da;
+  --muted: #6f7c8a;
+  /* Cyan/teal accent — the TUI's `ppz`, message senders, borders, markers.
+     Used for links, active tabs and (via --btn-bg) primary buttons. */
+  --accent: #4fbdd0;
+  --accent-hover: #74d4e5;
+  --btn-bg: #1f6d7e;
+  --btn-bg-hover: #2a8497;
+  --code-bg: #16202b;
+  --row-hover: #17212c;
+  /* Secondary / highlight — the TUI's green "online" blob. Liveness dots,
+     success status, and any positive/live accent. */
+  --online: #56c46a;
+  --stale: #d29922;
+  --offline: #6e7681;
 }
 
+/* Dark OS mode is the same terminal palette — no separate theme. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1a1a18;
-    --surface: #232321;
-    --border: #353532;
-    --text: #ececea;
-    --muted: #92928e;
-    --accent: #60a5fa;
-    --accent-hover: #93c5fd;
-    --code-bg: #2c2c2a;
-    --row-hover: #2a2a28;
+    --bg: #0c1119;
+    --surface: #121a24;
+    --border: #26454f;
+    --text: #c8d0da;
+    --muted: #6f7c8a;
+    --accent: #4fbdd0;
+    --accent-hover: #74d4e5;
+    --code-bg: #16202b;
+    --row-hover: #17212c;
   }
 }
 
@@ -42,8 +46,9 @@ html, body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Helvetica Neue", sans-serif;
-  font-size: 15px;
+  /* Monospace throughout — ppz-server mirrors the terminal UI. */
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -146,6 +151,36 @@ ul.tidy li:hover { background: var(--row-hover); }
 }
 
 /* Tables */
+/* Data tables scroll horizontally inside their own box on narrow screens,
+   instead of overflowing the page (the pipes table has 5 columns). */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 6px;
+}
+.table-scroll > table { min-width: 32rem; }
+
+@media (max-width: 720px) {
+  /* Trim the pipes table to essentials on mobile: drop namespace (col 1) and
+     payload (col 5), keeping source / pipe / last message. */
+  #pipes th:nth-child(1), #pipes td:nth-child(1),
+  #pipes th:nth-child(5), #pipes td:nth-child(5) { display: none; }
+  .table-scroll > #pipes { min-width: 0; }
+  /* Fixed layout with explicit widths — without the elastic payload cell, auto
+     layout gave each row different column widths (nothing lined up). Fixed +
+     percentages keep columns consistent and left-aligned; overflow ellipsises. */
+  #pipes { table-layout: fixed; }
+  #pipes th:nth-child(2), #pipes td:nth-child(2) { width: 28%; }
+  #pipes th:nth-child(3), #pipes td:nth-child(3) { width: 38%; }
+  #pipes th:nth-child(4), #pipes td:nth-child(4) { width: 34%; }
+  #pipes td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 0;
+  }
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -579,4 +614,390 @@ body[data-page="device-verify"] .btn-primary {
     font-size: 0.75rem;
     padding: 0.6rem 2.5rem 0.6rem 0.75rem;
   }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   Web `ppz chat` console (/orgs/<slug>/chat). Two-pane layout: a
+   three-section roster on the left (Agents / Inboxes / Pipes) and a
+   live chat pane on the right. Mirrors the `ppz chat` TUI.
+   ────────────────────────────────────────────────────────────── */
+
+/* Top-bar summary counts (N online · N agents · N pipes), TUI titleBar
+   parity — pushed to the right of the brand header. */
+header.chat-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.chat-brand-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 0 0 auto;
+}
+/* Top-bar identity switcher — "you are <handle>". The primary control: it
+   scopes the whole view (roster, DM threads, unread) to who you're acting as. */
+.chat-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+/* Custom identity dropdown (themed; native <select> popups can't be). */
+.chat-picker { position: relative; }
+.chat-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 7rem;
+  justify-content: space-between;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.2rem 0.55rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chat-picker-caret { color: var(--accent); font-size: 0.7rem; }
+.chat-picker-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 100%;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  display: none;
+}
+.chat-picker[data-open="true"] .chat-picker-menu { display: block; }
+.chat-picker-item {
+  display: block;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.chat-picker-item:hover { background: var(--row-hover); }
+.chat-picker-item.active { color: var(--accent); font-weight: 600; }
+.chat-counts {
+  color: var(--muted);
+  font: 12px/1.4 ui-monospace, monospace;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.chat-shell {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  height: 72vh;
+  min-height: 420px;
+}
+
+.chat-roster {
+  flex: 0 0 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0.5rem 0;
+}
+.chat-section { padding: 0.1rem 0 0.4rem; }
+.chat-section > h2 {
+  margin: 0.35rem 0.85rem 0.15rem;
+  font-size: 0.7rem;
+}
+.chat-section .empty { margin: 0 0.85rem; font-size: 0.85rem; }
+
+.chat-list { list-style: none; margin: 0; padding: 0; }
+.chat-list li { margin: 0; }
+
+/* Pipe rows carry a hover-revealed remove (✕) button beside the entry. */
+.chat-pipe-row { display: flex; align-items: center; }
+.chat-pipe-row .chat-entry { flex: 1 1 auto; }
+.chat-remove {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0.6rem;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0;
+}
+.chat-pipe-row:hover .chat-remove,
+.chat-remove:focus { opacity: 1; }
+.chat-remove:hover { color: #c44; }
+
+/* "+ add pipe" inline input at the foot of the PIPES section. */
+.chat-add-pipe { margin: 0.25rem 0.85rem 0; }
+.chat-add-pipe input {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.chat-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-radius: 0;
+  padding: 0.16rem 0.85rem;
+  margin: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-entry:hover { background: var(--row-hover); }
+.chat-entry.active { background: var(--accent); color: #fff; }
+.chat-entry.active .chat-entry-ns,
+.chat-entry.active .chat-entry-state { color: rgba(255,255,255,0.8); }
+
+.chat-entry-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Unread count — TUI-style "(n)" in the cyan accent, no pill (white-on-cyan
+   was unreadable). Parens come from CSS so the JS just sets the number. */
+.chat-unread {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding-left: 0.4rem;
+}
+.chat-unread::before { content: "("; }
+.chat-unread::after  { content: ")"; }
+.chat-entry.active .chat-unread { color: #cfe8ee; }
+.chat-entry-ns,
+.chat-entry-state {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.chat-glyph { width: 0.9rem; text-align: center; color: var(--muted); }
+
+/* Liveness dot — colours match the TUI's online/stale/offline glyphs. */
+.chat-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--offline); /* offline / unknown */
+}
+.chat-dot-online { background: var(--online); box-shadow: 0 0 5px color-mix(in srgb, var(--online) 70%, transparent); }
+.chat-dot-stale  { background: var(--stale); }
+.chat-dot-offline { background: var(--offline); }
+
+/* Right pane */
+.chat-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.chat-title {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.chat-log {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+/* One inline row per message: [time] [sender] [body], body hanging-indented
+   under its own column — matches the `ppz chat` TUI. */
+.chat-msg { display: flex; gap: 0.85rem; align-items: baseline; }
+.chat-msg-time {
+  flex: 0 0 auto;
+  width: 3.1em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.chat-msg-sender {
+  flex: 0 0 auto;
+  min-width: 6.5em;
+  color: var(--accent);
+  font-weight: 600;
+}
+.chat-msg-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Composer — full-width text field with the send button below-right (Slack-
+   style). flex:0 0 auto docks it at the bottom of the chat pane; the log above
+   takes the remaining space and scrolls, so the composer is always visible. */
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--border);
+  margin: 0;
+  flex: 0 0 auto;
+}
+.chat-composer textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  min-height: 2.4rem;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  line-height: 1.4;
+}
+.chat-composer textarea:focus { outline: none; border-color: var(--accent); }
+.chat-composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+/* Small Slack-style icon send button — just an arrow. Subtle grey by default;
+   turns accent once there's text to send (.ready). */
+.chat-send {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.chat-send:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.chat-send.ready {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08222a;
+}
+.chat-send.ready:hover { background: var(--accent-hover); }
+.chat-send:disabled { opacity: 0.4; cursor: default; }
+/* "Send as" handle picker — the acting identity, TUI current-handle analog. */
+.chat-handle {
+  flex: 0 0 auto;
+  max-width: 9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 0.4rem;
+  font: inherit;
+}
+.chat-no-handle {
+  margin: 0;
+  padding: 0.5rem 0.85rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.chat-status {
+  padding: 0;
+  font: 12px/1.4 ui-monospace, monospace;
+  color: var(--muted);
+}
+.chat-status.ok  { color: var(--online); }
+.chat-status.err { color: #e06c6c; }
+
+/* Terminal-parity accents for the chat surfaces: brighter cyan panel borders
+   and a navy (not cyan) selected-row bar, matching the TUI. */
+.chat-roster,
+.chat-main { border-color: #2f6b7d; }
+.chat-entry.active { background: #17395e; color: #eef4f6; }
+.chat-entry.active .chat-dot { box-shadow: none; }
+.chat-title { color: var(--accent); }
+.chat-page h1 a { color: var(--accent); }
+
+/* The mobile "‹ menu" back button — hidden on desktop (two-pane). */
+.chat-back { display: none; }
+
+@media (max-width: 720px) {
+  /* Top bar: let the identity picker + counts wrap under the title. */
+  header.chat-brand { flex-wrap: wrap; }
+  .chat-brand-right { flex-wrap: wrap; gap: 0.5rem 0.9rem; }
+  .chat-picker-menu { right: auto; left: 0; }
+
+  /* Master-detail: one pane at a time. The roster is the screen (full height,
+     native page scroll — no cramped nested box); tapping an entry swaps to the
+     conversation, and "‹ menu" swaps back. */
+  .chat-shell { flex-direction: column; height: auto; }
+  .chat-roster { flex-basis: auto; max-height: none; overflow: visible; }
+  .chat-main { display: none; min-height: 0; }
+  .chat-shell[data-view="chat"] .chat-roster { display: none; }
+  /* Conversation = a fixed full-screen panel sized to the *dynamic* viewport
+     (100dvh accounts for the mobile browser's address bar), so the log scrolls
+     internally and the composer is pinned to the bottom of the screen — never
+     bumped off. */
+  .chat-shell[data-view="chat"] .chat-main {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    height: 100vh;
+    height: 100dvh;
+    z-index: 40;
+    border: 0;
+    border-radius: 0;
+  }
+  .chat-log { min-height: 0; }
+
+  .chat-back {
+    display: inline-block;
+    align-self: flex-start;
+    margin: 0.5rem 0 0 0.5rem;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Tighter message columns so the body keeps room on a narrow screen. */
+  .chat-msg { gap: 0.5rem; }
+  .chat-msg-time { width: 2.9em; }
+  .chat-msg-sender { min-width: 4.5em; }
+}
+
+@media (max-width: 420px) {
+  main.wide { padding: 1rem 0.75rem 2rem; }
+  h1 { font-size: 1.1rem; }
+  .chat-msg-sender { min-width: 3.5em; }
 }

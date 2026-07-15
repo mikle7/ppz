@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ppz — {{.Org.Name}} / agents</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="chat-page">
+  <main class="wide">
+    <header class="brand chat-brand">
+      <div>
+        <h1><a href="/dashboard">ppz</a> / <a href="/orgs/{{.Org.Name}}">{{.Org.Name}}</a> / agents</h1>
+      </div>
+      <div class="chat-brand-right">
+        {{if .Handles}}
+        <div class="chat-identity">Set Handle
+          <div class="chat-picker" data-open="false">
+            <button type="button" class="chat-picker-btn" id="chat-handle-btn" aria-haspopup="listbox">
+              <span class="chat-picker-current">{{.ActingHandle}}</span><span class="chat-picker-caret" aria-hidden="true">▾</span>
+            </button>
+            <ul class="chat-picker-menu" role="listbox">
+              {{range .Handles}}
+              <li><a class="chat-picker-item{{if and $.ActingHandle (eq . $.ActingHandle)}} active{{end}}"
+                     data-handle="{{.}}" href="?as={{.}}">{{.}}</a></li>
+              {{end}}
+            </ul>
+          </div>
+        </div>
+        {{else}}
+        <span class="chat-no-handle">no handle — create one with <code>ppz source create &lt;name&gt;</code></span>
+        {{end}}
+        <div class="chat-counts" aria-label="roster summary">{{.Roster.OnlineCount}} online · {{len .Roster.Agents}} agents · {{len .Roster.Pipes}} pipes</div>
+      </div>
+    </header>
+
+    <div class="chat-shell" data-org="{{.Org.Name}}" data-me="{{.Me}}" data-acting="{{.ActingHandle}}">
+      <aside class="chat-roster">
+        <section class="chat-section" data-section="agents">
+          <h2>Agents</h2>
+          {{if .Roster.Agents}}
+          <ul class="chat-list">
+            {{range .Roster.Agents}}
+            <li>
+              <button type="button" class="chat-entry"
+                      data-chat-entry="agent:{{.Target}}"
+                      data-chat-kind="source"
+                      data-chat-target="{{.Target}}"
+                      data-chat-status="{{.Status}}"
+                      data-chat-state="{{.State}}"
+                      data-chat-title="{{.Title}}">
+                <span class="chat-dot chat-dot-{{.Status}}" aria-hidden="true"></span>
+                <span class="chat-entry-label">{{.Label}}</span>
+                {{if .State}}<span class="chat-entry-state">{{.State}}</span>{{end}}
+                {{if .Unread}}<span class="chat-unread" data-unread>{{.Unread}}</span>{{end}}
+              </button>
+            </li>
+            {{end}}
+          </ul>
+          {{else}}
+          <p class="empty">No agents online.</p>
+          {{end}}
+        </section>
+
+        <section class="chat-section" data-section="inboxes">
+          <h2>Inboxes</h2>
+          {{if .Roster.Inboxes}}
+          <ul class="chat-list">
+            {{range .Roster.Inboxes}}
+            <li>
+              <button type="button" class="chat-entry"
+                      data-chat-entry="inbox:{{.Target}}"
+                      data-chat-kind="source"
+                      data-chat-target="{{.Target}}"
+                      data-chat-title="{{.Title}}">
+                <span class="chat-glyph" aria-hidden="true">@</span>
+                <span class="chat-entry-label">{{.Label}}</span>
+                {{if .Unread}}<span class="chat-unread" data-unread>{{.Unread}}</span>{{end}}
+              </button>
+            </li>
+            {{end}}
+          </ul>
+          {{else}}
+          <p class="empty">No message inboxes.</p>
+          {{end}}
+        </section>
+
+        <section class="chat-section" data-section="pipes">
+          <h2>Pipes</h2>
+          {{if .Roster.Pipes}}
+          <ul class="chat-list">
+            {{range .Roster.Pipes}}
+            <li class="chat-pipe-row">
+              <button type="button" class="chat-entry"
+                      data-chat-entry="pipe:{{.Target}}"
+                      data-chat-kind="pipe"
+                      data-chat-target="{{.Target}}"
+                      data-chat-title="{{.Title}}">
+                <span class="chat-glyph" aria-hidden="true">#</span>
+                <span class="chat-entry-label">{{.Label}}</span>
+                {{if .Namespace}}<span class="chat-entry-ns">{{.Namespace}}</span>{{end}}
+                {{if .Unread}}<span class="chat-unread" data-unread>{{.Unread}}</span>{{end}}
+              </button>
+              <button type="button" class="chat-remove" data-remove-target="{{.Target}}"
+                      title="remove pipe" aria-label="remove pipe {{.Label}}">&times;</button>
+            </li>
+            {{end}}
+          </ul>
+          {{else}}
+          <p class="empty">No pipes yet.</p>
+          {{end}}
+          <form class="chat-add-pipe" id="chat-add-pipe">
+            <input type="text" id="chat-add-pipe-name" name="pipe" autocomplete="off"
+                   maxlength="128" placeholder="+ add pipe…">
+          </form>
+        </section>
+      </aside>
+
+      <section class="chat-main">
+        <button type="button" class="chat-back" id="chat-back">‹ menu</button>
+        <div class="chat-title" id="chat-title">
+          <span class="empty">Select an agent, inbox or pipe to start chatting.</span>
+        </div>
+        <div class="chat-log" id="chat-log" data-empty="1"></div>
+        <form class="chat-composer" id="chat-composer" hidden>
+          <textarea id="chat-input" name="message" rows="1" autocomplete="off"
+                    placeholder="message…" maxlength="2000" disabled></textarea>
+          <div class="chat-composer-bar">
+            <div class="chat-status" id="chat-status" hidden></div>
+            <button type="submit" id="chat-send" class="chat-send" disabled aria-label="Send message"
+                    title="Send"><span aria-hidden="true">➤</span></button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script src="/assets/chat.js"></script>
+</body>
+</html>

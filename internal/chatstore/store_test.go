@@ -188,3 +188,28 @@ func TestMigrate_MergesIntoExisting(t *testing.T) {
 		t.Fatalf("merged source should hold both messages, got %d", len(got))
 	}
 }
+
+// Chat state is isolated per account: the same handle in a different org (or on
+// a different server) must not see the previous account's history.
+func TestOpenForAccount_IsolatesByAccount(t *testing.T) {
+	home := t.TempDir()
+	open := func(account string) *Store {
+		t.Helper()
+		s, err := OpenForAccount(home, account, "james")
+		if err != nil {
+			t.Fatalf("open %s: %v", account, err)
+		}
+		return s
+	}
+	a := open("orgA")
+	a.Ingest(KindAgent, "alice", "alice", msg("m1", "in", "alice", "hi", "2026-07-15T09:00:00Z"))
+	if err := a.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := open("orgB").Messages(KindAgent, "alice"); len(got) != 0 {
+		t.Fatalf("orgB must not see orgA's chat state, got %d msgs", len(got))
+	}
+	if got, _ := open("orgA").Messages(KindAgent, "alice"); len(got) != 1 {
+		t.Fatalf("orgA reopen should see its own state, got %d", len(got))
+	}
+}

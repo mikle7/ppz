@@ -75,6 +75,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /auth/github/callback", s.handleAuthGitHubCallback)
 	mux.HandleFunc("POST /auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("POST /dev/login", s.handleDevLogin) // gated by s.DevLogin internally
+	mux.HandleFunc("GET /dev/login", s.handleDevLogin)  // GET+?next= for one-click local login
 
 	// Test-only: wipes JetStream state across every per-org account.
 	// 404s in prod (DevLogin=false). Phase 3.5 introduced per-org
@@ -104,6 +105,25 @@ func (s *Server) Routes() *http.ServeMux {
 	// "<manifold>.<name>" path the org pipes table surfaces; the
 	// handler splits on the last dot to recover manifold + leaf.
 	mux.HandleFunc("GET /orgs/{id}/pipes/{pipe}", s.requireSession(s.handleGUIUncollaredPipePage))
+	// Web `ppz chat` console — roster + live chat pane over the org's
+	// agents, inboxes and pipes. All four routes (page, snapshot, send,
+	// live WS) are session-authed here and additionally membership-gated
+	// in their handlers (resolveChatOrg), since /chat is a read+write
+	// surface into the org's streams.
+	mux.HandleFunc("GET /orgs/{id}/chat", s.requireSession(s.handleGUIChatPage))
+	mux.HandleFunc("GET /orgs/{id}/chat/messages", s.requireSession(s.handleGUIChatMessages))
+	mux.HandleFunc("GET /orgs/{id}/chat/roster", s.requireSession(s.handleGUIChatRoster))
+	mux.HandleFunc("POST /orgs/{id}/chat/read", s.requireSession(s.handleGUIChatMarkRead))
+	mux.HandleFunc("POST /orgs/{id}/chat/send", s.requireSession(s.handleGUIChatSend))
+	// Add/remove uncollared pipes from the console (TUI `a` / `-` parity).
+	mux.HandleFunc("POST /orgs/{id}/chat/pipes", s.requireSession(s.handleGUIChatAddPipe))
+	mux.HandleFunc("DELETE /orgs/{id}/chat/pipes", s.requireSession(s.handleGUIChatRemovePipe))
+	// Unlike the terminal WS (left un-authed as a punt), the chat WS is
+	// session-gated: the browser handshake carries the session cookie, so
+	// the follow is access-controlled AND the server can stamp `you`
+	// correctly from the viewer's identity. The client also derives `you`
+	// from data-me, so a future un-authed transport still labels correctly.
+	mux.HandleFunc("GET /orgs/{id}/chat/ws", s.requireSession(s.handleGUIChatWS))
 	mux.HandleFunc("GET /orgs/{id}/sources/{handle}/terminal", s.requireSession(s.handleGUITerminalPage))
 	// WebSocket for terminal stream — leaving un-auth'd for now (RED phase
 	// surfaced this; tighten to session-or-key auth in a follow-up).
