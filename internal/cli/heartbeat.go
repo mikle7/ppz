@@ -35,7 +35,8 @@ type HeartbeatPayload struct {
 	PPZVersion    string `json:"ppz_version"`
 	StartedAt     string `json:"started_at"`
 	IntervalSec   int    `json:"interval_sec"`
-	Project       string `json:"project"` // caller-supplied grouping hint, e.g. muster's registered project name
+	Project       string `json:"project"`   // caller-supplied grouping hint, e.g. muster's registered project name
+	Specialty     string `json:"specialty"` // caller-supplied capability hint, e.g. muster's role template ("backend")
 }
 
 // heartbeatInputs is what the runtime collects per beat. Kept as an
@@ -57,6 +58,7 @@ type heartbeatInputs struct {
 	StartedAt     time.Time
 	IntervalSec   int
 	Project       string
+	Specialty     string
 }
 
 // heartbeatDeps is the seam runHeartbeat reads everything it needs
@@ -117,6 +119,7 @@ func runHeartbeat(ctx context.Context, handle string, deps heartbeatDeps) {
 			StartedAt:     deps.StartedAt,
 			IntervalSec:   deps.IntervalSec,
 			Project:       deps.GetEnv("PPZ_AGENT_PROJECT"),
+			Specialty:     deps.GetEnv("PPZ_AGENT_SPECIALTY"),
 		}))
 		if err != nil {
 			return
@@ -172,5 +175,6 @@ func buildHeartbeatPayload(in heartbeatInputs) HeartbeatPayload {
 		StartedAt:     in.StartedAt.UTC().Format(time.RFC3339),
 		IntervalSec:   in.IntervalSec,
 		Project:       in.Project,
+		Specialty:     in.Specialty,
 	}
 }

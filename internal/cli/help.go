@@ -434,9 +434,12 @@ Create a custom pipe. A bare NAME is created under the session's current namespa
 Destroy a pipe. --recursive removes a manifold subtree of pipes.`,
 
 	// ---- Other -----------------------------------------------------------
-	"who": `usage: ppz who [--json] [--online|--stale|--offline] [--harness=X] [--owner=X]
+	"who": `usage: ppz who [--json] [--online|--stale|--offline] [--harness=X] [--owner=X] [--specialty=X] [--free]
 
-List every agent the local daemon has seen a heartbeat from, with online/stale/offline status, harness, model, host, os/arch, CREATED (uptime as a relative age) and OWNER (the source's creator, resolved at query time). Filters combine OR for status, AND for harness and owner.`,
+List every agent the local daemon has seen a heartbeat from, with online/stale/offline status, harness, model, host, os/arch, CREATED (uptime as a relative age) and OWNER (the source's creator, resolved at query time). Filters combine OR for status, AND for everything else.
+
+  --specialty=X   only agents advertising this capability (PPZ_AGENT_SPECIALTY on the shared/agent process — e.g. muster stamps its role template here: "backend").
+  --free          only agents that are provably dispatchable: online AND agent_state idle. A cross-machine dispatcher's bench query is 'ppz who --free --specialty=backend --json'.`,
 
 	"chat": `usage: ppz chat
 

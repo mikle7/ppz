@@ -42,6 +42,8 @@ func cmdWho(args []string) error {
 	onlyOffline := fs.Bool("offline", false, "show only offline agents")
 	harness := fs.String("harness", "", "show only agents with this harness (claude/codex/copilot/agy/...)")
 	owner := fs.String("owner", "", "show only agents whose source owner matches this username")
+	specialty := fs.String("specialty", "", "show only agents advertising this specialty (PPZ_AGENT_SPECIALTY)")
+	free := fs.Bool("free", false, "show only online agents whose state is idle — the dispatchable bench")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -53,11 +55,13 @@ func cmdWho(args []string) error {
 
 	now := time.Now()
 	entries := filterWhoEntries(reply.Entries, now, whoFilter{
-		Online:  *onlyOnline,
-		Stale:   *onlyStale,
-		Offline: *onlyOffline,
-		Harness: *harness,
-		Owner:   *owner,
+		Online:    *onlyOnline,
+		Stale:     *onlyStale,
+		Offline:   *onlyOffline,
+		Harness:   *harness,
+		Owner:     *owner,
+		Specialty: *specialty,
+		Free:      *free,
 	})
 
 	format := "table"
@@ -110,14 +114,16 @@ type whoRenderOpts struct {
 }
 
 // whoFilter is the client-side filter applied to the daemon's raw
-// snapshot. Multiple status flags combine OR; harness and owner each
-// combine AND with whatever else is set.
+// snapshot. Multiple status flags combine OR; harness, owner, specialty
+// and free each combine AND with whatever else is set.
 type whoFilter struct {
-	Online  bool
-	Stale   bool
-	Offline bool
-	Harness string
-	Owner   string
+	Online    bool
+	Stale     bool
+	Offline   bool
+	Harness   string
+	Owner     string
+	Specialty string // heartbeat "specialty" (PPZ_AGENT_SPECIALTY), e.g. muster's role template
+	Free      bool   // online + agent_state idle: the dispatchable bench
 }
 
 // filterWhoEntries returns the entries matching the filter. An empty
@@ -134,6 +140,18 @@ func filterWhoEntries(entries []cliproto.WhoEntry, now time.Time, f whoFilter) [
 		}
 		if f.Owner != "" && e.Owner != f.Owner {
 			continue
+		}
+		if f.Specialty != "" && p.Specialty != f.Specialty {
+			continue
+		}
+		if f.Free {
+			// "free" = provably reachable AND provably not mid-task: an
+			// online beat whose agent_state says idle. A stale/offline
+			// agent might be idle, but a dispatcher must not guess.
+			if p.AgentState != "idle" ||
+				daemon.ClassifyHeartbeatStatus(e.ArrivedAt, now, p.IntervalSec) != "online" {
+				continue
+			}
 		}
 		if statusFilter {
 			status := daemon.ClassifyHeartbeatStatus(e.ArrivedAt, now, p.IntervalSec)
