@@ -93,7 +93,7 @@ func TestBuildHeartbeatPayload_JSONShape(t *testing.T) {
 	wantKeys := []string{
 		"agent_state", "arch", "child_pid", "harness", "harness_source",
 		"hostname", "interval_sec", "model",
-		"os", "pid", "ppz_version", "project", "seq", "started_at", "ts",
+		"os", "pid", "ppz_version", "project", "seq", "specialty", "started_at", "ts",
 	}
 	gotKeys := make([]string, 0, len(m))
 	for k := range m {
